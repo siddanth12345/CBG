@@ -780,18 +780,7 @@ class Fighter {
         } else if (x.k === 'breath') {
             const sp = spec(this.char, 'N');
             this.activeMove = { type: 'CORE', t: 3 };
-            // Desktop: stream tracks the mouse. Mobile: keep the aim locked at fire time
-            // (touch overwrites mouse.world to movement/facing every frame, which is only the fallback).
-            if (!mouse.touchMode) {
-                const aim = aimOf(this);
-                let adx = aim.x - this.x, ady = aim.y - this.y;
-                let alen = Math.hypot(adx, ady);
-                if (alen >= 1) {
-                    adx /= alen; ady /= alen;
-                    x.dx = adx; x.dy = ady; x.ang = Math.atan2(ady, adx);
-                    if (Math.abs(adx) > 0.15) this.facing = adx > 0 ? 1 : -1;
-                }
-            }
+            // Direction is locked at release (PC + mobile): no mid-stream re-aim
             if (x.t < sp.frames && x.t % sp.every === 0) {
                 const w = lerpR(sp.w, x.c), last = x.t + sp.every >= sp.frames;
                 const dx = x.dx !== undefined ? x.dx : f, dy = x.dy !== undefined ? x.dy : 0;
