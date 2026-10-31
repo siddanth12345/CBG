@@ -1498,6 +1498,8 @@ class Fighter {
     // ------------------------------------------------------------ moves
     /** Roll: ONLY while shielding (hold E + scroll wheel), 2 s cooldown, never over the void. */
     executeRoll(force = false, dirOverride = 0) {
+        // static training bot never acts — including rolls
+        if (this.isAI && (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static')))) return false;
         if (!this.grounded || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.isRolling ||
             this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0 || this.sx || this.grabbedBy || this.grabHolding) return false;
         if (this.rollCooldown > 0) return false;
@@ -1694,7 +1696,12 @@ class AIBot extends Fighter {
         this.diff = null;                       // custom matches: 'easy' | 'medium' | 'hard' per bot
     }
 
-    get level() { return this.diff || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard'); }
+    get level() {
+        if (this.diff) return this.diff;
+        // training static dummy must never be treated as hard (that enabled counter-rolls)
+        if (S.gameMode === 'training') return (S.train && S.train.botType && S.train.botType !== 'static') ? S.train.botType : 'static';
+        return S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard';
+    }
 
     /** watch the player (learn their habits) */
     observe(target) {
@@ -1740,9 +1747,13 @@ class AIBot extends Fighter {
     }
 
     updateAI(target) {
-        if (S.gameMode === 'training') {
-            // the dummy never acts, but it moves with the same physics as everyone else
-            // (update() applies gravity / friction / knockback once), so launches go sideways too
+        // static / training dummy: zero input, no rolls, no attacks
+        if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static'))) {
+            this.isShielding = false;
+            this.shieldHold = 0;
+            return;
+        }
+        if (S.gameMode === 'training' && this.level !== 'easy' && this.level !== 'medium' && this.level !== 'hard') {
             this.isShielding = false;
             return;
         }
@@ -2329,7 +2340,7 @@ function launch(attacker, defender, hb) {
     defender.lastHitBy = attacker; defender.lastHitT = 0;
     if (defender.heldItem && defender.heldItem.type === 'FIRESTICK') burnStick(defender);      // getting hit shortens the firestick
 
-    if (defender.isAI && defender.level === 'hard') {
+    if (defender.isAI && defender.level === 'hard' && defender.level !== 'static') {
         defender.incomingHitCount++;
         if (!hb.stun && defender.grounded && defender.incomingHitCount >= 3 && defender.rollCooldown <= 0) {
             defender.incomingHitCount = 0;
