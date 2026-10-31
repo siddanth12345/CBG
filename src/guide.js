@@ -153,7 +153,7 @@ export class Guide {
         window.addEventListener('keydown', (e) => {
             if (!this.active || this.isBlocked()) return;
             if (e.code === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.go(this.i - 1); }
-            else if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.go(this.i + 1); }
+            else if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) { if (this.finished) this.stop(); else this.go(this.i + 1); } }
             else if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); this.stop(); }
         }, true);
     }

@@ -11,7 +11,7 @@ import { isDown } from './controls.js';
 import { ITEM_TYPES } from './items.js';
 import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
 
-export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null };   // online: null | 'host' | 'guest'
+export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();
 /** everything the host has produced since the last network snapshot (effects, sounds, particles) */
 export const outbox = [];
@@ -110,6 +110,25 @@ const HANG_MAX = 180;         // 3 s on a ledge -> kicked off...
 const TIMEOUT_BAN = 240;      // ...and can't re-grab a ledge for 4 s
 const KICK_BAN = 180;         // kicked by someone taking your ledge -> 3 s no ledge
 export const AIR_F_MAX = 2;   // F moves usable in the air before you must touch the ground
+/** training-menu overrides (only while gameMode === 'training') */
+export const trainLock = () => (S.gameMode === 'training' && S.train && S.train.lock != null) ? S.train.lock : LOCK;
+export const trainStun = () => (S.gameMode === 'training' && S.train && S.train.stun != null) ? S.train.stun : STUN;
+export const trainAirF = () => (S.gameMode === 'training' && S.train && S.train.airF != null) ? S.train.airF : AIR_F_MAX;
+export const trainWalk = () => (S.gameMode === 'training' && S.train && S.train.walk != null) ? S.train.walk : 1;
+export const trainJumps = (f) => {
+    if (S.gameMode === 'training' && S.train && S.train.jumps != null) return S.train.jumps;
+    return charOf(f.char).jumps + (f.balloon ? 3 : 0);
+};
+export const DEFAULT_TRAIN = {
+    stage: 'normal', // 'normal' | 'lobby' (big Frontier)
+    stun: 30, lock: 36, jumps: null, airF: 2, walk: 1,
+    char: null, botType: 'static', botChar: null,
+};
+export function ensureTrain() {
+    if (!S.train) S.train = { ...DEFAULT_TRAIN, char: null, botChar: null };
+    return S.train;
+}
+
 const CD = { CORE: 90, BLINK: 60, SPIRAL: 120, SUPLEX: 0, HEADBUTT: 90 };   // no aftermath cooldown on the suplex
 const F_MOVES = new Set(['BLINK', 'SPIRAL', 'HEADBUTT']);   // (the ground-down Suplex is a grab, so it counts as GRAB)
 const SPIRAL_JUMP_COST = 0;   // Rising Spiral takes no jumps at all
@@ -406,7 +425,7 @@ class Fighter {
         this.vy = 0;
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
         this.dropHeld();
-        this.balloon = false; this.maxJumps = charOf(this.char).jumps; this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0;
+        this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0;
         this.jumpsLeft = this.maxJumps;
         this.isHanging = false;
         this.canGrab = true;
@@ -465,7 +484,7 @@ class Fighter {
     update() {
         if (this.armorT > 0) this.armorT--;
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
-        const bj = charOf(this.char).jumps + (this.balloon ? 3 : 0);       // each character has its own jump count; a balloon ADDS 3
+        const bj = trainJumps(this);       // training menu can override jump count
         if (this.maxJumps !== bj) { this.jumpsLeft = Math.min(bj, this.jumpsLeft + Math.max(0, bj - this.maxJumps)); this.maxJumps = bj; }
         if (this.gravT > 0) this.gravT--;
         if (this.dropT > 0) this.dropT--;
@@ -824,7 +843,7 @@ class Fighter {
                 S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                 createParticles(cx, cy + sp.h / 2, this.color, 14);
             }
-            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || LOCK); }
+            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || trainLock()); }
         } else if (x.k === 'rocket') {
             const sp = spec(this.char, 'U');
             this.activeMove = { type: 'SPIRAL', t: 3 };
@@ -920,7 +939,7 @@ class Fighter {
         this.diving = false;
         this.vy = 0;
         const w = STAGE.width * sp.impactW;                   // Headbutt: 1/8 of the stage
-        const hit = sp.stun ? { damage: sp.impactDmg, bkb: 0, kbg: 0, angle: -Math.PI / 2, stun: sp.stunFrames || STUN }
+        const hit = sp.stun ? { damage: sp.impactDmg, bkb: 0, kbg: 0, angle: -Math.PI / 2, stun: sp.stunFrames || trainStun() }
                             : { damage: sp.impactDmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang, mirror: true, multi: true };
         this.activeHitbox = { x: this.x, y: this.y + this.height / 2 - 30, w, h: 64, type: 'HEADBUTT', ttl: 8, ...hit };
         this.activeMove = { type: 'HEADBUTT', t: 10 };
@@ -937,7 +956,7 @@ class Fighter {
     // ------------------------------------------------------------ F special: input
     canStartF(dir) {
         if (this.actionBlocked()) return false;
-        if (!this.grounded && this.airSpecials >= AIR_F_MAX) return false;
+        if (!this.grounded && this.airSpecials >= trainAirF()) return false;
         if (dir === 'NEUTRAL' && this.cd.CORE > 0) return false;
         return true;
     }
@@ -974,12 +993,12 @@ class Fighter {
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
         if (kind === 'HEADBUTT' && this.grounded) return false;
-        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= AIR_F_MAX) return false;
+        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= trainAirF()) return false;
 
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
         this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
-        this.actionLock = sp.lock !== undefined ? sp.lock : LOCK;
+        this.actionLock = sp.lock !== undefined ? sp.lock : trainLock();
 
         switch (kind) {
             case 'CORE': this.startCore(tx, ty, charge); break;
@@ -1484,7 +1503,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.rollTimer = ROLL_FRAMES;
         this.rollCooldown = ROLL_COOLDOWN;
-        this.actionLock = LOCK;
+        this.actionLock = trainLock();
         this.rollVx = rollDir * (ROLL_DISTANCE / ROLL_FRAMES);
 
         audio.playDash();
@@ -1535,7 +1554,7 @@ class Fighter {
         if (dist === 0) return false;
 
         this.canGrab = false;
-        this.actionLock = LOCK;
+        this.actionLock = trainLock();
 
         const grabDashSpeed = 23;
         this.vx = (dx / dist) * grabDashSpeed;
@@ -1569,7 +1588,7 @@ class Fighter {
         this.attackHeld = !!(hold && this.swing.chargeable);
         this.meleeCharge = 0;
         this.activeHitbox = null;
-        this.actionLock = LOCK + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
+        this.actionLock = trainLock() + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
         return true;
     }
@@ -2649,8 +2668,8 @@ function renderHUD() {
     if (fBadge) {
         let cls, txt, col;
         if (me.charging) { col = '#ddd6fe'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/60'; txt = `CORE ${Math.min(100, Math.round(me.chargeFrames / CHARGE_MAX * 100))}%`; }
-        else if (!me.grounded && me.airSpecials >= AIR_F_MAX) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
-        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${AIR_F_MAX - me.airSpecials}/${AIR_F_MAX}`; }
+        else if (!me.grounded && me.airSpecials >= trainAirF()) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
+        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${trainAirF() - me.airSpecials}/${trainAirF()}`; }
         const key = cls + txt + col;
         if (hudCache.fb !== key) { hudCache.fb = key; fBadge.className = cls; fBadge.textContent = txt; fBadge.style.color = col; }
     }
@@ -2676,7 +2695,7 @@ function triggerDramaticZoom(winnerCharacter) {
 
 const TEAM_COLORS = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', green: '#22c55e' };
 /** name above a fighter: username / guest, or Easy/Medium/Hard Bot (numbered when several of the same) */
-function assignTagNames() {
+export function assignTagNames() {
     const bots = {};
     for (const f of fighters) {
         if (!f.active) { f.tagName = ''; continue; }
@@ -2809,6 +2828,14 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('aimMatrixHud').classList.remove('hidden');
     document.getElementById('inGameMenuContainer').classList.remove('hidden');
 
+    // Training: apply prefs, no countdown — jump straight into playing
+    if (S.gameMode === 'training') {
+        applyTrainPrefs();
+        document.getElementById('countdownScreen').classList.add('hidden');
+        S.gameState = 'playing';
+        return;
+    }
+
     S.gameState = 'countdown';
     const countdownScreen = document.getElementById('countdownScreen');
     const countdownText = document.getElementById('countdownText');
@@ -2829,6 +2856,25 @@ function startMatchSequence(mode, cfg) {
             S.gameState = 'playing';
         }
     }, 1000);
+}
+
+/** Apply S.train to arena, p1/p2 characters, bot type */
+export function applyTrainPrefs() {
+    const t = ensureTrain();
+    if (t.stage === 'lobby' || t.stage === 'frontier') setArena('lobby');
+    else setArena('normal');
+    if (t.char) { p1.char = charOf(t.char).id; }
+    else p1.char = getMyChar();
+    p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;
+    const bt = t.botType || 'static';
+    p2.isAI = true;
+    if (bt === 'static') { p2.diff = null; p2.name = 'Training Dummy'; }
+    else { p2.diff = bt; p2.name = bt === 'easy' ? 'Easy Bot' : bt === 'medium' ? 'Medium Bot' : 'Hard Bot'; }
+    p2.char = charOf(t.botChar || t.char || getMyChar()).id;
+    p2.maxJumps = charOf(p2.char).jumps; p2.jumpsLeft = p2.maxJumps;
+    try { assignTagNames(); } catch (e) { /* ok */ }
+    const btn = document.getElementById('trainMenuBtn');
+    if (btn) btn.classList.toggle('hidden', S.gameMode !== 'training');
 }
 
 const gameOverModal = document.getElementById('gameOverModal');
@@ -2876,7 +2922,7 @@ function drive(f, h) {
         const meleeCharging = f.attackHeld && f.attackTimer > 0;     // charging a melee: movement input is ignored (momentum carries on)
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk;   // charging a core: 1.5x the old 4.5
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1);   // training walk mult for p1
             if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
             if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
         }
@@ -3108,7 +3154,10 @@ export function step() {
         drive(p1, { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') });
         p1.update();
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
-        else { p2.updateAI(p1); aiWalk(p2); }
+        else {
+            const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
+            if (!staticBot) { p2.updateAI(p1); aiWalk(p2); }
+        }
         p2.update();
 
         updateOrbs();
