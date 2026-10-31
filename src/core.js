@@ -1493,6 +1493,44 @@ class Fighter {
                 }
             }
         }
+
+        // Solid inverted-triangle keel under the stage (matches the 3D crystal under the map)
+        {
+            const keelTop = STAGE.y + STAGE.height;
+            const keelH = 320;
+            const keelBot = keelTop + keelH;
+            const cx = STAGE.x + STAGE.width / 2;
+            const halfTop = STAGE.width * 0.48;
+            const fL = this.x - this.width / 2, fR = this.x + this.width / 2;
+            const fT = this.y - this.height / 2, fB = this.y + this.height / 2;
+            if (fB > keelTop + 0.5 && fT < keelBot) {
+                // sample half-width at the fighter's vertical centre (tapered triangle)
+                const midY = Math.max(keelTop, Math.min(keelBot, this.y));
+                const t = (midY - keelTop) / keelH;
+                const half = halfTop * Math.max(0, 1 - t);
+                const left = cx - half, right = cx + half;
+                if (fR > left && fL < right) {
+                    // push out to the nearer sloping side
+                    const toL = fR - left, toR = right - fL;
+                    if (toL < toR) {
+                        this.x = left - this.width / 2;
+                        if (this.vx > 0) this.vx = bounce ? -Math.abs(vx0) * BOUNCE : 0;
+                    } else {
+                        this.x = right + this.width / 2;
+                        if (this.vx < 0) this.vx = bounce ? Math.abs(vx0) * BOUNCE : 0;
+                    }
+                    // upward into the keel from below: bounce down a bit
+                    if (vy0 < 0 && fT < keelBot && this.y > keelTop + keelH * 0.5) {
+                        this.vy = bounce ? Math.abs(vy0) * BOUNCE : Math.max(this.vy, 0);
+                    }
+                    if (this.sx && this.sx.k === 'rocket') {
+                        // deflect rocket away from centre
+                        const away = this.x < cx ? Math.PI : 0;
+                        this.sx.ang = away * 0.35 + this.sx.ang * 0.65;
+                    }
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ moves

@@ -124,7 +124,7 @@ export function buildStage(scene) {
     stage.add(ledgeL, ledgeR);
     anim.push((t) => { ledgeMat.emissiveIntensity = 2.6 + Math.sin(t * 3) * 0.7; });
 
-    // inverted crystal keel under the slab (purely decorative)
+    // inverted crystal keel under the slab (solid in gameplay — matches collision)
     const keelMat = new THREE.MeshStandardMaterial({ color: 0x172033, metalness: 0.6, roughness: 0.5, flatShading: true });
     const keelGeo = new THREE.CylinderGeometry(0.5, 0.07, 1, 4, 1);
     keelGeo.rotateY(Math.PI / 4);
