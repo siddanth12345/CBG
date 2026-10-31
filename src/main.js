@@ -240,7 +240,7 @@ $('menuRestartBtn').addEventListener('click', () => { menuDropdown.classList.add
 function backToMenu() {
     ui.guide.stop();
     if (S.online || Online.role) leaveRoom();
-    for (const id of ['gameHud', 'aimMatrixHud', 'inGameMenuContainer', 'trainingControlPanel', 'openTrainingPanelBtn', 'trainMenuBtn']) $(id).classList.add('hidden');
+    for (const id of ['gameHud', 'aimMatrixHud', 'inGameMenuContainer', 'trainMenuBtn']) $(id).classList.add('hidden');
     try { trainUI.close(); } catch (e) { /* ok */ }
     dramaticZoom.active = false;
     S.gameState = 'start';
@@ -250,16 +250,12 @@ $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('h
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); backToMenu(); });
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
-const trainingPanel = $('trainingControlPanel');
-const openTrainingBtn = $('openTrainingPanelBtn');
-$('closeTrainingPanelBtn').addEventListener('click', () => { trainingPanel.classList.add('hidden'); openTrainingBtn.classList.remove('hidden'); });
-openTrainingBtn.addEventListener('click', () => { trainingPanel.classList.remove('hidden'); openTrainingBtn.classList.add('hidden'); });
 const trainMenuBtn = $('trainMenuBtn');
 if (trainMenuBtn) trainMenuBtn.addEventListener('click', () => trainUI.open());
 
 
 for (const [id, mode] of [['easyModeBtn', 'easy'], ['mediumModeBtn', 'medium'], ['hardModeBtn', 'hard'], ['trainingModeBtn', 'training']]) {
-    $(id).addEventListener('click', () => { audio.init(); startMatchSequence(mode); if (mode === 'training' && mouse.touchMode) $('closeTrainingPanelBtn').click(); });
+    $(id).addEventListener('click', () => { audio.init(); startMatchSequence(mode); });
 }
 
 // ------------------------------------------------------------------ loop

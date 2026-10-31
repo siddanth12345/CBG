@@ -2899,38 +2899,26 @@ function startMatchSequence(mode, cfg) {
 
     if (S.gameMode === 'lobby') {
         modeLabel.textContent = S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL';
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'easy') {
         modeLabel.textContent = "MODE: EASY";
         aiDiffLabel.textContent = "Easy Bot";
         aiDescText.textContent = "Slower movement, passive attacks & defensive shield";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'medium') {
         modeLabel.textContent = "MODE: MEDIUM";
         aiDiffLabel.textContent = "Medium Bot";
         aiDescText.textContent = "Uses every move, but reacts slower and doesn't learn your habits";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'hard') {
         modeLabel.textContent = "MODE: HARD"
         aiDiffLabel.textContent = "Hard Bot";
         aiDescText.textContent = "Learns your habits • Core zoning • Ledge Guard & Counter-Rolls";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'online') {
         modeLabel.textContent = "MODE: ONLINE 1v1";
         aiDiffLabel.textContent = S.opponentName || 'Opponent';
         aiDescText.textContent = S.online === 'host' ? 'You are hosting: you are the blue fighter' : 'Connected to the host: you are the blue fighter';
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'training') {
         modeLabel.textContent = "MODE: TRAINING";
         aiDiffLabel.textContent = "Static Bot";
         aiDescText.textContent = "Static Bot — stationary practice dummy with infinite stocks";
-        document.getElementById('trainingControlPanel').classList.remove('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     }
 
     document.getElementById('gameHud').classList.remove('hidden');
