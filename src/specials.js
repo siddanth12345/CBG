@@ -48,7 +48,7 @@ export const SP = {
              speed: [7, 6.5], r: [22, 40], dmg: [7, 15], R: [90, 150], bkb: [3, 5], kbg: 0.45, life: 460, wobble: 5, pull: 5 },
         S: { kind: 'bubble', name: 'Bubble Trap', desc: 'Fire a slow bubble. The first foe it touches is trapped inside until it pops: after 3 seconds, on the floor, or when someone hits it. The pop deals 9.', cd: 150, speed: 5.5, r: 46, life: 160, popDmg: 9, R: 95, bkb: 7, kbg: 0.7 },
         U: { kind: 'erupt', name: 'Geyser', desc: 'A water pillar erupts right under your nearest foe (on the ground or in mid-air). It lifts them high and stuns them (grey), and the jet throws you upward too (11).', cd: 130, windup: 12, near: 650, ride: 12, h: 420, w: 0.06, dmg: 11, stun: 40, lift: 11 },
-        DG: { kind: 'pound', name: 'Whirlpool', desc: 'A big pull: drags everyone nearby toward you (8).', cd: 90, windup: 8, w: 0.3, h: 120, dmg: 8, bkb: 3, kbg: 0.3, ang: -1.0, stun: 0, lock: 30, hits: 1, pull: 6, centred: true },
+        DG: { kind: 'pound', name: 'Whirlpool', desc: 'A 3 s whirlpool on the ground. Foes inside are stunned and slowly dragged to the centre (8 on spawn). They can be hit out of it.', cd: 90, windup: 8, w: 0.28, h: 40, dmg: 8, bkb: 0, kbg: 0, ang: -1.0, stun: 0, lock: 30, hits: 1, pull: 2.2, centred: true, zone: true, life: 180, R: 0.14 },
         DA: { kind: 'dive', name: 'Splash Dive', desc: 'A plunge ending in a wide splash that shoves foes aside (12).', cd: 90, vy: 22, hitDmg: 0, every: 99, impactDmg: 12, impactW: 0.2, stun: false, bkb: 8, kbg: 0.9, ang: -0.7, lock: 20 },
     },
     volt: {

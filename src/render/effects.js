@@ -429,6 +429,57 @@ export class Effects {
                     else { this.ring(pos, 10, R, 0.4, P[0], 'screen'); this.ring(pos, 6, R * 0.6, 0.3, P[1], 'screen'); this.sparks(pos, P[1], 14, R * 2, 0.45); }
                     break;
                 }
+                case 'whirlpool': {       // lasting water spiral on the ground; a = radius, b = life frames
+                    const P = pal(e.c || 'water');
+                    const R = Math.max(40, e.a || 120);
+                    const dur = Math.min(3.2, Math.max(0.35, (e.b || 60) / 60));
+                    const g = new THREE.Group();
+                    g.position.copy(pos);
+                    g.position.y = this.stageTop + 2;
+                    // stacked spinning rings (looks like a whirlpool funnel)
+                    const rings = [];
+                    for (let i = 0; i < 5; i++) {
+                        const rr = R * (1 - i * 0.14);
+                        const tor = new THREE.Mesh(
+                            new THREE.TorusGeometry(rr * 0.55, Math.max(2.5, rr * 0.04), 8, 36),
+                            new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? P[1] : P[0]).multiplyScalar(1.6), transparent: true, opacity: 0.85 - i * 0.1, blending: ADD, depthWrite: false, toneMapped: false })
+                        );
+                        tor.rotation.x = Math.PI / 2;
+                        tor.position.y = 4 + i * 5;
+                        g.add(tor); rings.push(tor);
+                    }
+                    // inner dark core disc
+                    const core = new THREE.Mesh(
+                        new THREE.CircleGeometry(R * 0.22, 24),
+                        new THREE.MeshBasicMaterial({ color: 0x0c4a6e, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
+                    );
+                    core.rotation.x = -Math.PI / 2; core.position.y = 1; g.add(core);
+                    // water spray column
+                    const spray = new THREE.Mesh(
+                        new THREE.CylinderGeometry(R * 0.08, R * 0.35, 18, 12, 1, true),
+                        new THREE.MeshBasicMaterial({ color: new THREE.Color(P[1]).multiplyScalar(1.8), transparent: true, opacity: 0.35, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
+                    );
+                    spray.position.y = 12; g.add(spray);
+                    this.scene.add(g);
+                    this.timed.push({
+                        obj: g, t: 0, dur,
+                        step: (u) => {
+                            const spin = u * Math.PI * 6;
+                            rings.forEach((r, i) => {
+                                r.rotation.z = spin * (1 + i * 0.15) * (i % 2 ? -1 : 1);
+                                r.material.opacity = (0.85 - i * 0.1) * (1 - u * 0.5);
+                                const pulse = 1 + Math.sin(u * 20 + i) * 0.04;
+                                r.scale.set(pulse, pulse, pulse);
+                            });
+                            core.material.opacity = 0.55 * (1 - u * 0.4);
+                            spray.rotation.y = -spin * 1.4;
+                            spray.material.opacity = 0.35 * (1 - u * 0.3);
+                            g.position.y = this.stageTop + 2 + Math.sin(u * 12) * 1.5;
+                        },
+                    });
+                    this.sparks(pos, P[1], 10, R * 1.2, 0.4);
+                    break;
+                }
                 case 'trail': {          // a = travel angle (sim), b = 1 for a dash streak
                     const P = pal(e.c), wa = -(e.a || 0);
                     this.spray(pos, wa + Math.PI, P[Math.random() < 0.5 ? 0 : 1], e.b ? 3 : 4, 160, 0.5, 0.3);

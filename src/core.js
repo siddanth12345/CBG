@@ -26,6 +26,7 @@ export const koBeams = [];
 export const shockwaves = [];
 export const fxEvents = [];
 export const orbs = [];                    // CBG Core projectiles
+export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, life, owner, pull }
 let orbSerial = 0;
 function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
 
@@ -834,14 +835,25 @@ class Fighter {
                 const w = STAGE.width * sp.w, feet = this.y + this.height / 2;
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
-                this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
-                    pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
-                const st = STYLE_OF[this.char];
-                if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st);
-                if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st);
-                if (sp.pull) fx('gust', cx, cy, sp.pull * 30, 1, st);
-                S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
-                createParticles(cx, cy + sp.h / 2, this.color, 14);
+                if (sp.zone) {
+                    // lasting whirlpool on the ground (Tide): initial hit, then zone pulls + stuns for sp.life frames
+                    const R = STAGE.width * (sp.R || sp.w * 0.5);
+                    this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
+                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
+                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                    fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
+                    S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+                    createParticles(cx, feet - 10, '#38bdf8', 22);
+                } else {
+                    this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
+                        pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
+                    const st = STYLE_OF[this.char];
+                    if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st);
+                    if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st);
+                    if (sp.pull) fx('gust', cx, cy, sp.pull * 30, 1, st);
+                    S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
+                    createParticles(cx, cy + sp.h / 2, this.color, 14);
+                }
             }
             if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || trainLock()); }
         } else if (x.k === 'rocket') {
@@ -2400,6 +2412,35 @@ function explodeOrb(o) {
 }
 
 function dropOrb(o) { const k = orbs.indexOf(o); if (k >= 0) orbs.splice(k, 1); }
+function updateWhirlpools() {
+    for (let i = whirlpools.length - 1; i >= 0; i--) {
+        const w = whirlpools[i];
+        w.life--;
+        if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
+        // refresh VFX every ~0.35 s so the spiral keeps spinning for the full 3 s
+        if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        for (const f of foesOf(w.owner || p1)) {
+            if (!isAlive(f)) continue;
+            // hit out: a real launch (hitstun) frees them from the pool
+            if (f.hitstun > 14) { f._inWhirl = false; continue; }
+            const dx = w.x - f.x, dy = (w.y - f.height * 0.35) - f.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > w.r + f.width * 0.5) { f._inWhirl = false; continue; }
+            if (!f._inWhirl) { f.interrupt(); f._inWhirl = true; }
+            // soft continuous stun while inside
+            f.clashStunTimer = Math.max(f.clashStunTimer, 10);
+            const pull = w.pull || 2;
+            if (dist > 10) {
+                f.vx = dx / dist * pull;
+                f.vy = dy / dist * pull * 0.5;
+            } else {
+                f.vx *= 0.65; f.vy *= 0.65;
+            }
+            f.grounded = false;
+        }
+    }
+}
+
 function updateOrbs() {
     for (let i = Math.min(orbs.length, 64) - 1; i >= 0; i--) {
         const o = orbs[i];
@@ -2747,6 +2788,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
     orbs.length = 0;
+    whirlpools.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
     if (S.match) {
@@ -3146,6 +3188,7 @@ export function step() {
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
+        updateWhirlpools();
         updateOrbs();
         updateItems();
         const live2 = fighters.filter(isAlive);
@@ -3165,6 +3208,7 @@ export function step() {
         }
         p2.update();
 
+        updateWhirlpools();
         updateOrbs();
 
         checkCombatCollisions(p1, p2);
