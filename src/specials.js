@@ -72,8 +72,8 @@ export const SP = {
              speed: [10, 9], r: [34, 62], dmg: [12, 24], R: [120, 200], bkb: [9, 13], kbg: 0.72, life: 220, grav: 0.3 },
         S: { kind: 'dash', name: 'Boulder Roll', desc: 'A long, armoured roll for 20 damage. Long recovery.', cd: 160, dist: 380, frames: 17, armor: true, dmg: 20, bkb: 12, kbg: 1.0, w: 110, h: 100, ang: 0.4, lock: 70 },
         U: { kind: 'rise', name: 'Rubble Launch', desc: 'A rubble blast under your feet throws foes away (14), then an armoured slow lift with a crushing hit at the top (10).', cd: 170, frames: 36, vy: 6.5, armor: true, every: 99, hitDmg: 0, lastDmg: 10, lastBkb: 12, lastKbg: 1.05, w: 170, h: 150, start: { R: 150, dmg: 14, bkb: 10, kbg: 1.0 } },
-        DG: { kind: 'pound', name: 'Quake', desc: 'A huge, slow ground pound: 24 damage in a big radius, armoured while winding up. Knockback is soft (0.3×).', cd: 180, windup: 30, armor: true, w: 0.34, h: 80, dmg: 24, bkb: 3.6, kbg: 0.315, ang: -1.3, stun: 0, lock: 70, hits: 1, centred: true },
-        DA: { kind: 'dive', name: 'Landslide', desc: 'A very heavy drop: one 22-damage impact in a wide area. Knockback is soft (0.3×).', cd: 170, vy: 28, hitDmg: 0, every: 99, impactDmg: 22, impactW: 0.26, stun: false, bkb: 3.3, kbg: 0.3, ang: -1.3, lock: 40 },
+        DG: { kind: 'pound', name: 'Quake', desc: 'A huge, slow ground pound: 24 damage in a big radius, armoured while winding up. Knockback matches Bulwark downs (0.3×).', cd: 180, windup: 30, armor: true, w: 0.34, h: 80, dmg: 24, bkb: 3.6, kbg: 0.33, ang: -1.3, stun: 0, lock: 70, hits: 1, centred: true },
+        DA: { kind: 'dive', name: 'Landslide', desc: 'A very heavy drop: one 22-damage impact in a wide area. Knockback matches Bulwark downs (0.3×).', cd: 170, vy: 28, hitDmg: 0, every: 99, impactDmg: 22, impactW: 0.26, stun: false, bkb: 3.6, kbg: 0.33, ang: -1.3, lock: 40 },
     },
 };
 
