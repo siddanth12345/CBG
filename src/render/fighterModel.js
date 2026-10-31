@@ -414,13 +414,13 @@ export class FighterModel {
         };
         this.lblHang = label('HANGING', '#38bdf8');
         this.lblStun = label('STUNNED', '#f43f5e');
-        // name tag (outlined, team/fighter color) — texture rebuilt when name or color changes
+        // name tag (3x size, black box + colored border matching the text) — texture rebuilt when name/color change
         this._nameKey = '';
         this.lblName = (() => {
-            const c = document.createElement('canvas'); c.width = 512; c.height = 64;
+            const c = document.createElement('canvas'); c.width = 768; c.height = 128;
             const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
-            s.scale.set(90, 14, 1); s.position.y = 58; s.visible = false; s.renderOrder = 21;
+            s.scale.set(270, 42, 1); s.position.y = 72; s.visible = false; s.renderOrder = 21;
             s.userData.canvas = c;
             this.root.add(s);
             return s;
@@ -897,7 +897,7 @@ export class FighterModel {
 
         this.lblHang.visible = f.isHanging;
         this.lblStun.visible = f.clashStunTimer > 0;
-        // name tag: outlined text in the fighter's team / slot color
+        // name tag: 3x size, black box, border + text in team/slot color
         {
             const show = f.active && !f.out;
             const name = (f.tagName || f.name || '').slice(0, 24);
@@ -909,22 +909,36 @@ export class FighterModel {
                 const g = c.getContext('2d');
                 g.clearRect(0, 0, c.width, c.height);
                 if (name) {
-                    g.font = '800 28px Inter, system-ui, sans-serif';
+                    g.font = '800 52px Inter, system-ui, sans-serif';
                     g.textAlign = 'center'; g.textBaseline = 'middle';
-                    g.lineJoin = 'round'; g.miterLimit = 2;
-                    g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,0.85)';
-                    g.strokeText(name, c.width / 2, 34);
+                    const tw = Math.ceil(g.measureText(name).width);
+                    const padX = 28, padY = 16;
+                    const boxW = tw + padX * 2, boxH = 52 + padY * 2;
+                    const bx = (c.width - boxW) / 2, by = (c.height - boxH) / 2;
+                    // black fill box
+                    g.fillStyle = 'rgba(0,0,0,0.88)';
+                    g.beginPath();
+                    const r = 12;
+                    g.moveTo(bx + r, by); g.arcTo(bx + boxW, by, bx + boxW, by + boxH, r);
+                    g.arcTo(bx + boxW, by + boxH, bx, by + boxH, r);
+                    g.arcTo(bx, by + boxH, bx, by, r); g.arcTo(bx, by, bx + boxW, by, r);
+                    g.closePath(); g.fill();
+                    // colored outline matching the font
+                    g.lineWidth = 5; g.strokeStyle = col;
+                    g.stroke();
+                    // name text in the same color
                     g.fillStyle = col;
-                    g.fillText(name, c.width / 2, 34);
+                    g.fillText(name, c.width / 2, c.height / 2 + 1);
                 }
                 this.lblName.material.map.needsUpdate = true;
-                const tw = name ? Math.min(120, 18 + name.length * 5.2) : 40;
-                this.lblName.scale.set(tw, 14, 1);
+                // world scale ~3x previous (~90x14 -> ~270x42), width tracks name length a bit
+                const tw = name ? Math.min(320, 90 + name.length * 14) : 120;
+                this.lblName.scale.set(tw, 42, 1);
             }
             this.lblName.visible = show && !!name;
-            // hang/stun labels sit a bit higher when the name is showing
-            this.lblHang.position.y = show && name ? 70 : 52;
-            this.lblStun.position.y = show && name ? 70 : 52;
+            // hang/stun labels sit above the bigger name plate
+            this.lblHang.position.y = show && name ? 96 : 52;
+            this.lblStun.position.y = show && name ? 96 : 52;
         }
         this.stars.visible = f.dizzyTimer > 0;
         if (this.stars.visible) {
