@@ -831,8 +831,19 @@ class Fighter {
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
-            this.x += Math.cos(x.ang) * sp.speed; this.y += Math.sin(x.ang) * sp.speed;
-            this.vx = this.vy = 0; this.grounded = false; this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
+            // Sub-step the rocket so it cannot skip through the stage / platforms in one frame
+            const step = sp.speed, n = Math.max(1, Math.ceil(step / 6));
+            const sx = Math.cos(x.ang) * step / n, sy = Math.sin(x.ang) * step / n;
+            for (let i = 0; i < n; i++) {
+                const lx = this.x, ly = this.y;
+                this.x += sx; this.y += sy;
+                this.px = lx; this.py = ly;
+                this.vx = sx; this.vy = sy;
+                this.checkStageCollision(false);
+                if (this.grounded) break;
+            }
+            this.vx = this.vy = 0;
+            this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
             if (sp.drill) {                                                // Phoenix Dash: a drill of quick hits that carry foes along with the flame; only the final blast knocks
                 if (x.t % 4 === 1 && (x.hits || 0) < sp.maxHits) {
                     const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
@@ -1337,7 +1348,12 @@ class Fighter {
     }
 
     checkStageCollision(bounce = false) {
-        const vx0 = this.vx, vy0 = this.vy;                  // speed on impact (used for the ragdoll bounce)
+        // Use actual frame motion (x - px) when vx/vy were zeroed by a special (rocket, dash, etc.)
+        // so fast moves cannot tunnel through the stage or platforms.
+        const mx = this.x - (this.px !== undefined ? this.px : this.x);
+        const my = this.y - (this.py !== undefined ? this.py : this.y);
+        const vx0 = Math.abs(this.vx) > 0.01 ? this.vx : mx;
+        const vy0 = Math.abs(this.vy) > 0.01 ? this.vy : my;
         const BOUNCE = 0.62, MIN_BOUNCE = 3.2;
         const platLeft = STAGE.x;
         const platRight = STAGE.x + STAGE.width;
@@ -1348,6 +1364,10 @@ class Fighter {
         const fRight = this.x + this.width / 2;
         const fTop = this.y - this.height / 2;
         const fBottom = this.y + this.height / 2;
+        const prevBottom = (this.py !== undefined ? this.py : this.y) + this.height / 2;
+        const prevTop = (this.py !== undefined ? this.py : this.y) - this.height / 2;
+        const prevLeft = (this.px !== undefined ? this.px : this.x) - this.width / 2;
+        const prevRight = (this.px !== undefined ? this.px : this.x) + this.width / 2;
 
         // (the 0.5 tolerance keeps a fighter standing exactly on the surface "grounded" every
         //  frame; the strict comparison used to flicker grounded on/off, which made rolls and
@@ -1361,10 +1381,16 @@ class Fighter {
             const minOverlapX = Math.min(overlapLeft, overlapRight);
             const minOverlapY = Math.min(overlapTop, overlapBottom);
 
-            if (minOverlapY < minOverlapX) {
-                if (overlapTop < overlapBottom && this.vy >= 0) {
+            // Prefer the axis we were moving along; otherwise smaller overlap
+            const preferY = Math.abs(vy0) >= Math.abs(vx0) * 0.85 || minOverlapY <= minOverlapX + 0.5;
+
+            if (preferY && minOverlapY <= minOverlapX + 2) {
+                // Landing / ceiling: use motion direction, not raw vy (rocket zeros vy)
+                const goingDown = vy0 >= -0.01 || prevBottom <= platTop + 2;
+                const goingUp = vy0 < -0.01 || prevTop >= platBottom - 2;
+                if (goingDown && overlapTop <= overlapBottom + 1) {
                     this.y = platTop - this.height / 2;
-                    if (bounce && vy0 > MIN_BOUNCE) {         // land hard: bounce back up with the knockback that is left
+                    if (bounce && vy0 > MIN_BOUNCE) {
                         this.vy = -vy0 * BOUNCE;
                         this.vx = vx0 * 0.9;
                         this.grounded = false;
@@ -1373,15 +1399,22 @@ class Fighter {
                         return;
                     }
                     this.vy = 0;
-                    if (bounce) this.vx *= 0.35;               // settled: no skating across the floor
+                    if (bounce) this.vx *= 0.35;
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
-                    this.leaveLedge();                       // climbing off a ledge strips remaining invuln
-                    this.airSpecials = 0;                     // touching the ground recharges air F moves
-                } else if (overlapBottom <= overlapTop && this.vy < 0) {
+                    this.leaveLedge();
+                    this.airSpecials = 0;
+                    // stop a rocket / similar special from driving further into the floor
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.min(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
+                } else if (goingUp || overlapBottom < overlapTop) {
                     this.y = platBottom + this.height / 2;
-                    this.vy = bounce ? -vy0 * BOUNCE : 0;      // knocked into the underside: rebound downward
+                    this.vy = bounce ? Math.abs(vy0) * BOUNCE : 0;
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.max(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
                 }
             } else {
                 if (overlapLeft < overlapRight) {
@@ -1389,19 +1422,26 @@ class Fighter {
                 } else {
                     this.x = platRight + this.width / 2;
                 }
-                this.vx = bounce ? -vx0 * BOUNCE : 0;          // rebound off the side wall with the speed that is left
+                this.vx = bounce ? -vx0 * BOUNCE : 0;
                 if (bounce && Math.abs(vx0) > MIN_BOUNCE) fx('hit', this.x, this.y, Math.min(16, Math.abs(vx0) * 0.6), vx0 > 0 ? Math.PI : 0);
+                if (this.sx && this.sx.k === 'rocket') {
+                    this.sx.ang = Math.atan2(Math.sin(this.sx.ang), -Math.cos(this.sx.ang));
+                }
             }
         } else {
             this.grounded = false;
         }
 
-        // soft platforms (custom-match arena): you land on top when coming down onto them, and pass through from below
-        if (!this.grounded && STAGE.platforms.length && this.dropT <= 0 && vy0 >= 0) {
-            const bottom = this.y + this.height / 2, prevBottom = this.py + this.height / 2;
+        // Soft platforms (Frontier / custom arena): land when the swept body crosses the top
+        // from above. No "bottom < pl.y + 60" cap — that let rockets tunnel through.
+        if (!this.grounded && STAGE.platforms.length && this.dropT <= 0 && vy0 >= -0.01) {
             for (const pl of STAGE.platforms) {
-                if (this.x + this.width / 2 > pl.x && this.x - this.width / 2 < pl.x + pl.w &&
-                    bottom > pl.y - 0.5 && prevBottom <= pl.y + 1 && bottom < pl.y + 60) {
+                const halfW = this.width / 2;
+                if (this.x + halfW <= pl.x || this.x - halfW >= pl.x + pl.w) continue;
+                // swept crossing of the platform surface this frame (or standing on it)
+                const crossed = prevBottom <= pl.y + 3 && fBottom >= pl.y - 0.5;
+                const resting = Math.abs(fBottom - pl.y) <= 1.5 && vy0 >= -0.01;
+                if (crossed || resting) {
                     this.y = pl.y - this.height / 2;
                     if (bounce && vy0 > MIN_BOUNCE) {
                         this.vy = -vy0 * BOUNCE; this.vx = vx0 * 0.9;
@@ -1415,6 +1455,9 @@ class Fighter {
                     this.canGrab = true;
                     this.leaveLedge();
                     this.airSpecials = 0;
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.min(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
                     break;
                 }
             }
