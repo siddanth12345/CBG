@@ -1529,10 +1529,11 @@ class Fighter {
         if (this.actionLock > JUMP_OK) return false;                // 0.3 s after a move you may jump again
 
         if (this.isHanging) {
+            // hangSide is -1 on the left ledge, +1 on the right: jump ONTO the stage
             const side = this.hangSide;
             this.leaveLedge();
             this.vy = -14.5;
-            this.vx = side * 7.5;
+            this.vx = -side * 9;
             this.jumpsLeft = this.maxJumps;
             this.canGrab = true;
             audio.playJump();
@@ -1765,8 +1766,20 @@ class AIBot extends Fighter {
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         if (this.isHanging) {
-            this.jump();
-            this.vx = (this.x < stageCenterX) ? 8.5 : -8.5;
+            // always climb toward stage centre; force a get-up if jump is locked
+            const onto = this.x < stageCenterX ? 10 : -10;
+            if (!this.jump()) {
+                this.leaveLedge();
+                this.vy = -15;
+                this.jumpsLeft = this.maxJumps;
+                this.canGrab = true;
+            }
+            this.vx = onto;
+            // hard bots: if still near the void edge, burn a recovery special next frame
+            if (this.level === 'hard' && this.actionTimer % 8 === 0) {
+                const lx = this.x < stageCenterX ? STAGE.x + 40 : STAGE.x + STAGE.width - 40;
+                this.useSpecial('SPIRAL', lx, STAGE.y - 40);
+            }
             return;
         }
 

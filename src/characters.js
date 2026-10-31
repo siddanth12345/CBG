@@ -13,7 +13,7 @@ export const CHARS = {
         art: { skin: '#cbd5e1', feature: 'crest' },
     },
     bulwark: {
-        id: 'bulwark', name: 'Bulwark', role: 'Tank', walk: 0.72, orb: 0.85, blink: 0.8, scale: 1.14,
+        id: 'bulwark', name: 'Bulwark', role: 'Tank', walk: 0.936, orb: 0.85, blink: 0.8, scale: 1.14,
         desc: 'An armoured knight who walks slowly but never hurries. Swings a heavy tower shield. Armoured specials and the hardest hits.',
         look: { suit: 0x1e293b, trim: 0x94a3b8, head: 'bucket', weapon: 'slab', anim: 'heavy', extra: 'shieldback' },
         art: { skin: '#94a3b8', feature: 'bucket' },
@@ -49,7 +49,7 @@ export const CHARS = {
         art: { skin: '#6b7280', feature: 'hood' },
     },
     terra: {
-        id: 'terra', name: 'Terra', role: 'Heavy', walk: 0.62, orb: 0.8, blink: 0.75, scale: 1.2,
+        id: 'terra', name: 'Terra', role: 'Heavy', walk: 0.806, orb: 0.8, blink: 0.75, scale: 1.2,
         desc: 'A rock golem. The slowest walker, with huge fists and slow, crushing specials. Hits like a landslide.',
         look: { suit: 0x292524, trim: 0xa8a29e, head: 'rocks', weapon: 'fist', anim: 'heavy', extra: 'rocks' },
         art: { skin: '#a8a29e', feature: 'rocks' },
@@ -62,6 +62,8 @@ const JUMPS = { luminent: 3, bulwark: 3, zephyr: 5, ember: 4, tide: 4, volt: 4, 
 for (const c of Object.values(CHARS)) {
     const w = c.walk;
     c.kb = Math.round((w < 1 ? 1 - 0.4 * (1 - w) / 0.38 : 1 + 0.5 * (w - 1) / 0.35) * 1000) / 1000;
+    // light/speedy: 1.15× weight → take less knockback
+    if (c.id === 'zephyr' || c.id === 'volt' || c.id === 'umbra') c.kb = Math.round(c.kb / 1.15 * 1000) / 1000;
     c.jumps = JUMPS[c.id];
     const sp = SP[c.id];
     c.specials = [['Hold F', sp.N], ['Side F', sp.S], ['Up F', sp.U], ['Down F (ground)', sp.DG], ['Down F (air)', sp.DA]].map(([k, v]) => ({ key: k, name: v.name, desc: v.desc }));
