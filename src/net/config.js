@@ -21,3 +21,9 @@ export const RTC_ICE = [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
     { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' },
 ];
+
+// Realtime relay: the SAME Supabase project Table Wars uses (its publishable key is public by design). Only Realtime broadcast channels
+// named "cbg:<code>" are used: nothing is stored, and accounts stay local (they do not use this project).
+export const REALTIME_URL = 'https://c--c99ea759-61d6-495d-b33e-9852618688eb-prod.lovable.cloud';
+export const REALTIME_KEY = 'sb_publishable_vloFvJzxxIubERvZ94mWdg_NvwYhnsv';
+export const REALTIME_JS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js', 'https://unpkg.com/@supabase/supabase-js@2.57.4/dist/umd/supabase.js'];

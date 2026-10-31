@@ -1,5 +1,5 @@
 // One shared Supabase client (loaded from a CDN) for accounts and realtime.
-import { SUPABASE_URL, SUPABASE_KEY, SUPABASE_JS } from './config.js';
+import { SUPABASE_URL, SUPABASE_KEY, SUPABASE_JS, REALTIME_URL, REALTIME_KEY, REALTIME_JS } from './config.js';
 
 export const supabaseConfigured = () => !!(SUPABASE_URL && SUPABASE_KEY);
 let client = null, loading = null;
@@ -20,4 +20,16 @@ export async function getClient() {
         return client;
     });
     return loading;
+}
+
+// Realtime-only client (the relay shared with Table Wars). Never used for accounts.
+let rtClient = null, rtLoading = null;
+export const realtimeConfigured = () => !!(REALTIME_URL && REALTIME_KEY);
+export function getRealtimeClient() {
+    if (rtClient) return Promise.resolve(rtClient);
+    if (!rtLoading) rtLoading = REALTIME_JS.reduce((p, src) => p.catch(() => loadScript(src)), Promise.reject(new Error('start'))).then(() => {
+        rtClient = window.supabase.createClient(REALTIME_URL, REALTIME_KEY, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { params: { eventsPerSecond: 100 } } });
+        return rtClient;
+    }).catch((e) => { rtLoading = null; throw e; });
+    return rtLoading;
 }

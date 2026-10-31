@@ -1,6 +1,6 @@
 // A transport moves small JSON messages between the two players of a room.
 //   const t = await openTransport(code); t.onmessage = (msg) => ...; t.send(msg); t.close();
-import { getClient, supabaseConfigured } from './supa.js';
+import { getClient, supabaseConfigured, getRealtimeClient, realtimeConfigured } from './supa.js';
 import { MQTT_JS, MQTT_BROKERS, RTC_ICE } from './config.js';
 
 const forced = () => { try { return localStorage.getItem('luminary-transport'); } catch (e) { return null; } };
@@ -78,14 +78,38 @@ class MqttTransport {
         this.rtcRole = null; this.peers = new Map(); this.info = { mode: 'relay', rtt: 0 }; this.pingT = 0; this.mqttRtt = 0; this.seq = 0;
     }
     async open() {
+        // two relays at once: the Supabase realtime channel (what Table Wars uses) and the public MQTT brokers. The first that works lets the
+        // room open; both carry every message (duplicates are dropped), so players always meet even if one relay is blocked for one of them.
+        const jobs = [];
+        if (realtimeConfigured() && forced() !== 'mqtt') jobs.push(this.openSupa());
+        if (forced() !== 'supabase') jobs.push(this.openMqtt());
+        await new Promise((resolve, reject) => {
+            let failed = 0, last = null;
+            for (const j of jobs) j.then(resolve, (e) => { last = last || e; if (++failed === jobs.length) reject(last); });
+        });
+    }
+    async openMqtt() {
         await getMqtt();
         if (!subs.has(this.topic)) subs.set(this.topic, new Set());
         subs.get(this.topic).add(this);
         await Promise.all(pool.filter((c) => c.connected).map((c) => new Promise((resolve) => c.subscribe(this.topic, { qos: 0 }, () => resolve()))));
     }
+    async openSupa() {
+        const cl = await getRealtimeClient();
+        const ch = cl.channel('cbg:' + this.topic.split('/').pop(), { config: { broadcast: { self: false, ack: false } } });
+        ch.on('broadcast', { event: 'm' }, ({ payload }) => { if (payload && payload.s !== this.id && !dupe(payload)) this.recv(payload); });
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('timed out connecting to the server')), 12000);
+            ch.subscribe((status) => {
+                if (status === 'SUBSCRIBED') { clearTimeout(timer); this.sch = ch; this.sup = cl; resolve(); }
+                else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { clearTimeout(timer); reject(new Error('server connection failed (' + status + ')')); }
+            });
+        });
+    }
     raw(d) {
         const s = JSON.stringify({ s: this.id, n: ++this.seq, d });
         for (const c of pool) if (c.connected) { try { c.publish(this.topic, s, { qos: 0 }); } catch (e) { /* offline */ } }
+        if (this.sch) { try { this.sch.send({ type: 'broadcast', event: 'm', payload: { s: this.id, n: this.seq, d } }); } catch (e) { /* offline */ } }
     }
 
     // ---------------------------------------------------------------- peer to peer upgrade (WebRTC data channels)
@@ -179,6 +203,7 @@ class MqttTransport {
     send_(msg) { this.send(msg); }
     close() {
         clearInterval(this.pingT);
+        if (this.sch && this.sup) { try { this.sup.removeChannel(this.sch); } catch (e) { /* ignore */ } this.sch = null; }
         for (const id of [...this.peers.keys()]) this.dropPeer(id);
         const set = subs.get(this.topic);
         if (set) { set.delete(this); if (!set.size) { subs.delete(this.topic); for (const c of pool) { try { c.unsubscribe(this.topic); } catch (e) { /* ignore */ } } } }
