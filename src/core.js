@@ -1292,6 +1292,14 @@ class Fighter {
         }
     }
 
+    /** leave the ledge: any remaining ledge invincibility is stripped immediately */
+    leaveLedge() {
+        if (!this.isHanging) return;
+        this.isHanging = false;
+        this.hangTimer = 0;
+        this.invincibleTimer = 0;
+    }
+
     hangLedge(side) {
         // one fighter per ledge: whoever arrives second kicks the first one off (3 s without a ledge)
         for (const other of fighters) if (other !== this && other.active && other.isHanging && other.hangSide === side) other.kickFromLedge(KICK_BAN);
@@ -1316,13 +1324,11 @@ class Fighter {
 
     kickFromLedge(ban) {
         const side = this.hangSide;
-        this.isHanging = false;
-        this.hangTimer = 0;
+        this.leaveLedge();
         this.ledgeBan = ban;
         this.vx = side * 5;                                   // away from the stage
         this.vy = 3;
         this.grounded = false;
-        this.invincibleTimer = 0;
         fx('kick', this.x, this.y, side);
         createParticles(this.x, this.y, '#f59e0b', 14);
         audio.playHit(false);
@@ -1369,7 +1375,7 @@ class Fighter {
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
-                    this.isHanging = false;
+                    this.leaveLedge();                       // climbing off a ledge strips remaining invuln
                     this.airSpecials = 0;                     // touching the ground recharges air F moves
                 } else if (overlapBottom <= overlapTop && this.vy < 0) {
                     this.y = platBottom + this.height / 2;
@@ -1405,7 +1411,7 @@ class Fighter {
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
-                    this.isHanging = false;
+                    this.leaveLedge();
                     this.airSpecials = 0;
                     break;
                 }
@@ -1447,9 +1453,10 @@ class Fighter {
         if (this.actionLock > JUMP_OK) return false;                // 0.3 s after a move you may jump again
 
         if (this.isHanging) {
-            this.isHanging = false;
+            const side = this.hangSide;
+            this.leaveLedge();
             this.vy = -14.5;
-            this.vx = this.hangSide * 7.5;
+            this.vx = side * 7.5;
             this.jumpsLeft = this.maxJumps;
             this.canGrab = true;
             audio.playJump();
@@ -2794,8 +2801,8 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (!f.diving && !meleeCharging && !f.sx) {
             const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk;   // charging a core: 1.5x the old 4.5
-            if (h.left) { if (f.isHanging) f.isHanging = false; f.vx = -spd; if (!swinging) f.facing = -1; }
-            if (h.right) { if (f.isHanging) f.isHanging = false; f.vx = spd; if (!swinging) f.facing = 1; }
+            if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
+            if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
         }
         f.isShielding = !!h.shield && f.canShield();
         if (h.drop) f.dropT = 12;
