@@ -5,6 +5,7 @@
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
+import { displayName } from './account.js';
 import { SoundEngine } from './audio.js';
 import { isDown } from './controls.js';
 import { ITEM_TYPES } from './items.js';
@@ -2628,6 +2629,26 @@ function triggerDramaticZoom(winnerCharacter) {
 }
 
 const TEAM_COLORS = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', green: '#22c55e' };
+/** name above a fighter: username / guest, or Easy/Medium/Hard Bot (numbered when several of the same) */
+function assignTagNames() {
+    const bots = {};
+    for (const f of fighters) {
+        if (!f.active) { f.tagName = ''; continue; }
+        if (f.isAI) {
+            const lv = f.diff || (typeof f.level === 'string' ? f.level : null)
+                || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard');
+            const base = lv === 'easy' ? 'Easy Bot' : lv === 'medium' ? 'Medium Bot' : 'Hard Bot';
+            (bots[base] || (bots[base] = [])).push(f);
+        } else {
+            f.tagName = (f === p1) ? (displayName() || f.name || 'Player') : (f.name || 'Player');
+        }
+    }
+    for (const [base, list] of Object.entries(bots)) {
+        if (list.length === 1) list[0].tagName = base;
+        else list.forEach((f, i) => { f.tagName = base + ' ' + (i + 1); });
+    }
+}
+
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
@@ -2679,6 +2700,17 @@ function startMatchSequence(mode, cfg) {
     p2.shieldHold = 0;
     p2.isAI = !S.online;                                   // online: p2 is a person
     }
+    if (!S.match) {
+        p1.name = displayName() || p1.name || 'Player';
+        if (p2.isAI) {
+            p2.diff = S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : S.gameMode === 'hard' ? 'hard' : (p2.diff || 'hard');
+            p2.name = p2.diff === 'easy' ? 'Easy Bot' : p2.diff === 'medium' ? 'Medium Bot' : 'Hard Bot';
+        } else if (S.opponentName) {
+            p2.name = S.opponentName;
+        }
+    }
+    assignTagNames();
+
     p2.remoteAim = null;
     S.winnerRole = null;
     remote.helds = {};

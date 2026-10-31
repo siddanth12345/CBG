@@ -401,7 +401,7 @@ export class FighterModel {
         gb.add(new THREE.LineSegments(new THREE.EdgesGeometry(gb.geometry), new THREE.LineBasicMaterial({ color: 0xff6b6b, toneMapped: false })));
         gb.visible = false; this.grabBox = gb; this.root.add(gb);
 
-        // status labels + dizzy stars
+        // status labels + dizzy stars + name tag
         const label = (text, color) => {
             const c = document.createElement('canvas'); c.width = 256; c.height = 64;
             const g = c.getContext('2d');
@@ -414,6 +414,17 @@ export class FighterModel {
         };
         this.lblHang = label('HANGING', '#38bdf8');
         this.lblStun = label('STUNNED', '#f43f5e');
+        // name tag (outlined, team/fighter color) — texture rebuilt when name or color changes
+        this._nameKey = '';
+        this.lblName = (() => {
+            const c = document.createElement('canvas'); c.width = 512; c.height = 64;
+            const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
+            s.scale.set(90, 14, 1); s.position.y = 58; s.visible = false; s.renderOrder = 21;
+            s.userData.canvas = c;
+            this.root.add(s);
+            return s;
+        })();
         this.stars = new THREE.Group(); this.stars.position.y = 44; this.root.add(this.stars);
         const starMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#facc15').multiplyScalar(1.7), toneMapped: false });
         for (let i = 0; i < 3; i++) {
@@ -836,7 +847,7 @@ export class FighterModel {
 
     #hideExtras() {
         this.shield.visible = false; this.grabBox.visible = false; this.stars.visible = false;
-        this.lblHang.visible = false; this.lblStun.visible = false; this.blob.visible = false;
+        this.lblHang.visible = false; this.lblStun.visible = false; if (this.lblName) this.lblName.visible = false; this.blob.visible = false;
         for (const k in this.trails) this.trails[k].update(0.016);
     }
 
@@ -886,6 +897,35 @@ export class FighterModel {
 
         this.lblHang.visible = f.isHanging;
         this.lblStun.visible = f.clashStunTimer > 0;
+        // name tag: outlined text in the fighter's team / slot color
+        {
+            const show = f.active && !f.out;
+            const name = (f.tagName || f.name || '').slice(0, 24);
+            const col = f.color || '#e2e8f0';
+            const key = name + '|' + col + '|' + (show ? 1 : 0);
+            if (key !== this._nameKey) {
+                this._nameKey = key;
+                const c = this.lblName.userData.canvas;
+                const g = c.getContext('2d');
+                g.clearRect(0, 0, c.width, c.height);
+                if (name) {
+                    g.font = '800 28px Inter, system-ui, sans-serif';
+                    g.textAlign = 'center'; g.textBaseline = 'middle';
+                    g.lineJoin = 'round'; g.miterLimit = 2;
+                    g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,0.85)';
+                    g.strokeText(name, c.width / 2, 34);
+                    g.fillStyle = col;
+                    g.fillText(name, c.width / 2, 34);
+                }
+                this.lblName.material.map.needsUpdate = true;
+                const tw = name ? Math.min(120, 18 + name.length * 5.2) : 40;
+                this.lblName.scale.set(tw, 14, 1);
+            }
+            this.lblName.visible = show && !!name;
+            // hang/stun labels sit a bit higher when the name is showing
+            this.lblHang.position.y = show && name ? 70 : 52;
+            this.lblStun.position.y = show && name ? 70 : 52;
+        }
         this.stars.visible = f.dizzyTimer > 0;
         if (this.stars.visible) {
             this.stars.children.forEach((s, i) => {
