@@ -2700,6 +2700,11 @@ export function assignTagNames() {
     for (const f of fighters) {
         if (!f.active) { f.tagName = ''; continue; }
         if (f.isAI) {
+            // Training static dummy is not a Hard Bot
+            if (S.gameMode === 'training' && (!f.diff || (S.train && S.train.botType === 'static'))) {
+                f.tagName = 'Static Bot';
+                continue;
+            }
             const lv = f.diff || (typeof f.level === 'string' ? f.level : null)
                 || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard');
             const base = lv === 'easy' ? 'Easy Bot' : lv === 'medium' ? 'Medium Bot' : 'Hard Bot';
@@ -2818,8 +2823,8 @@ function startMatchSequence(mode, cfg) {
         document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'training') {
         modeLabel.textContent = "MODE: TRAINING";
-        aiDiffLabel.textContent = "Training Dummy";
-        aiDescText.textContent = "Stationary practice dummy with infinite stocks";
+        aiDiffLabel.textContent = "Static Bot";
+        aiDescText.textContent = "Static Bot — stationary practice dummy with infinite stocks";
         document.getElementById('trainingControlPanel').classList.remove('hidden');
         document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     }
@@ -2868,7 +2873,7 @@ export function applyTrainPrefs() {
     p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;
     const bt = t.botType || 'static';
     p2.isAI = true;
-    if (bt === 'static') { p2.diff = null; p2.name = 'Training Dummy'; }
+    if (bt === 'static') { p2.diff = null; p2.name = 'Static Bot'; }
     else { p2.diff = bt; p2.name = bt === 'easy' ? 'Easy Bot' : bt === 'medium' ? 'Medium Bot' : 'Hard Bot'; }
     p2.char = charOf(t.botChar || t.char || getMyChar()).id;
     p2.maxJumps = charOf(p2.char).jumps; p2.jumpsLeft = p2.maxJumps;

@@ -9,7 +9,7 @@ const savePrefs = (a) => { try { localStorage.setItem(PKEY, JSON.stringify(a)); 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const BOTS = [
-    { id: 'static', label: 'Static (dummy)' },
+    { id: 'static', label: 'Static Bot' },
     { id: 'easy', label: 'Easy Bot' },
     { id: 'medium', label: 'Medium Bot' },
     { id: 'hard', label: 'Hard Bot' },
