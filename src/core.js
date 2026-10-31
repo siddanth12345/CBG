@@ -793,8 +793,11 @@ class Fighter {
                 const cx = this.x + dx * (halfL + 16);
                 const cy = this.y + dy * (halfL + 16);
                 this.swingHitSet = new Set();
+                const tickD = Array.isArray(sp.dmg) ? lerpR(sp.dmg, x.c) : sp.dmg;
+                const lastD = Array.isArray(sp.lastDmg) ? lerpR(sp.lastDmg, x.c) : sp.lastDmg;
+                // 6 ticks (every 5 over 26 frames): 5×tick + last → 14 uncharged / 18 full charge
                 this.activeHitbox = { x: cx, y: cy, w: extX * 2, h: extY * 2, type: 'CORE', ttl: sp.every, multi: true,
-                    damage: last ? sp.lastDmg : sp.dmg, bkb: last ? sp.bkb : 0, kbg: last ? sp.kbg : 0,
+                    damage: last ? lastD : tickD, bkb: last ? sp.bkb : 0, kbg: last ? sp.kbg : 0,
                     angle: last ? ang - 0.15 * Math.sign(dx || 1) : ang,
                     fixed: last ? null : { vx: dx * 3.5, vy: dy * 3.5 - 0.4, hitstun: 12 } };
                 createParticles(this.x + dx * w * 0.5, this.y + dy * w * 0.5, '#fb923c', 8);
@@ -884,7 +887,7 @@ class Fighter {
                     this.swing = null; this.attackTimer = 0;
                     this.swingHitSet = new Set();
                     this.activeHitbox = { x: this.x + x.d * (e.fwd || 0), y: e.pillar ? feet - e.h / 2 + 30 : this.y, w: e.w, h: e.h, type: 'BLINK', ttl: 6, multi: true,
-                        mirror: !e.radial, radial: !!e.radial, damage: e.dmg, bkb: e.bkb, kbg: e.kbg, angle: e.ang !== undefined ? e.ang : -0.5 };
+                        mirror: !e.radial, radial: !!e.radial, damage: e.dmg, bkb: e.bkb || 0, kbg: e.kbg || 0, angle: e.ang !== undefined ? e.ang : -0.5, stun: e.stun || 0 };
                     if (e.pillar) fx('pillar', this.x + x.d * (e.fwd || 0), feet, e.w, e.h, st + '!'); else { fx('explosion', this.x, this.y, e.w / 2, 0.5, st); fx('gust', this.x, this.y, e.w / 2, 1, st); }
                     S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                     if (sp.rebound) { this.vx = -x.d * sp.rebound; this.vy = -5; this.grounded = false; }
