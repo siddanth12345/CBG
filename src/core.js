@@ -780,19 +780,22 @@ class Fighter {
         } else if (x.k === 'breath') {
             const sp = spec(this.char, 'N');
             this.activeMove = { type: 'CORE', t: 3 };
-            // Re-aim every tick so the stream tracks the cursor / aim matrix while it fires
-            {
+            // Desktop: stream tracks the mouse. Mobile: keep the aim locked at fire time
+            // (touch overwrites mouse.world to movement/facing every frame, which is only the fallback).
+            if (!mouse.touchMode) {
                 const aim = aimOf(this);
                 let adx = aim.x - this.x, ady = aim.y - this.y;
                 let alen = Math.hypot(adx, ady);
-                if (alen < 1) { adx = x.dx !== undefined ? x.dx : f; ady = x.dy !== undefined ? x.dy : 0; alen = Math.hypot(adx, ady) || 1; }
-                adx /= alen; ady /= alen;
-                x.dx = adx; x.dy = ady; x.ang = Math.atan2(ady, adx);
-                if (Math.abs(adx) > 0.15) this.facing = adx > 0 ? 1 : -1;
+                if (alen >= 1) {
+                    adx /= alen; ady /= alen;
+                    x.dx = adx; x.dy = ady; x.ang = Math.atan2(ady, adx);
+                    if (Math.abs(adx) > 0.15) this.facing = adx > 0 ? 1 : -1;
+                }
             }
             if (x.t < sp.frames && x.t % sp.every === 0) {
                 const w = lerpR(sp.w, x.c), last = x.t + sp.every >= sp.frames;
-                const dx = x.dx, dy = x.dy, ang = x.ang;
+                const dx = x.dx !== undefined ? x.dx : f, dy = x.dy !== undefined ? x.dy : 0;
+                const ang = x.ang !== undefined ? x.ang : (f > 0 ? 0 : Math.PI);
                 const halfL = w / 2, halfT = sp.h / 2;
                 // AABB that bounds the oriented stream rectangle (length w, thickness h)
                 const extX = Math.abs(dx) * halfL + Math.abs(dy) * halfT;
@@ -992,12 +995,18 @@ class Fighter {
         const sp = spec(this.char, 'N');
         if (sp.kind === 'burst') return this.startSx('burst', charge);
         if (sp.kind === 'breath') {
-            // Omnidirectional: aim at cursor / aim-matrix (mobile) / remote aim
-            const ax = tx !== undefined ? tx : aimOf(this).x;
-            const ay = ty !== undefined ? ty : aimOf(this).y;
-            let dx = ax - this.x, dy = ay - this.y;
+            // Same aim rules as Luminent Core: aim-matrix / touchAim vector first, else tx/ty
+            // (set by setAim from the matrix drag), else facing / move direction as fallback.
+            let dx, dy;
+            if (mouse.touchAim && mouse.touchAim.length === 2) {
+                dx = mouse.touchAim[0]; dy = mouse.touchAim[1];
+            } else {
+                const ax = tx !== undefined ? tx : aimOf(this).x;
+                const ay = ty !== undefined ? ty : aimOf(this).y;
+                dx = ax - this.x; dy = ay - this.y;
+            }
             let len = Math.hypot(dx, dy);
-            if (len < 1) { dx = this.facing; dy = 0; len = 1; }
+            if (len < 0.15) { dx = this.facing; dy = 0; len = 1; }
             dx /= len; dy /= len;
             if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
             return this.startSx('breath', charge, { ang: Math.atan2(dy, dx), dx, dy });

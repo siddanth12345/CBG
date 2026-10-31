@@ -199,8 +199,17 @@ export class TouchControls {
             const k = len > lim ? lim / len : 1;
             main.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
             if (g.charging) {                                         // the Core is charging: dragging only aims it (never switches move)
-                if (len > 10) { g.aim = [dx / len, dy / len]; showAim(g.aim); }
-                else { g.aim = null; showAim(null); }
+                if (len > 10) {
+                    g.aim = [dx / len, dy / len];
+                    showAim(g.aim);
+                    mouse.touchAim = g.aim;
+                    // Keep world aim on the matrix vector (same as Luminent Core) so Ember breath / orbs use it
+                    const m = this.me();
+                    mouse.worldX = m.x + g.aim[0] * 500;
+                    mouse.worldY = m.y + g.aim[1] * 500;
+                } else {
+                    g.aim = null; showAim(null); mouse.touchAim = null;
+                }
                 const near = len > this.geo.d * 0.45 ? (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN')) : null;
                 clearSel(); if (near) dirButton(near).classList.add('sel');          // the closest arrow glows while the Core charges too
                 return;
@@ -215,12 +224,23 @@ export class TouchControls {
             if (!g || e.pointerId !== g.id) return;
             clearTimeout(g.timer);
             const s = g; g = null;
-            main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null); mouse.touchAim = null;
-            if (e.type === 'pointercancel') { if (s.charging) this.api.cancelF(); return; }
-            if (s.sel) { this.act('special', s.sel); this.api.releaseAction('special'); }          // directional F move
-            else if (s.charging) {                                                                  // release the Core where it was aimed
-                this.pressedAim = true; this.setAim('NEUTRAL', s.aim || null); this.api.releaseAction('special'); this.pressedAim = false;
-            } else this.act('attack', 'NEUTRAL');                                                  // quick tap: sword spin
+            main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null);
+            if (e.type === 'pointercancel') { mouse.touchAim = null; if (s.charging) this.api.cancelF(); return; }
+            if (s.sel) {
+                mouse.touchAim = null;
+                this.act('special', s.sel); this.api.releaseAction('special');          // directional F move
+            } else if (s.charging) {                                                                  // release Core / Ember breath where the matrix aimed
+                // Matrix drag vector first; if none, setAim falls back to move/facing (same as Luminent)
+                this.pressedAim = true;
+                mouse.touchAim = s.aim || null;
+                this.setAim('NEUTRAL', s.aim || null);
+                this.api.releaseAction('special');
+                this.pressedAim = false;
+                mouse.touchAim = null;
+            } else {
+                mouse.touchAim = null;
+                this.act('attack', 'NEUTRAL');                                                  // quick tap: sword spin
+            }
         };
         main.addEventListener('pointerup', mainEnd); main.addEventListener('pointercancel', mainEnd);
 
