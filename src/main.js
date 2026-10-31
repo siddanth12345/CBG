@@ -8,6 +8,7 @@ import { held, actionsFor } from './controls.js';
 import { TouchControls } from './touch.js';
 import { LayoutEditor } from './layoutUI.js';
 import { UI } from './ui.js';
+import { TrainUI } from './trainUI.js';
 import { View } from './render/view.js';
 import { Online, leaveRoom, sendAct, sendHeld, requestRematch, joinRoom } from './net/online.js';
 import { CustomUI } from './net/customUI.js';
@@ -36,6 +37,7 @@ const toasts = new Toasts($('luminary-root'));
 const borgsUI = new BorgsUI({ root: $('luminary-root'), toasts, onInviteSent: () => lobby.open('Invite sent. Waiting for your friend to join…') });
 const charUI = new CharUI({ root: $('luminary-root'), openBtn: $('charBtnStart') });
 const custom = new CustomUI({ root: $('luminary-root'), openBtn: $('customBtnStart'), openBorgs: () => borgsUI.open('borgs') });
+const trainUI = new TrainUI({ root: $('luminary-root'), isGuideActive: () => ui.guide && ui.guide.active });
 const partyUI = new PartyUI({ root: $('luminary-root'), openBtn: $('partyBtnStart'), toasts });
 Inbox.joinParty = (code) => { partyUI.open(); return joinParty(code); };
 Party.onGo = (m) => { if (Online.role) return; toasts.show({ text: m.kind === 'lobby' ? 'Your party is starting a custom match' : 'Your party is starting a 1v1', ttl: 4000 }); joinRoom(m.code); };
@@ -238,7 +240,8 @@ $('menuRestartBtn').addEventListener('click', () => { menuDropdown.classList.add
 function backToMenu() {
     ui.guide.stop();
     if (S.online || Online.role) leaveRoom();
-    for (const id of ['gameHud', 'aimMatrixHud', 'inGameMenuContainer', 'trainingControlPanel', 'openTrainingPanelBtn']) $(id).classList.add('hidden');
+    for (const id of ['gameHud', 'aimMatrixHud', 'inGameMenuContainer', 'trainMenuBtn']) $(id).classList.add('hidden');
+    try { trainUI.close(); } catch (e) { /* ok */ }
     dramaticZoom.active = false;
     S.gameState = 'start';
     $('startScreen').classList.remove('hidden');
@@ -247,13 +250,12 @@ $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('h
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); backToMenu(); });
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
-const trainingPanel = $('trainingControlPanel');
-const openTrainingBtn = $('openTrainingPanelBtn');
-$('closeTrainingPanelBtn').addEventListener('click', () => { trainingPanel.classList.add('hidden'); openTrainingBtn.classList.remove('hidden'); });
-openTrainingBtn.addEventListener('click', () => { trainingPanel.classList.remove('hidden'); openTrainingBtn.classList.add('hidden'); });
+const trainMenuBtn = $('trainMenuBtn');
+if (trainMenuBtn) trainMenuBtn.addEventListener('click', () => trainUI.open());
+
 
 for (const [id, mode] of [['easyModeBtn', 'easy'], ['mediumModeBtn', 'medium'], ['hardModeBtn', 'hard'], ['trainingModeBtn', 'training']]) {
-    $(id).addEventListener('click', () => { audio.init(); startMatchSequence(mode); if (mode === 'training' && mouse.touchMode) $('closeTrainingPanelBtn').click(); });
+    $(id).addEventListener('click', () => { audio.init(); startMatchSequence(mode); });
 }
 
 // ------------------------------------------------------------------ loop
@@ -293,4 +295,4 @@ updateAimMatrix();
 requestAnimationFrame(frame);
 
 // handy for debugging / automated tests
-window.__luminary = { S, p1, p2, view, step, keys, mouse, startMatchSequence, touch };
+window.__luminary = { S, p1, p2, view, step, keys, mouse, startMatchSequence, touch, trainUI };

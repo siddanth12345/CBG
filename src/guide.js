@@ -5,6 +5,7 @@ import { keyLabel } from './controls.js';
 import { touchMode } from './layout.js';
 import { items, spawnItem } from './core.js';
 import { charOf } from './characters.js';
+import { spec } from './specials.js';
 
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const K = (a) => `<kbd>${esc(keyLabel(a))}</kbd>`;
@@ -105,28 +106,28 @@ const STEPS = [
         },
     },
     {
-        title: 'Blink Slash',
-        text: (m) => m ? `<b>Drag the red centre onto the side arrow</b> and release. You teleport and slash.` : `Aim to the <b>side</b>, then <b>tap</b> ${K('special')} (do not hold it). You teleport and slash.`,
+        title: 'Side special',
+        text: (m) => { const sp = spec(p1.char, 'S'); return `${m ? '<b>Drag the red centre onto the side arrow</b> and release' : 'Aim to the <b>side</b>, then <b>tap</b> ' + K('special') + ' (do not hold it)'}. Your side special is <b>${sp.name}</b>: ${sp.desc}`; },
         init: () => ({}),
-        check: () => !!(p1.activeMove && p1.activeMove.type === 'BLINK'),
+        check: () => p1.cd.BLINK > 0 || !!p1.sx || !!(p1.activeMove && p1.activeMove.type === 'BLINK'),
     },
     {
-        title: 'Rising Spiral',
-        text: (m) => `${m ? '<b>Drag the red centre onto the up arrow</b>' : 'Aim <b>up</b> and tap ' + K('special')}. A multi-hit rise that costs no jumps. If you miss the stage you get extra lag.`,
+        title: 'Up special',
+        text: (m) => { const sp = spec(p1.char, 'U'); return `${m ? '<b>Drag the red centre onto the up arrow</b>' : 'Aim <b>up</b> and tap ' + K('special')}. Your up special is <b>${sp.name}</b>: ${sp.desc}`; },
         init: () => ({}),
-        check: () => p1.spiralT > 0,
+        check: () => p1.spiralT > 0 || !!p1.sx || p1.cd.SPIRAL > 0,
     },
     {
-        title: 'Suplex',
-        text: (m) => `Stand on the ground within about half the stage of the dummy, ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')}. It homes in, grabs, carries them up and slams them down.`,
+        title: 'Ground down special',
+        text: (m) => { const sp = spec(p1.char, 'DG'); return `Stand on the ground, ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')}. Your ground down special is <b>${sp.name}</b>: ${sp.desc}`; },
         init: () => ({}),
-        check: () => p1.suplexT > 0,
+        check: () => p1.suplexT > 0 || !!p1.sx || p1.cd.SUPLEX > 0,
     },
     {
-        title: 'Headbutt dive',
-        text: (m) => `Jump, then ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')} in the air. You dive with several hits, then slam the floor.`,
+        title: 'Air down special',
+        text: (m) => { const sp = spec(p1.char, 'DA'); return `Jump, then ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')} in the air. Your air down special is <b>${sp.name}</b>: ${sp.desc}`; },
         init: () => ({}),
-        check: () => p1.diving,
+        check: () => p1.diving || p1.cd.HEADBUTT > 0,
     },
 ];
 
@@ -153,7 +154,7 @@ export class Guide {
         window.addEventListener('keydown', (e) => {
             if (!this.active || this.isBlocked()) return;
             if (e.code === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.go(this.i - 1); }
-            else if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.go(this.i + 1); }
+            else if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) { if (this.finished) this.stop(); else this.go(this.i + 1); } }
             else if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); this.stop(); }
         }, true);
     }

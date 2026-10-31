@@ -401,7 +401,7 @@ export class FighterModel {
         gb.add(new THREE.LineSegments(new THREE.EdgesGeometry(gb.geometry), new THREE.LineBasicMaterial({ color: 0xff6b6b, toneMapped: false })));
         gb.visible = false; this.grabBox = gb; this.root.add(gb);
 
-        // status labels + dizzy stars
+        // status labels + dizzy stars + name tag
         const label = (text, color) => {
             const c = document.createElement('canvas'); c.width = 256; c.height = 64;
             const g = c.getContext('2d');
@@ -414,6 +414,17 @@ export class FighterModel {
         };
         this.lblHang = label('HANGING', '#38bdf8');
         this.lblStun = label('STUNNED', '#f43f5e');
+        // name tag (3x size, black box + colored border matching the text) — texture rebuilt when name/color change
+        this._nameKey = '';
+        this.lblName = (() => {
+            const c = document.createElement('canvas'); c.width = 768; c.height = 128;
+            const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+            const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
+            s.scale.set(270, 42, 1); s.position.y = 72; s.visible = false; s.renderOrder = 21;
+            s.userData.canvas = c;
+            this.root.add(s);
+            return s;
+        })();
         this.stars = new THREE.Group(); this.stars.position.y = 44; this.root.add(this.stars);
         const starMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#facc15').multiplyScalar(1.7), toneMapped: false });
         for (let i = 0; i < 3; i++) {
@@ -544,6 +555,17 @@ export class FighterModel {
             this.visFacing = f.facing;
             p.pitch = this.#velPitch(); p.rSx = -30; p.lSx = -30; p.rSz = 8; p.lSz = 8; p.rE = 8; p.lE = 8;
             p.rHx = -6; p.lHx = -10; p.rK = 12; p.lK = 18; p.headX = 24; p.lean = 6; p.aura = 1;
+            return p;
+        }
+        if (f.sx && f.sx.k === 'thunder') {            // Volt's Enlightened: arms stretched out wide, hanging in the air
+            this.visFacing = f.facing;
+            p.dy = -6 + Math.sin(t * 9) * 1.5; p.rSx = 150; p.lSx = 150; p.rSz = 50; p.lSz = 50; p.rE = 4; p.lE = 4; p.rK = 14; p.lK = 20; p.headX = -6; p.lean = -2; p.aura = 1;
+            return p;
+        }
+        if (f.sx && f.sx.k === 'roll') {               // Ember's fireball roll: curled up, then spinning along
+            this.visFacing = f.sx.d;
+            if (f.sx.ph === 'charge') { p.dy = -4; p.rSx = 100; p.lSx = 100; p.rE = 90; p.lE = 90; p.rK = 70; p.lK = 70; p.lean = 10; p.twist = Math.sin(t * 40) * 3 * f.sx.c; p.aura = 0.5 + 0.5 * f.sx.c; }
+            else { p.spin = -((t * 1100) % 360) * f.sx.d; p.rSx = 100; p.lSx = 100; p.rE = 100; p.lE = 100; p.rK = 110; p.lK = 110; p.rHx = 40; p.lHx = 40; p.aura = 1; }
             return p;
         }
         if (f.specialKind === 'CORE') {                // thrust the orb away
@@ -836,7 +858,7 @@ export class FighterModel {
 
     #hideExtras() {
         this.shield.visible = false; this.grabBox.visible = false; this.stars.visible = false;
-        this.lblHang.visible = false; this.lblStun.visible = false; this.blob.visible = false;
+        this.lblHang.visible = false; this.lblStun.visible = false; if (this.lblName) this.lblName.visible = false; this.blob.visible = false;
         for (const k in this.trails) this.trails[k].update(0.016);
     }
 
@@ -886,6 +908,49 @@ export class FighterModel {
 
         this.lblHang.visible = f.isHanging;
         this.lblStun.visible = f.clashStunTimer > 0;
+        // name tag: 3x size, black box, border + text in team/slot color
+        {
+            const show = f.active && !f.out;
+            const name = (f.tagName || f.name || '').slice(0, 24);
+            const col = f.color || '#e2e8f0';
+            const key = name + '|' + col + '|' + (show ? 1 : 0);
+            if (key !== this._nameKey) {
+                this._nameKey = key;
+                const c = this.lblName.userData.canvas;
+                const g = c.getContext('2d');
+                g.clearRect(0, 0, c.width, c.height);
+                if (name) {
+                    g.font = '800 52px Inter, system-ui, sans-serif';
+                    g.textAlign = 'center'; g.textBaseline = 'middle';
+                    const tw = Math.ceil(g.measureText(name).width);
+                    const padX = 28, padY = 16;
+                    const boxW = tw + padX * 2, boxH = 52 + padY * 2;
+                    const bx = (c.width - boxW) / 2, by = (c.height - boxH) / 2;
+                    // black fill box
+                    g.fillStyle = 'rgba(0,0,0,0.88)';
+                    g.beginPath();
+                    const r = 12;
+                    g.moveTo(bx + r, by); g.arcTo(bx + boxW, by, bx + boxW, by + boxH, r);
+                    g.arcTo(bx + boxW, by + boxH, bx, by + boxH, r);
+                    g.arcTo(bx, by + boxH, bx, by, r); g.arcTo(bx, by, bx + boxW, by, r);
+                    g.closePath(); g.fill();
+                    // colored outline matching the font
+                    g.lineWidth = 5; g.strokeStyle = col;
+                    g.stroke();
+                    // name text in the same color
+                    g.fillStyle = col;
+                    g.fillText(name, c.width / 2, c.height / 2 + 1);
+                }
+                this.lblName.material.map.needsUpdate = true;
+                // world scale ~3x previous (~90x14 -> ~270x42), width tracks name length a bit
+                const tw = name ? Math.min(320, 90 + name.length * 14) : 120;
+                this.lblName.scale.set(tw, 42, 1);
+            }
+            this.lblName.visible = show && !!name;
+            // hang/stun labels sit above the bigger name plate
+            this.lblHang.position.y = show && name ? 96 : 52;
+            this.lblStun.position.y = show && name ? 96 : 52;
+        }
         this.stars.visible = f.dizzyTimer > 0;
         if (this.stars.visible) {
             this.stars.children.forEach((s, i) => {

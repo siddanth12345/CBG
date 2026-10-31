@@ -166,8 +166,14 @@ export function addBot(level) {
     if (L.members.length >= MAX_PLAYERS || !['easy', 'medium', 'hard'].includes(level)) return false;
     let slot = 1; while (L.members.some(x => x.slot === slot)) slot++;
     const counts = TEAMS.map(tm => L.members.filter(x => x.team === tm).length);
-    const n = L.members.filter(x => x.bot).length + 1;
-    L.members.push({ id: 'bot' + slot + '_' + Math.random().toString(36).slice(2, 5), slot, char: getMyChar(), name: `CPU ${n} (${level})`, team: TEAMS[counts.indexOf(Math.min(...counts))], bot: level, seen: Infinity });
+    const label = level === 'easy' ? 'Easy Bot' : level === 'medium' ? 'Medium Bot' : 'Hard Bot';
+    const same = L.members.filter(x => x.bot === level).length;
+    const name = same === 0 ? label : `${label} ${same + 1}`;
+    if (same === 1) {
+        const first = L.members.find(x => x.bot === level);
+        if (first && first.name === label) first.name = label + ' 1';
+    }
+    L.members.push({ id: 'bot' + slot + '_' + Math.random().toString(36).slice(2, 5), slot, char: getMyChar(), name, team: TEAMS[counts.indexOf(Math.min(...counts))], bot: level, seen: Infinity });
     lobbyPush();
     return true;
 }

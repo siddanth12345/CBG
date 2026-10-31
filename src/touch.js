@@ -100,7 +100,7 @@ export class TouchControls {
     }
 
     releaseAll() {
-        this.joy = null; this.joyVec = null; this.base.style.display = 'none';
+        this.joy = null; this.joyVec = null; mouse.joy = null; this.base.style.display = 'none';
         virtual.left = virtual.right = virtual.shield = virtual.drop = false;
         this.api.heldChanged();
     }
@@ -136,7 +136,7 @@ export class TouchControls {
             this.base.style.left = this.joy.ox + 'px'; this.base.style.top = this.joy.oy + 'px';
             this.stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
             const mag = Math.hypot(dx, dy);
-            this.joyVec = mag > 14 ? [dx / mag, dy / mag] : null;
+            this.joyVec = mag > 14 ? [dx / mag, dy / mag] : null; mouse.joy = this.joyVec;
             const dirX = dx < -16 ? -1 : dx > 16 ? 1 : 0;
             if (virtual.shield) {                                   // moving while shielding = roll
                 if (dirX && dirX !== this.dirX) { const m = this.me(); this.pressedAim = true; mouse.worldX = m.x + dirX * 300; mouse.worldY = m.y; this.api.doAction('roll'); this.pressedAim = false; }
@@ -148,7 +148,7 @@ export class TouchControls {
         });
         const joyEnd = (e) => {
             if (!this.joy || e.pointerId !== this.joy.id) return;
-            this.joy = null; this.joyVec = null; this.dirX = 0; this.base.style.display = 'none';
+            this.joy = null; this.joyVec = null; mouse.joy = null; this.dirX = 0; this.base.style.display = 'none';
             virtual.left = virtual.right = virtual.drop = false; this.api.heldChanged();
         };
         z.addEventListener('pointerup', joyEnd); z.addEventListener('pointercancel', joyEnd);
@@ -199,8 +199,17 @@ export class TouchControls {
             const k = len > lim ? lim / len : 1;
             main.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
             if (g.charging) {                                         // the Core is charging: dragging only aims it (never switches move)
-                if (len > 10) { g.aim = [dx / len, dy / len]; showAim(g.aim); }
-                else { g.aim = null; showAim(null); }
+                if (len > 10) {
+                    g.aim = [dx / len, dy / len];
+                    showAim(g.aim);
+                    mouse.touchAim = g.aim;
+                    // Keep world aim on the matrix vector (same as Luminent Core) so Ember breath / orbs use it
+                    const m = this.me();
+                    mouse.worldX = m.x + g.aim[0] * 500;
+                    mouse.worldY = m.y + g.aim[1] * 500;
+                } else {
+                    g.aim = null; showAim(null); mouse.touchAim = null;
+                }
                 const near = len > this.geo.d * 0.45 ? (Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN')) : null;
                 clearSel(); if (near) dirButton(near).classList.add('sel');          // the closest arrow glows while the Core charges too
                 return;
@@ -215,12 +224,23 @@ export class TouchControls {
             if (!g || e.pointerId !== g.id) return;
             clearTimeout(g.timer);
             const s = g; g = null;
-            main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null); mouse.touchAim = null;
-            if (e.type === 'pointercancel') { if (s.charging) this.api.cancelF(); return; }
-            if (s.sel) { this.act('special', s.sel); this.api.releaseAction('special'); }          // directional F move
-            else if (s.charging) {                                                                  // release the Core where it was aimed
-                this.pressedAim = true; this.setAim('NEUTRAL', s.aim || null); this.api.releaseAction('special'); this.pressedAim = false;
-            } else this.act('attack', 'NEUTRAL');                                                  // quick tap: sword spin
+            main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null);
+            if (e.type === 'pointercancel') { mouse.touchAim = null; if (s.charging) this.api.cancelF(); return; }
+            if (s.sel) {
+                mouse.touchAim = null;
+                this.act('special', s.sel); this.api.releaseAction('special');          // directional F move
+            } else if (s.charging) {                                                                  // release Core / Ember breath where the matrix aimed
+                // Matrix drag vector first; if none, setAim falls back to move/facing (same as Luminent)
+                this.pressedAim = true;
+                mouse.touchAim = s.aim || null;
+                this.setAim('NEUTRAL', s.aim || null);
+                this.api.releaseAction('special');
+                this.pressedAim = false;
+                mouse.touchAim = null;
+            } else {
+                mouse.touchAim = null;
+                this.act('attack', 'NEUTRAL');                                                  // quick tap: sword spin
+            }
         };
         main.addEventListener('pointerup', mainEnd); main.addEventListener('pointercancel', mainEnd);
 

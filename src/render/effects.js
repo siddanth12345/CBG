@@ -194,8 +194,32 @@ export class Effects {
             bub.add(new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color('#e0f2fe').multiplyScalar(2), transparent: true, opacity: 0.85, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })));
             const hl = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.7, 24, 1, 2.2, 1.3), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, toneMapped: false, side: THREE.DoubleSide }));
             hl.position.z = 0.05; bub.add(hl);
-            rock.visible = voidG.visible = bub.visible = false;
-            g.add(rock, voidG, bub); Object.assign(g.userData, { rock, voidG, bub, vr, vr2 });
+            // Ember's detached fire rocket (points along +x)
+            const rk = new THREE.Group();
+            const rbody = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.6, 12), new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x7f1d1d, emissiveIntensity: 0.9, roughness: 0.5 })); rbody.rotation.z = Math.PI / 2;
+            const rnose = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0x92400e, emissiveIntensity: 0.8, roughness: 0.4 })); rnose.rotation.z = -Math.PI / 2; rnose.position.x = 1.25;
+            const rband = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.22, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fde047').multiplyScalar(1.4), toneMapped: false })); rband.rotation.z = Math.PI / 2; rband.position.x = 0.35;
+            const fins = new THREE.Group();
+            for (let i = 0; i < 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.5), new THREE.MeshStandardMaterial({ color: 0x7f1d1d, flatShading: true })); fin.position.x = -0.7; fin.position.y = Math.sin(i * 2.09) * 0.5; fin.position.z = Math.cos(i * 2.09) * 0.5; fin.rotation.x = i * 2.09; fins.add(fin); }
+            const rflame = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.9, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(1.8), transparent: true, opacity: 0.85, blending: ADD, depthWrite: false, toneMapped: false })); rflame.rotation.z = Math.PI / 2; rflame.position.x = -1.7;
+            const rflame2 = rflame.clone(); rflame2.material = rflame.material.clone(); rflame2.material.color.set('#fde047').multiplyScalar(2); rflame2.scale.set(0.55, 0.65, 0.55); rflame2.position.x = -1.45;
+            rk.add(rbody, rnose, rband, fins, rflame, rflame2);
+            // Volt's thunder ball: white-hot core, crackling rings
+            const th = new THREE.Group();
+            th.add(new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: new THREE.Color('#fffbeb').multiplyScalar(2), toneMapped: false })));
+            const tglow = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: new THREE.Color('#fde047').multiplyScalar(2), transparent: true, opacity: 0.35, blending: ADD, depthWrite: false, toneMapped: false })); tglow.scale.setScalar(1.8); th.add(tglow);
+            const tr1 = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.07, 6, 7), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fde047').multiplyScalar(2.4), blending: ADD, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }));
+            const tr2 = tr1.clone(); tr2.rotation.x = 1.2; th.add(tr1, tr2);
+            // charge-orb decorations: rocks on a boulder (Terra), a swirl of fireworks (Ember)
+            const chips = new THREE.Group(), fw = new THREE.Group();
+            for (let i = 0; i < 7; i++) {
+                const ch = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34 + (i % 3) * 0.07, 0), new THREE.MeshStandardMaterial({ color: i % 2 ? 0x78716c : 0x57534e, flatShading: true, roughness: 1, emissive: 0x292524, emissiveIntensity: 0.8 }));
+                const a = i * 2.4, e = (i / 7) * 2.6 - 1.3; ch.position.set(Math.cos(a) * Math.cos(e) * 1.05, Math.sin(e) * 1.05, Math.sin(a) * Math.cos(e) * 1.05); chips.add(ch);
+            }
+            const FW = ['#fb923c', '#fde047', '#f472b6', '#38bdf8', '#a3e635', '#f87171', '#c084fc', '#ffffff'];
+            for (let i = 0; i < 8; i++) { const b = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: new THREE.Color(FW[i]).multiplyScalar(2.2), toneMapped: false })); b.scale.setScalar(0.2 + (i % 3) * 0.04); fw.add(b); }
+            rock.visible = voidG.visible = bub.visible = rk.visible = th.visible = chips.visible = fw.visible = false;
+            g.add(rock, voidG, bub, rk, th, chips, fw); Object.assign(g.userData, { rock, voidG, bub, vr, vr2, rk, th, tr1, tr2, chips, fw, rflame, rflame2 });
             g.visible = false; g.renderOrder = 6; this.scene.add(g);
             return g;
         };
@@ -429,20 +453,119 @@ export class Effects {
                     else { this.ring(pos, 10, R, 0.4, P[0], 'screen'); this.ring(pos, 6, R * 0.6, 0.3, P[1], 'screen'); this.sparks(pos, P[1], 14, R * 2, 0.45); }
                     break;
                 }
+                case 'whirlpool': {       // lasting water spiral on the ground; a = radius, b = life frames
+                    const P = pal(e.c || 'water');
+                    const R = Math.max(40, e.a || 120);
+                    const dur = Math.min(3.2, Math.max(0.35, (e.b || 60) / 60));
+                    const g = new THREE.Group();
+                    g.position.copy(pos);
+                    g.position.y = this.stageTop + 2;
+                    // stacked spinning rings (looks like a whirlpool funnel)
+                    const rings = [];
+                    for (let i = 0; i < 5; i++) {
+                        const rr = R * (1 - i * 0.14);
+                        const tor = new THREE.Mesh(
+                            new THREE.TorusGeometry(rr * 0.55, Math.max(2.5, rr * 0.04), 8, 36),
+                            new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? P[1] : P[0]).multiplyScalar(1.6), transparent: true, opacity: 0.85 - i * 0.1, blending: ADD, depthWrite: false, toneMapped: false })
+                        );
+                        tor.rotation.x = Math.PI / 2;
+                        tor.position.y = 4 + i * 5;
+                        g.add(tor); rings.push(tor);
+                    }
+                    // inner dark core disc
+                    const core = new THREE.Mesh(
+                        new THREE.CircleGeometry(R * 0.22, 24),
+                        new THREE.MeshBasicMaterial({ color: 0x0c4a6e, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
+                    );
+                    core.rotation.x = -Math.PI / 2; core.position.y = 1; g.add(core);
+                    // water spray column
+                    const spray = new THREE.Mesh(
+                        new THREE.CylinderGeometry(R * 0.08, R * 0.35, 18, 12, 1, true),
+                        new THREE.MeshBasicMaterial({ color: new THREE.Color(P[1]).multiplyScalar(1.8), transparent: true, opacity: 0.35, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })
+                    );
+                    spray.position.y = 12; g.add(spray);
+                    this.scene.add(g);
+                    this.timed.push({
+                        obj: g, t: 0, dur,
+                        step: (u) => {
+                            const spin = u * Math.PI * 6;
+                            rings.forEach((r, i) => {
+                                r.rotation.z = spin * (1 + i * 0.15) * (i % 2 ? -1 : 1);
+                                r.material.opacity = (0.85 - i * 0.1) * (1 - u * 0.5);
+                                const pulse = 1 + Math.sin(u * 20 + i) * 0.04;
+                                r.scale.set(pulse, pulse, pulse);
+                            });
+                            core.material.opacity = 0.55 * (1 - u * 0.4);
+                            spray.rotation.y = -spin * 1.4;
+                            spray.material.opacity = 0.35 * (1 - u * 0.3);
+                            g.position.y = this.stageTop + 2 + Math.sin(u * 12) * 1.5;
+                        },
+                    });
+                    this.sparks(pos, P[1], 10, R * 1.2, 0.4);
+                    break;
+                }
                 case 'trail': {          // a = travel angle (sim), b = 1 for a dash streak
                     const P = pal(e.c), wa = -(e.a || 0);
                     this.spray(pos, wa + Math.PI, P[Math.random() < 0.5 ? 0 : 1], e.b ? 3 : 4, 160, 0.5, 0.3);
                     this.star(pos, e.b ? 40 : 52, P[1], 0.12, 4);
                     break;
                 }
-                case 'flame': {          // a = signed length (sign = facing), b = 1 on the final burst
-                    const L = Math.abs(e.a || 200), dirx = (e.a || 1) < 0 ? -1 : 1, wa = dirx < 0 ? Math.PI : 0;
+                case 'flame': {          // a = aim angle (sim rad), b = +/- length (positive = final burst)
+                    // Legacy fallback: if |a| is large it was the old signed-length encoding
+                    let ang, L, last;
+                    if (Math.abs(e.a) > 6.5) {           // old format: a = signed length, b = 1 on final
+                        L = Math.abs(e.a || 200); ang = (e.a || 1) < 0 ? Math.PI : 0; last = !!e.b;
+                    } else {
+                        ang = e.a || 0; L = Math.abs(e.b || 200); last = (e.b || 0) > 0;
+                    }
+                    const dirx = Math.cos(ang), diry = Math.sin(ang);   // sim space (y down)
+                    const wa = -ang;                                   // three.js (y up)
                     for (let i = 0; i < 4; i++) {
-                        const p = pos.clone(); p.x += dirx * L * (0.2 + 0.7 * Math.random()); p.y += (Math.random() - 0.5) * 40;
+                        const t = 0.2 + 0.7 * Math.random();
+                        const p = pos.clone();
+                        p.x += dirx * L * t;
+                        p.y -= diry * L * t;                           // flip sim y -> three y
+                        p.y += (Math.random() - 0.5) * 40;
                         this.spray(p, wa + 0.2, i % 2 ? '#fb923c' : '#fde047', 3, 140 + L, 0.6, 0.35);
                         this.star(p, 26 + Math.random() * 26, i % 2 ? '#fb923c' : '#fef08a', 0.16, 4);
                     }
-                    if (e.b) { const p = pos.clone(); p.x += dirx * L * 0.85; this.star(p, 130, '#fb923c', 0.28); this.ring(p, 10, 110, 0.35, '#fde047', 'screen'); }
+                    if (last) {
+                        const p = pos.clone();
+                        p.x += dirx * L * 0.85;
+                        p.y -= diry * L * 0.85;
+                        this.star(p, 130, '#fb923c', 0.28);
+                        this.ring(p, 10, 110, 0.35, '#fde047', 'screen');
+                    }
+                    break;
+                }
+                case 'drop': {           // a = fall frames, b = landing y (sim), c = 'sword' | 'rock'
+                    const dur = Math.max(0.1, (e.a || 16) / 60), land = wy(e.b), isRock = e.c === 'rock';
+                    let obj;
+                    if (isRock) {
+                        obj = new THREE.Mesh(new THREE.DodecahedronGeometry(46, 0), new THREE.MeshStandardMaterial({ color: 0x78716c, flatShading: true, roughness: 1, emissive: 0x3b3531, emissiveIntensity: 0.9 }));
+                    } else {
+                        obj = new THREE.Group();
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(18, 120, 6), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.7, roughness: 0.25, emissive: 0x475569, emissiveIntensity: 0.6 }));
+                        const tip = new THREE.Mesh(new THREE.ConeGeometry(9, 26, 4), blade.material); tip.rotation.z = Math.PI; tip.rotation.y = Math.PI / 4; tip.position.y = -73;
+                        const guard = new THREE.Mesh(new THREE.BoxGeometry(60, 10, 12), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.6, roughness: 0.4, emissive: 0x334155, emissiveIntensity: 0.6 })); guard.position.y = 66;
+                        const grip = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 34, 8), new THREE.MeshStandardMaterial({ color: 0x1e293b })); grip.position.y = 88;
+                        const pom = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 8), guard.material); pom.position.y = 108;
+                        const gl = new THREE.Mesh(new THREE.BoxGeometry(26, 150, 2), new THREE.MeshBasicMaterial({ color: new THREE.Color('#bae6fd').multiplyScalar(1.5), transparent: true, opacity: 0.25, blending: ADD, depthWrite: false, toneMapped: false })); gl.position.y = 10;
+                        obj.add(blade, tip, guard, grip, pom, gl); obj.rotation.z = (Math.random() - 0.5) * 0.25;
+                    }
+                    obj.position.set(pos.x, pos.y, 4); obj.renderOrder = 6; this.scene.add(obj);
+                    const y0 = pos.y, y1 = land + (isRock ? 40 : 70);
+                    this.timed.push({ obj, t: 0, dur, step: (u) => { obj.position.y = y0 + (y1 - y0) * u * u; if (isRock) { obj.rotation.x += 0.2; obj.rotation.y += 0.15; } },
+                        free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });
+                    break;
+                }
+                case 'ember': {          // a = side the fire trails to (sign), b = charge: a short-lived flame left on the ground
+                    const cc = e.b || 0, size = 22 + 16 * cc;
+                    const m = new THREE.Mesh(new THREE.ConeGeometry(size * 0.55, size * 2, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(1.8), transparent: true, opacity: 0.9, blending: ADD, depthWrite: false, toneMapped: false }));
+                    m.position.set(pos.x, pos.y + size * 0.8, 1); m.renderOrder = 5; this.scene.add(m);
+                    const m2 = new THREE.Mesh(new THREE.ConeGeometry(size * 0.3, size * 1.3, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fde047').multiplyScalar(2), transparent: true, opacity: 0.9, blending: ADD, depthWrite: false, toneMapped: false }));
+                    m2.position.set(pos.x, pos.y + size * 0.55, 1.5); m2.renderOrder = 5; this.scene.add(m2);
+                    for (const [mm, base] of [[m, size * 0.8], [m2, size * 0.55]]) this.timed.push({ obj: mm, t: 0, dur: 0.5, step: (u) => { const k = 1 - u; mm.scale.set(Math.max(0.05, k), Math.max(0.05, k * (1 + 0.4 * Math.sin(u * 30))), Math.max(0.05, k)); mm.position.y = pos.y + base * k; mm.material.opacity = 0.9 * k; }, free: () => { mm.geometry.dispose(); mm.material.dispose(); } });
                     break;
                 }
                 case 'rocket': {
@@ -607,11 +730,19 @@ export class Effects {
             g.visible = true;
             const pulse = 1 + Math.sin(this.chargeT * 18 + i) * 0.07;
             g.position.set(wx(o.x), wy(o.y), 0);
-            const kind = o.kind || 0, u = g.userData, alt = kind === 'boulder' || kind === 'void' || kind === 'bubble';
+            const kind = o.kind || 0, u = g.userData, alt = kind === 'boulder' || kind === 'void' || kind === 'bubble' || kind === 'firerocket' || kind === 'thunder';
             u.core.visible = u.mid.visible = u.halo.visible = !alt;
-            u.rock.visible = kind === 'boulder'; u.voidG.visible = kind === 'void'; u.bub.visible = kind === 'bubble';
+            u.rock.visible = kind === 'boulder'; u.voidG.visible = kind === 'void'; u.bub.visible = kind === 'bubble'; u.rk.visible = kind === 'firerocket'; u.th.visible = kind === 'thunder'; u.chips.visible = u.fw.visible = false;
             if (kind === 'water') { this.#paintOrb(g, o.r * pulse, '#38bdf8', 1); if (Math.random() < 0.7) this.sparks(g.position.clone(), '#bae6fd', 1, 60, 0.3, 'down'); }
-            else if (kind === 'boulder') {
+            else if (kind === 'firerocket') {
+                g.scale.setScalar(o.r * 1.9); u.rk.rotation.z = Math.atan2(-o.vy, o.vx);
+                const f = 1 + Math.sin(this.chargeT * 40 + i) * 0.25; u.rflame.scale.set(1 * f, 1, 1); u.rflame2.scale.set(0.55 * f, 0.65, 0.55);
+                if (Math.random() < 0.9) this.sparks(g.position.clone().add(new THREE.Vector3(-Math.cos(Math.atan2(-o.vy, o.vx)) * o.r * 2.6, -Math.sin(Math.atan2(-o.vy, o.vx)) * o.r * 2.6, 0)), Math.random() < 0.5 ? '#fb923c' : '#fde047', 1, 120, 0.35);
+            } else if (kind === 'thunder') {
+                g.scale.setScalar(o.r * pulse); u.tr1.rotation.z += dt * 9; u.tr2.rotation.z -= dt * 11; u.tr1.rotation.y += dt * 5;
+                if (Math.random() < 0.9) this.sparks(g.position.clone(), Math.random() < 0.5 ? '#fde047' : '#ffffff', 2, 220, 0.25);
+                if (Math.random() < 0.25) this.ring(g.position.clone(), o.r, o.r + 50, 0.15, '#fde047', 'screen');
+            } else if (kind === 'boulder') {
                 g.scale.setScalar(o.r); u.rock.rotation.x += dt * 4; u.rock.rotation.y += dt * 3;
                 if (Math.random() < 0.9) this.sparks(g.position.clone(), '#a8a29e', 1, 90, 0.4, 'down');
                 if (Math.random() < 0.3) this.sparks(g.position.clone(), '#fb923c', 1, 80, 0.25);
@@ -623,22 +754,81 @@ export class Effects {
                 if (Math.random() < 0.15) this.sparks(g.position.clone(), '#e0f2fe', 1, 50, 0.4, 'up');
             } else { this.#paintOrb(g, o.r * pulse, o.color, 1); if (Math.random() < 0.8) this.sparks(g.position.clone(), o.color, 1, 70, 0.28); }
         }
-        // ---- the orb a fighter is charging (grows with the charge)
+        // ---- the orb a fighter is charging (grows with the charge). Every character has its own look.
         fighters.forEach((f, i) => {
             const g = this.chargePool[i]; if (!g) return;
-            if (!f.active || f.out || !f.charging || S.gameState !== 'playing') { g.visible = false; return; }
-            const c = Math.min(1, f.chargeFrames / CHARGE_MAX);
-            const r = (5 + 15 * c) * (1 + Math.sin(this.chargeT * 30) * 0.08);
+            const rolling = !!(f.sx && f.sx.k === 'roll');
+            if (!f.active || f.out || !(f.charging || rolling) || S.gameState !== 'playing') { g.visible = false; return; }
+            const u = g.userData; u.core.visible = u.mid.visible = u.halo.visible = true; u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
             g.visible = true;
-            g.position.set(wx(f.x + f.facing * (30 + 8 * c)), wy(f.y - 2), 8);
-            const col = c >= 1 ? (S.match ? '#a855f7' : f === p1 ? '#a855f7' : '#fb923c') : f.color;
-            this.#paintOrb(g, r, col, 0.8 + 0.2 * c);
-            if (Math.random() < 0.5 + c * 0.5) {          // energy streaming in
-                const a = Math.random() * Math.PI * 2, d = 50 + 60 * c;
-                const from = g.position.clone().add(new THREE.Vector3(Math.cos(a) * d, Math.sin(a) * d, 0));
-                this.spray(from, a + Math.PI, c >= 1 ? (S.match ? '#a855f7' : f === p1 ? '#a855f7' : '#fb923c') : f.color, 1, d * 5, 0.1, 0.18);
+            if (rolling) {                                  // Ember's fireball roll: the fireball hugs him while charging and rolling
+                const c = f.sx.c || 0, r = (26 + 22 * c) * (1 + Math.sin(this.chargeT * 30) * 0.07);
+                g.position.set(wx(f.x), wy(f.y), 6); this.#paintOrb(g, r, c >= 1 ? '#fde047' : '#fb923c', 0.9);
+                if (Math.random() < 0.8) this.sparks(g.position.clone(), Math.random() < 0.5 ? '#fb923c' : '#fde047', 2, 160 + 80 * c, 0.3);
+                if (f.sx.ph === 'charge' && Math.random() < 0.5) { const a = Math.random() * 6.28; this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 110, Math.sin(a) * 110, 0)), a + Math.PI, '#fb923c', 1, 500, 0.1, 0.18); }
+                return;
             }
-            if (c >= 1 && Math.floor(this.chargeT * 12) % 6 === 0) this.ring(g.position.clone(), r, r + 40, 0.2, '#ffffff', 'screen');
+            const c = Math.min(1, f.chargeFrames / CHARGE_MAX), full = c >= 1;
+            const r = (5 + 15 * c) * (1 + Math.sin(this.chargeT * 30) * 0.08);
+            g.position.set(wx(f.x + f.facing * (30 + 8 * c)), wy(f.y - 2), 8);
+            const hot = full ? (S.match ? '#a855f7' : f === p1 ? '#a855f7' : '#fb923c') : f.color;
+            const pos = g.position.clone();
+            switch (f.char) {
+                case 'terra': {                             // a boulder that gathers rocks as it charges
+                    u.core.visible = u.mid.visible = u.halo.visible = false; u.rock.visible = u.chips.visible = true;
+                    g.scale.setScalar(9 + 24 * c); u.rock.rotation.x += dt * 2; u.rock.rotation.y += dt * 1.5; u.chips.rotation.y += dt * (1 + 3 * c); u.chips.rotation.x += dt * 1.2;
+                    u.chips.children.forEach((ch, k) => { ch.visible = k < 1 + Math.floor(c * 6.5); });
+                    if (Math.random() < 0.5) this.sparks(pos, '#a8a29e', 1, 80, 0.35, 'down');
+                    break;
+                }
+                case 'ember': {                             // a stirred cluster of fireworks
+                    u.core.visible = u.mid.visible = u.halo.visible = false; u.fw.visible = true;
+                    g.scale.setScalar(14 + 22 * c);
+                    const n = 3 + Math.floor(c * 5);
+                    u.fw.children.forEach((b, k) => { b.visible = k < n; const a = this.chargeT * (5 + 4 * c) + k * 0.8, rr = 0.7 + 0.35 * Math.sin(this.chargeT * 3 + k); b.position.set(Math.cos(a) * rr, Math.sin(a * 1.3) * rr, Math.sin(a) * 0.4); });
+                    if (Math.random() < 0.35 + c * 0.6) { const cols = ['#fb923c', '#fde047', '#f472b6', '#38bdf8', '#a3e635']; this.sparks(pos, cols[Math.floor(Math.random() * cols.length)], 3 + Math.floor(c * 4), 200 + 120 * c, 0.4); }
+                    if (full && Math.floor(this.chargeT * 10) % 5 === 0) this.star(pos, 90, '#fde047', 0.18, 8);
+                    break;
+                }
+                case 'tide': {                              // a growing water ball
+                    this.#paintOrb(g, r * 1.5, '#38bdf8', 0.9 + 0.1 * c);
+                    if (Math.random() < 0.6) this.sparks(pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * r * 3, (Math.random() - 0.5) * r * 3, 0)), '#bae6fd', 1, 50, 0.45, 'up');
+                    if (full && Math.floor(this.chargeT * 10) % 5 === 0) this.ring(pos, r, r + 60, 0.25, '#e0f2fe', 'screen');
+                    break;
+                }
+                case 'umbra': {                             // a pulsing void
+                    u.core.visible = u.mid.visible = u.halo.visible = false; u.voidG.visible = true;
+                    g.scale.setScalar(r * 1.2); u.vr.rotation.z += dt * 6; u.vr2.rotation.z -= dt * 8;
+                    if (Math.random() < 0.7) { const a = Math.random() * 6.28; this.spray(pos.clone().add(new THREE.Vector3(Math.cos(a) * 90, Math.sin(a) * 90, 0)), a + Math.PI, '#a855f7', 1, 420, 0.1, 0.2); }
+                    break;
+                }
+                case 'volt': {                              // crackling electricity
+                    this.#paintOrb(g, r * 1.25, '#fde047', 1);
+                    if (Math.random() < 0.9) this.sparks(pos, Math.random() < 0.5 ? '#fde047' : '#ffffff', 2 + Math.floor(c * 3), 240, 0.2);
+                    if (Math.random() < 0.3) this.ring(pos, r, r + 40 + 40 * c, 0.12, '#fde047', 'screen');
+                    break;
+                }
+                case 'zephyr': {                            // a whirl of wind
+                    this.#paintOrb(g, r * 0.9, '#a7f3d0', 0.7);
+                    for (let k = 0; k < 2; k++) { const a = this.chargeT * 12 + k * 3.14; this.sparks(pos.clone().add(new THREE.Vector3(Math.cos(a) * (40 + 30 * c), Math.sin(a) * (40 + 30 * c), 0)), '#ecfeff', 1, 40, 0.25); }
+                    if (Math.random() < 0.3) this.ring(pos, 20, 70 + 50 * c, 0.2, '#a7f3d0', 'screen');
+                    break;
+                }
+                case 'bulwark': {                           // a plated iron sphere
+                    this.#paintOrb(g, r * 1.3, '#cbd5e1', 0.8);
+                    if (Math.random() < 0.4) this.sparks(pos, '#e2e8f0', 1, 70, 0.3);
+                    if (full && Math.floor(this.chargeT * 10) % 5 === 0) this.ring(pos, r, r + 50, 0.2, '#94a3b8', 'screen');
+                    break;
+                }
+                default: {                                  // Luminent: the energy orb
+                    this.#paintOrb(g, r, hot, 0.8 + 0.2 * c);
+                    if (Math.random() < 0.5 + c * 0.5) {
+                        const a = Math.random() * Math.PI * 2, d = 50 + 60 * c;
+                        this.spray(pos.clone().add(new THREE.Vector3(Math.cos(a) * d, Math.sin(a) * d, 0)), a + Math.PI, hot, 1, d * 5, 0.1, 0.18);
+                    }
+                    if (full && Math.floor(this.chargeT * 12) % 6 === 0) this.ring(pos, r, r + 40, 0.2, '#ffffff', 'screen');
+                }
+            }
         });
 
         // ---- aim line

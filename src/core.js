@@ -5,12 +5,13 @@
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
+import { displayName } from './account.js';
 import { SoundEngine } from './audio.js';
 import { isDown } from './controls.js';
 import { ITEM_TYPES } from './items.js';
 import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
 
-export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null };   // online: null | 'host' | 'guest'
+export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();
 /** everything the host has produced since the last network snapshot (effects, sounds, particles) */
 export const outbox = [];
@@ -25,6 +26,7 @@ export const koBeams = [];
 export const shockwaves = [];
 export const fxEvents = [];
 export const orbs = [];                    // CBG Core projectiles
+export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, life, owner, pull }
 let orbSerial = 0;
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 102;             // Ember's rolling charge: 1.7 s to full
@@ -111,6 +113,25 @@ const HANG_MAX = 180;         // 3 s on a ledge -> kicked off...
 const TIMEOUT_BAN = 240;      // ...and can't re-grab a ledge for 4 s
 const KICK_BAN = 180;         // kicked by someone taking your ledge -> 3 s no ledge
 export const AIR_F_MAX = 2;   // F moves usable in the air before you must touch the ground
+/** training-menu overrides (only while gameMode === 'training') */
+export const trainLock = () => (S.gameMode === 'training' && S.train && S.train.lock != null) ? S.train.lock : LOCK;
+export const trainStun = () => (S.gameMode === 'training' && S.train && S.train.stun != null) ? S.train.stun : STUN;
+export const trainAirF = () => (S.gameMode === 'training' && S.train && S.train.airF != null) ? S.train.airF : AIR_F_MAX;
+export const trainWalk = () => (S.gameMode === 'training' && S.train && S.train.walk != null) ? S.train.walk : 1;
+export const trainJumps = (f) => {
+    if (S.gameMode === 'training' && S.train && S.train.jumps != null) return S.train.jumps;
+    return charOf(f.char).jumps + (f.balloon ? 3 : 0);
+};
+export const DEFAULT_TRAIN = {
+    stage: 'normal', // 'normal' | 'lobby' (big Frontier)
+    stun: 30, lock: 36, jumps: null, airF: 2, walk: 1,
+    char: null, botType: 'static', botChar: null,
+};
+export function ensureTrain() {
+    if (!S.train) S.train = { ...DEFAULT_TRAIN, char: null, botChar: null };
+    return S.train;
+}
+
 const CD = { CORE: 90, BLINK: 60, SPIRAL: 120, SUPLEX: 0, HEADBUTT: 90 };   // no aftermath cooldown on the suplex
 const F_MOVES = new Set(['BLINK', 'SPIRAL', 'HEADBUTT']);   // (the ground-down Suplex is a grab, so it counts as GRAB)
 const SPIRAL_JUMP_COST = 0;   // Rising Spiral takes no jumps at all
@@ -185,26 +206,35 @@ function updateAimMatrix() {
 
     vectorElem.textContent = `dx: ${Math.round(mouse.dx)} | dy: ${Math.round(mouse.dy)}`;
 
+    // Per-character F special names (J swings are shared)
+    const cid = (typeof p1 !== 'undefined' && p1 && p1.char) ? p1.char : getMyChar();
+    const spN = spec(cid, 'N'), spS = spec(cid, 'S'), spU = spec(cid, 'U');
+    const spDG = spec(cid, 'DG'), spDA = spec(cid, 'DA');
+    const nName = spN.name || 'Core';
+    const sName = spS.name || 'Side Special';
+    const uName = spU.name || 'Up Special';
+    const dName = (spDG.name || 'Down') + ' / ' + (spDA.name || 'Air Down');
+
     switch (mouse.direction) {
         case 'UP':
             arrowElem.textContent = '⬆';
-            labelElem.textContent = 'UP  •  J: Up Slash  •  F: Rising Spiral';
+            labelElem.textContent = `UP  •  J: Up Slash  •  F: ${uName}`;
             break;
         case 'DOWN':
             arrowElem.textContent = '⬇';
-            labelElem.textContent = 'DOWN  •  J: Down Strike  •  F: Suplex / Headbutt';
+            labelElem.textContent = `DOWN  •  J: Down Strike  •  F: ${dName}`;
             break;
         case 'SIDE_LEFT':
             arrowElem.textContent = '⬅';
-            labelElem.textContent = 'SIDE (LEFT)  •  J: Side Slash  •  F: Blink Slash';
+            labelElem.textContent = `SIDE (LEFT)  •  J: Side Slash  •  F: ${sName}`;
             break;
         case 'SIDE_RIGHT':
             arrowElem.textContent = '➡';
-            labelElem.textContent = 'SIDE (RIGHT)  •  J: Side Slash  •  F: Blink Slash';
+            labelElem.textContent = `SIDE (RIGHT)  •  J: Side Slash  •  F: ${sName}`;
             break;
         default:
             arrowElem.textContent = '⏺';
-            labelElem.textContent = (forcedNeutral ? 'NEUTRAL (held)' : 'NEUTRAL') + '  •  J: Jab  •  hold F: CBG Core';
+            labelElem.textContent = (forcedNeutral ? 'NEUTRAL (held)' : 'NEUTRAL') + `  •  J: Jab  •  hold F: ${nName}`;
             break;
     }
 }
@@ -399,7 +429,7 @@ class Fighter {
         this.vy = 0;
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
         this.dropHeld();
-        this.balloon = false; this.maxJumps = charOf(this.char).jumps; this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.burnBy = null;
+        this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.burnDmg = 3; this.burnBy = null;
         this.jumpsLeft = this.maxJumps;
         this.isHanging = false;
         this.canGrab = true;
@@ -462,7 +492,7 @@ class Fighter {
             if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
         }
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
-        const bj = charOf(this.char).jumps + (this.balloon ? 3 : 0);       // each character has its own jump count; a balloon ADDS 3
+        const bj = trainJumps(this);       // training menu can override jump count
         if (this.maxJumps !== bj) { this.jumpsLeft = Math.min(bj, this.jumpsLeft + Math.max(0, bj - this.maxJumps)); this.maxJumps = bj; }
         if (this.gravT > 0) this.gravT--;
         if (this.dropT > 0) this.dropT--;
@@ -649,7 +679,7 @@ class Fighter {
 
         this.updateSpecials();
 
-        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
+        if (this.sx && ((this.sx.k === 'roll' && this.sx.ph === 'charge') || this.sx.k === 'thunder')) {
             this.vx = 0; this.vy = 0;                          // charging the fireball roll: hovering, gravity does not apply
         } else if (this.diving || this.spiralT > 0 || (this.sx && this.sx.k === 'rocket')) {
             this.vx *= 0.92;
@@ -784,14 +814,29 @@ class Fighter {
         } else if (x.k === 'breath') {
             const sp = spec(this.char, 'N');
             this.activeMove = { type: 'CORE', t: 3 };
+            // Direction is locked at release (PC + mobile): no mid-stream re-aim
             if (x.t < sp.frames && x.t % sp.every === 0) {
                 const w = lerpR(sp.w, x.c), last = x.t + sp.every >= sp.frames;
+                const dx = x.dx !== undefined ? x.dx : f, dy = x.dy !== undefined ? x.dy : 0;
+                const ang = x.ang !== undefined ? x.ang : (f > 0 ? 0 : Math.PI);
+                const halfL = w / 2, halfT = sp.h / 2;
+                // AABB that bounds the oriented stream rectangle (length w, thickness h)
+                const extX = Math.abs(dx) * halfL + Math.abs(dy) * halfT;
+                const extY = Math.abs(dy) * halfL + Math.abs(dx) * halfT;
+                const cx = this.x + dx * (halfL + 16);
+                const cy = this.y + dy * (halfL + 16);
                 this.swingHitSet = new Set();
-                this.activeHitbox = { x: this.x + f * (w / 2 + 16), y: this.y - 6, w, h: sp.h, type: 'CORE', ttl: sp.every, multi: true,
-                    damage: last ? sp.lastDmg : sp.dmg, bkb: last ? sp.bkb : 0, kbg: last ? sp.kbg : 0, angle: f > 0 ? -0.5 : Math.PI + 0.5,
-                    fixed: last ? null : { vx: f * 3.5, vy: -1, hitstun: 12 } };
-                createParticles(this.x + f * w * 0.5, this.y - 6, '#fb923c', 8); createParticles(this.x + f * w * 0.8, this.y - 6, '#fde047', 5);
-                fx('flame', this.x + f * 24, this.y - 6, f * w, last ? 1 : 0, STYLE_OF[this.char]);
+                const tickD = Array.isArray(sp.dmg) ? lerpR(sp.dmg, x.c) : sp.dmg;
+                const lastD = Array.isArray(sp.lastDmg) ? lerpR(sp.lastDmg, x.c) : sp.lastDmg;
+                // 6 ticks (every 5 over 26 frames): 5×tick + last → 14 uncharged / 18 full charge
+                this.activeHitbox = { x: cx, y: cy, w: extX * 2, h: extY * 2, type: 'CORE', ttl: sp.every, multi: true,
+                    damage: last ? lastD : tickD, bkb: last ? sp.bkb : 0, kbg: last ? sp.kbg : 0,
+                    angle: last ? ang - 0.15 * Math.sign(dx || 1) : ang,
+                    fixed: last ? null : { vx: dx * 3.5, vy: dy * 3.5 - 0.4, hitstun: 12 } };
+                createParticles(this.x + dx * w * 0.5, this.y + dy * w * 0.5, '#fb923c', 8);
+                createParticles(this.x + dx * w * 0.8, this.y + dy * w * 0.8, '#fde047', 5);
+                // a = aim angle (sim rad), b = +/- length (sign marks final burst)
+                fx('flame', this.x + dx * 24, this.y + dy * 24, ang, last ? w : -w, STYLE_OF[this.char]);
             }
             if (x.t >= sp.frames + 6) { this.sx = null; this.activeMove = null; }
         } else if (x.k === 'pound') {
@@ -803,24 +848,46 @@ class Fighter {
                 const w = STAGE.width * sp.w, feet = this.y + this.height / 2;
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
-                this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
-                    pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
-                const st = STYLE_OF[this.char];
-                if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st);
-                if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st);
-                if (sp.pull) fx('gust', cx, cy, sp.pull * 30, 1, st);
-                S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
-                createParticles(cx, cy + sp.h / 2, this.color, 14);
+                if (sp.zone) {
+                    // lasting whirlpool on the ground (Tide): initial hit, then zone pulls + stuns for sp.life frames
+                    const R = STAGE.width * (sp.R || sp.w * 0.5);
+                    this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
+                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
+                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                    fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
+                    S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+                    createParticles(cx, feet - 10, '#38bdf8', 22);
+                } else {
+                    this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
+                        pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
+                    const st = STYLE_OF[this.char];
+                    if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st);
+                    if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st);
+                    if (sp.pull) fx('gust', cx, cy, sp.pull * 30, 1, st);
+                    S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
+                    createParticles(cx, cy + sp.h / 2, this.color, 14);
+                }
             }
-            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || LOCK); }
+            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || trainLock()); }
         } else if (x.k === 'rocket') {
             const sp = spec(this.char, 'U');
             this.activeMove = { type: 'SPIRAL', t: 3 };
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
-            this.x += Math.cos(x.ang) * sp.speed; this.y += Math.sin(x.ang) * sp.speed;
-            this.vx = this.vy = 0; this.grounded = false; this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
+            // Sub-step the rocket so it cannot skip through the stage / platforms in one frame
+            const step = sp.speed, n = Math.max(1, Math.ceil(step / 6));
+            const sx = Math.cos(x.ang) * step / n, sy = Math.sin(x.ang) * step / n;
+            for (let i = 0; i < n; i++) {
+                const lx = this.x, ly = this.y;
+                this.x += sx; this.y += sy;
+                this.px = lx; this.py = ly;
+                this.vx = sx; this.vy = sy;
+                this.checkStageCollision(false);
+                if (this.grounded) break;
+            }
+            this.vx = this.vy = 0;
+            this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
             if (sp.drill) {                                                // Phoenix Dash: a drill of quick hits that carry foes along with the flame; only the final blast knocks
                 if (x.t % 4 === 1 && (x.hits || 0) < sp.maxHits) {
                     const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
@@ -845,7 +912,7 @@ class Fighter {
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
                 this.vx = Math.cos(x.ang) * sp.speed * 0.45; this.vy = Math.sin(x.ang) * sp.speed * 0.45;
                 const over = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
-                this.actionLock = Math.max(this.actionLock, sp.boom ? 16 : over ? 20 : 70);
+                this.actionLock = Math.max(this.actionLock, sp.missile ? 16 : over ? 20 : 70);
             }
         } else if (x.k === 'erupt') {
             const sp = spec(this.char, 'U');
@@ -883,7 +950,7 @@ class Fighter {
                     this.swing = null; this.attackTimer = 0;
                     this.swingHitSet = new Set();
                     this.activeHitbox = { x: this.x + x.d * (e.fwd || 0), y: e.pillar ? feet - e.h / 2 + 30 : this.y, w: e.w, h: e.h, type: 'BLINK', ttl: 6, multi: true,
-                        mirror: !e.radial, radial: !!e.radial, damage: e.dmg, bkb: e.bkb, kbg: e.kbg, angle: e.ang !== undefined ? e.ang : -0.5 };
+                        mirror: !e.radial, radial: !!e.radial, damage: e.dmg, bkb: e.bkb || 0, kbg: e.kbg || 0, angle: e.ang !== undefined ? e.ang : -0.5, stun: e.stun || 0 };
                     if (e.pillar) fx('pillar', this.x + x.d * (e.fwd || 0), feet, e.w, e.h, st + '!'); else { fx('explosion', this.x, this.y, e.w / 2, 0.5, st); fx('gust', this.x, this.y, e.w / 2, 1, st); }
                     S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                     if (sp.rebound) { this.vx = -x.d * sp.rebound; this.vy = -5; this.grounded = false; }
@@ -907,6 +974,10 @@ class Fighter {
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, '#fb923c', 2);
                 if (x.t >= (sp.maxFrames || 300)) this.endRoll();
             }
+        } else if (x.k === 'thunder') {                            // arms stretched out, hanging in the air, until the ball is gone
+            this.vx = this.vy = 0; this.activeMove = null; this.grounded = false;
+            if (!orbs.some(o => o.id === x.oid) && x.t > 2) { this.sx = null; this.actionLock = Math.max(this.actionLock, 10); }
+            else if (x.t % 5 === 0) createParticles(this.x, this.y, '#fde047', 2);
         } else if (x.k === 'wind') {                              // Umbra's Shadow Step startup: a purple blast gathers (an indicator only), then he vanishes
             this.vx = 0; this.activeMove = null;
             const sp = spec(this.char, 'S');
@@ -936,7 +1007,7 @@ class Fighter {
         this.diving = false;
         this.vy = 0;
         const w = STAGE.width * sp.impactW;                   // Headbutt: 1/8 of the stage
-        const hit = sp.stun ? { damage: sp.impactDmg, bkb: 0, kbg: 0, angle: -Math.PI / 2, stun: sp.stunFrames || STUN }
+        const hit = sp.stun ? { damage: sp.impactDmg, bkb: 0, kbg: 0, angle: -Math.PI / 2, stun: sp.stunFrames || trainStun() }
                             : { damage: sp.impactDmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang, mirror: true, multi: true };
         this.activeHitbox = { x: this.x, y: this.y + this.height / 2 - 30, w, h: 64, type: 'HEADBUTT', ttl: 8, ...hit };
         this.activeMove = { type: 'HEADBUTT', t: 10 };
@@ -953,7 +1024,7 @@ class Fighter {
     // ------------------------------------------------------------ F special: input
     canStartF(dir) {
         if (this.actionBlocked()) return false;
-        if (!this.grounded && this.airSpecials >= AIR_F_MAX) return false;
+        if (!this.grounded && this.airSpecials >= trainAirF()) return false;
         if (dir === 'NEUTRAL' && this.cd.CORE > 0) return false;
         return true;
     }
@@ -991,12 +1062,12 @@ class Fighter {
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
         if (kind === 'HEADBUTT' && this.grounded) return false;
-        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= AIR_F_MAX) return false;
+        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= trainAirF()) return false;
 
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
         this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
-        this.actionLock = sp.lock !== undefined ? sp.lock : LOCK;
+        this.actionLock = sp.lock !== undefined ? sp.lock : trainLock();
 
         switch (kind) {
             case 'CORE': this.startCore(tx, ty, charge); break;
@@ -1014,10 +1085,24 @@ class Fighter {
 
     startCore(tx, ty, charge) {
         const sp = spec(this.char, 'N');
+        if (sp.kind === 'thunder') return this.startThunder(sp, charge);
         if (sp.kind === 'burst') return this.startSx('burst', charge);
         if (sp.kind === 'breath') {
-            if (tx !== undefined && Math.abs(tx - this.x) > 20) this.facing = tx > this.x ? 1 : -1;
-            return this.startSx('breath', charge);
+            // Same aim rules as Luminent Core: aim-matrix / touchAim vector first, else tx/ty
+            // (set by setAim from the matrix drag), else facing / move direction as fallback.
+            let dx, dy;
+            if (mouse.touchAim && mouse.touchAim.length === 2) {
+                dx = mouse.touchAim[0]; dy = mouse.touchAim[1];
+            } else {
+                const ax = tx !== undefined ? tx : aimOf(this).x;
+                const ay = ty !== undefined ? ty : aimOf(this).y;
+                dx = ax - this.x; dy = ay - this.y;
+            }
+            let len = Math.hypot(dx, dy);
+            if (len < 0.15) { dx = this.facing; dy = 0; len = 1; }
+            dx /= len; dy /= len;
+            if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
+            return this.startSx('breath', charge, { ang: Math.atan2(dy, dx), dx, dy });
         }
         let dx = tx - this.x, dy = ty - this.y;
         let len = Math.hypot(dx, dy);
@@ -1040,6 +1125,20 @@ class Fighter {
         fx('core', this.x, this.y, charge, Math.atan2(dy, dx));
     }
 
+    /** Volt's Enlightened: he hangs in the air with his arms out while a thunder ball falls from above him and is steered (mouse on PC, joystick on phones) */
+    startThunder(sp, charge) {
+        const c = Math.max(0, Math.min(1, charge));
+        const minS = 8.5 * charOf('volt').walk, maxS = 2 * 8.5 * charOf('zephyr').walk;
+        const id = ++orbSerial, spd = minS + (maxS - minS) * c;
+        const o = { x: this.x, y: this.y - 300, vx: 0, vy: spd * 0.6, r: 16 + 10 * c, charge: c, owner: this, life: sp.life, color: '#fde047', id,
+            d: sp.dmg[0] + (sp.dmg[1] - sp.dmg[0]) * c, R: lerpR(sp.R, c), bkb: lerpR(sp.bkb, c), kbg: lerpR(sp.kbg, c), stun: sp.stun, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0,
+            kind: 'thunder', ctrl: this, spd, ang: Math.PI / 2 };
+        orbs.push(o);
+        this.sx = { k: 'thunder', t: 0, c, tx: null, ty: null, d: 1, oid: id };
+        this.activeMove = null; this.specialKind = null; this.specialDur = 0; this.vx = this.vy = 0; this.grounded = false;
+        fx('pillar', this.x, this.y - 300, 40, 600, 'volt!'); fx('core', this.x, this.y - 300, c, Math.PI / 2, 'volt'); fx('gust', this.x, this.y, 100, 0, 'volt');
+        S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
+    }
     canRollStart() { return this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < AIR_F_MAX); }
     /** Ember's Fireball Roll, step 1: hover and charge (1.7 s to full, no gravity). A hit now stuns for 1 s. */
     startRollCharge(d) {
@@ -1330,6 +1429,14 @@ class Fighter {
         }
     }
 
+    /** leave the ledge: any remaining ledge invincibility is stripped immediately */
+    leaveLedge() {
+        if (!this.isHanging) return;
+        this.isHanging = false;
+        this.hangTimer = 0;
+        this.invincibleTimer = 0;
+    }
+
     hangLedge(side) {
         // one fighter per ledge: whoever arrives second kicks the first one off (3 s without a ledge)
         for (const other of fighters) if (other !== this && other.active && other.isHanging && other.hangSide === side) other.kickFromLedge(KICK_BAN);
@@ -1354,20 +1461,23 @@ class Fighter {
 
     kickFromLedge(ban) {
         const side = this.hangSide;
-        this.isHanging = false;
-        this.hangTimer = 0;
+        this.leaveLedge();
         this.ledgeBan = ban;
         this.vx = side * 5;                                   // away from the stage
         this.vy = 3;
         this.grounded = false;
-        this.invincibleTimer = 0;
         fx('kick', this.x, this.y, side);
         createParticles(this.x, this.y, '#f59e0b', 14);
         audio.playHit(false);
     }
 
     checkStageCollision(bounce = false) {
-        const vx0 = this.vx, vy0 = this.vy;                  // speed on impact (used for the ragdoll bounce)
+        // Use actual frame motion (x - px) when vx/vy were zeroed by a special (rocket, dash, etc.)
+        // so fast moves cannot tunnel through the stage or platforms.
+        const mx = this.x - (this.px !== undefined ? this.px : this.x);
+        const my = this.y - (this.py !== undefined ? this.py : this.y);
+        const vx0 = Math.abs(this.vx) > 0.01 ? this.vx : mx;
+        const vy0 = Math.abs(this.vy) > 0.01 ? this.vy : my;
         const BOUNCE = 0.62, MIN_BOUNCE = 3.2;
         const platLeft = STAGE.x;
         const platRight = STAGE.x + STAGE.width;
@@ -1378,6 +1488,10 @@ class Fighter {
         const fRight = this.x + this.width / 2;
         const fTop = this.y - this.height / 2;
         const fBottom = this.y + this.height / 2;
+        const prevBottom = (this.py !== undefined ? this.py : this.y) + this.height / 2;
+        const prevTop = (this.py !== undefined ? this.py : this.y) - this.height / 2;
+        const prevLeft = (this.px !== undefined ? this.px : this.x) - this.width / 2;
+        const prevRight = (this.px !== undefined ? this.px : this.x) + this.width / 2;
 
         // (the 0.5 tolerance keeps a fighter standing exactly on the surface "grounded" every
         //  frame; the strict comparison used to flicker grounded on/off, which made rolls and
@@ -1391,10 +1505,16 @@ class Fighter {
             const minOverlapX = Math.min(overlapLeft, overlapRight);
             const minOverlapY = Math.min(overlapTop, overlapBottom);
 
-            if (minOverlapY < minOverlapX) {
-                if (overlapTop < overlapBottom && this.vy >= 0) {
+            // Prefer the axis we were moving along; otherwise smaller overlap
+            const preferY = Math.abs(vy0) >= Math.abs(vx0) * 0.85 || minOverlapY <= minOverlapX + 0.5;
+
+            if (preferY && minOverlapY <= minOverlapX + 2) {
+                // Landing / ceiling: use motion direction, not raw vy (rocket zeros vy)
+                const goingDown = vy0 >= -0.01 || prevBottom <= platTop + 2;
+                const goingUp = vy0 < -0.01 || prevTop >= platBottom - 2;
+                if (goingDown && overlapTop <= overlapBottom + 1) {
                     this.y = platTop - this.height / 2;
-                    if (bounce && vy0 > MIN_BOUNCE) {         // land hard: bounce back up with the knockback that is left
+                    if (bounce && vy0 > MIN_BOUNCE) {
                         this.vy = -vy0 * BOUNCE;
                         this.vx = vx0 * 0.9;
                         this.grounded = false;
@@ -1403,15 +1523,22 @@ class Fighter {
                         return;
                     }
                     this.vy = 0;
-                    if (bounce) this.vx *= 0.35;               // settled: no skating across the floor
+                    if (bounce) this.vx *= 0.35;
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
-                    this.isHanging = false;
-                    this.airSpecials = 0;                     // touching the ground recharges air F moves
-                } else if (overlapBottom <= overlapTop && this.vy < 0) {
+                    this.leaveLedge();
+                    this.airSpecials = 0;
+                    // stop a rocket / similar special from driving further into the floor
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.min(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
+                } else if (goingUp || overlapBottom < overlapTop) {
                     this.y = platBottom + this.height / 2;
-                    this.vy = bounce ? -vy0 * BOUNCE : 0;      // knocked into the underside: rebound downward
+                    this.vy = bounce ? Math.abs(vy0) * BOUNCE : 0;
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.max(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
                 }
             } else {
                 if (overlapLeft < overlapRight) {
@@ -1419,19 +1546,26 @@ class Fighter {
                 } else {
                     this.x = platRight + this.width / 2;
                 }
-                this.vx = bounce ? -vx0 * BOUNCE : 0;          // rebound off the side wall with the speed that is left
+                this.vx = bounce ? -vx0 * BOUNCE : 0;
                 if (bounce && Math.abs(vx0) > MIN_BOUNCE) fx('hit', this.x, this.y, Math.min(16, Math.abs(vx0) * 0.6), vx0 > 0 ? Math.PI : 0);
+                if (this.sx && this.sx.k === 'rocket') {
+                    this.sx.ang = Math.atan2(Math.sin(this.sx.ang), -Math.cos(this.sx.ang));
+                }
             }
         } else {
             this.grounded = false;
         }
 
-        // soft platforms (custom-match arena): you land on top when coming down onto them, and pass through from below
-        if (!this.grounded && STAGE.platforms.length && this.dropT <= 0 && vy0 >= 0) {
-            const bottom = this.y + this.height / 2, prevBottom = this.py + this.height / 2;
+        // Soft platforms (Frontier / custom arena): land when the swept body crosses the top
+        // from above. No "bottom < pl.y + 60" cap — that let rockets tunnel through.
+        if (!this.grounded && STAGE.platforms.length && this.dropT <= 0 && vy0 >= -0.01) {
             for (const pl of STAGE.platforms) {
-                if (this.x + this.width / 2 > pl.x && this.x - this.width / 2 < pl.x + pl.w &&
-                    bottom > pl.y - 0.5 && prevBottom <= pl.y + 1 && bottom < pl.y + 60) {
+                const halfW = this.width / 2;
+                if (this.x + halfW <= pl.x || this.x - halfW >= pl.x + pl.w) continue;
+                // swept crossing of the platform surface this frame (or standing on it)
+                const crossed = prevBottom <= pl.y + 3 && fBottom >= pl.y - 0.5;
+                const resting = Math.abs(fBottom - pl.y) <= 1.5 && vy0 >= -0.01;
+                if (crossed || resting) {
                     this.y = pl.y - this.height / 2;
                     if (bounce && vy0 > MIN_BOUNCE) {
                         this.vy = -vy0 * BOUNCE; this.vx = vx0 * 0.9;
@@ -1443,9 +1577,50 @@ class Fighter {
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
-                    this.isHanging = false;
+                    this.leaveLedge();
                     this.airSpecials = 0;
+                    if (this.sx && this.sx.k === 'rocket') {
+                        this.sx.ang = Math.atan2(Math.min(0, Math.sin(this.sx.ang)), Math.cos(this.sx.ang));
+                    }
                     break;
+                }
+            }
+        }
+
+        // Solid inverted-triangle keel under the stage (matches the 3D crystal under the map)
+        {
+            const keelTop = STAGE.y + STAGE.height;
+            const keelH = 320;
+            const keelBot = keelTop + keelH;
+            const cx = STAGE.x + STAGE.width / 2;
+            const halfTop = STAGE.width * 0.48;
+            const fL = this.x - this.width / 2, fR = this.x + this.width / 2;
+            const fT = this.y - this.height / 2, fB = this.y + this.height / 2;
+            if (fB > keelTop + 0.5 && fT < keelBot) {
+                // sample half-width at the fighter's vertical centre (tapered triangle)
+                const midY = Math.max(keelTop, Math.min(keelBot, this.y));
+                const t = (midY - keelTop) / keelH;
+                const half = halfTop * Math.max(0, 1 - t);
+                const left = cx - half, right = cx + half;
+                if (fR > left && fL < right) {
+                    // push out to the nearer sloping side
+                    const toL = fR - left, toR = right - fL;
+                    if (toL < toR) {
+                        this.x = left - this.width / 2;
+                        if (this.vx > 0) this.vx = bounce ? -Math.abs(vx0) * BOUNCE : 0;
+                    } else {
+                        this.x = right + this.width / 2;
+                        if (this.vx < 0) this.vx = bounce ? Math.abs(vx0) * BOUNCE : 0;
+                    }
+                    // upward into the keel from below: bounce down a bit
+                    if (vy0 < 0 && fT < keelBot && this.y > keelTop + keelH * 0.5) {
+                        this.vy = bounce ? Math.abs(vy0) * BOUNCE : Math.max(this.vy, 0);
+                    }
+                    if (this.sx && this.sx.k === 'rocket') {
+                        // deflect rocket away from centre
+                        const away = this.x < cx ? Math.PI : 0;
+                        this.sx.ang = away * 0.35 + this.sx.ang * 0.65;
+                    }
                 }
             }
         }
@@ -1454,6 +1629,8 @@ class Fighter {
     // ------------------------------------------------------------ moves
     /** Roll: ONLY while shielding (hold E + scroll wheel), 2 s cooldown, never over the void. */
     executeRoll(force = false, dirOverride = 0) {
+        // static training bot never acts — including rolls
+        if (this.isAI && (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static')))) return false;
         if (!this.grounded || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.isRolling ||
             this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0 || this.sx || this.grabbedBy || this.grabHolding) return false;
         if (this.rollCooldown > 0) return false;
@@ -1471,7 +1648,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.rollTimer = ROLL_FRAMES;
         this.rollCooldown = ROLL_COOLDOWN;
-        this.actionLock = LOCK;
+        this.actionLock = trainLock();
         this.rollVx = rollDir * (ROLL_DISTANCE / ROLL_FRAMES);
 
         audio.playDash();
@@ -1486,9 +1663,11 @@ class Fighter {
         if (this.actionLock > JUMP_OK) return false;                // 0.3 s after a move you may jump again
 
         if (this.isHanging) {
-            this.isHanging = false;
+            // hangSide is -1 on the left ledge, +1 on the right: jump ONTO the stage
+            const side = this.hangSide;
+            this.leaveLedge();
             this.vy = -14.5;
-            this.vx = this.hangSide * 7.5;
+            this.vx = -side * 9;
             this.jumpsLeft = this.maxJumps;
             this.canGrab = true;
             audio.playJump();
@@ -1522,7 +1701,7 @@ class Fighter {
         if (dist === 0) return false;
 
         this.canGrab = false;
-        this.actionLock = LOCK;
+        this.actionLock = trainLock();
 
         const grabDashSpeed = 23;
         this.vx = (dx / dist) * grabDashSpeed;
@@ -1556,7 +1735,7 @@ class Fighter {
         this.attackHeld = !!(hold && this.swing.chargeable);
         this.meleeCharge = 0;
         this.activeHitbox = null;
-        this.actionLock = LOCK + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
+        this.actionLock = trainLock() + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
         return true;
     }
@@ -1649,7 +1828,12 @@ class AIBot extends Fighter {
         this.diff = null;                       // custom matches: 'easy' | 'medium' | 'hard' per bot
     }
 
-    get level() { return this.diff || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard'); }
+    get level() {
+        if (this.diff) return this.diff;
+        // training static dummy must never be treated as hard (that enabled counter-rolls)
+        if (S.gameMode === 'training') return (S.train && S.train.botType && S.train.botType !== 'static') ? S.train.botType : 'static';
+        return S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard';
+    }
 
     /** watch the player (learn their habits) */
     observe(target) {
@@ -1695,9 +1879,13 @@ class AIBot extends Fighter {
     }
 
     updateAI(target) {
-        if (S.gameMode === 'training') {
-            // the dummy never acts, but it moves with the same physics as everyone else
-            // (update() applies gravity / friction / knockback once), so launches go sideways too
+        // static / training dummy: zero input, no rolls, no attacks
+        if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static'))) {
+            this.isShielding = false;
+            this.shieldHold = 0;
+            return;
+        }
+        if (S.gameMode === 'training' && this.level !== 'easy' && this.level !== 'medium' && this.level !== 'hard') {
             this.isShielding = false;
             return;
         }
@@ -1721,8 +1909,20 @@ class AIBot extends Fighter {
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         if (this.isHanging) {
-            this.jump();
-            this.vx = (this.x < stageCenterX) ? 8.5 : -8.5;
+            // always climb toward stage centre; force a get-up if jump is locked
+            const onto = this.x < stageCenterX ? 10 : -10;
+            if (!this.jump()) {
+                this.leaveLedge();
+                this.vy = -15;
+                this.jumpsLeft = this.maxJumps;
+                this.canGrab = true;
+            }
+            this.vx = onto;
+            // hard bots: if still near the void edge, burn a recovery special next frame
+            if (this.level === 'hard' && this.actionTimer % 8 === 0) {
+                const lx = this.x < stageCenterX ? STAGE.x + 40 : STAGE.x + STAGE.width - 40;
+                this.useSpecial('SPIRAL', lx, STAGE.y - 40);
+            }
             return;
         }
 
@@ -2279,7 +2479,7 @@ function launch(attacker, defender, hb) {
     defender.lastHitBy = attacker; defender.lastHitT = 0;
     if (defender.heldItem && defender.heldItem.type === 'FIRESTICK') burnStick(defender);      // getting hit shortens the firestick
 
-    if (defender.isAI && defender.level === 'hard') {
+    if (defender.isAI && defender.level === 'hard' && defender.level !== 'static') {
         defender.incomingHitCount++;
         if (!hb.stun && defender.grounded && defender.incomingHitCount >= 3 && defender.rollCooldown <= 0) {
             defender.incomingHitCount = 0;
@@ -2343,6 +2543,7 @@ function launch(attacker, defender, hb) {
 }
 
 function explodeOrb(o) {
+    if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
     if (o.trap) for (const f of fighters) if (f.trapId === o.id) f.trapId = 0;
     const R = o.R !== undefined ? o.R : 80 + 90 * o.charge;
     const dmg = o.d !== undefined ? o.d : 4 + 16 * o.charge;          // Luminent: min 4, max 20; every character has its own numbers
@@ -2362,7 +2563,7 @@ function explodeOrb(o) {
         if (res === 'hit') {
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,      // half the knockback
-                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0,
+                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0,
             });
         } else if (res === 'shield') {
             audio.playShield();
@@ -2393,6 +2594,34 @@ function updateDrops() {
         }
     }
 }
+function updateWhirlpools() {
+    for (let i = whirlpools.length - 1; i >= 0; i--) {
+        const w = whirlpools[i];
+        w.life--;
+        if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
+        // refresh VFX every ~0.35 s so the spiral keeps spinning for the full 3 s
+        if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        for (const f of foesOf(w.owner || p1)) {
+            if (!isAlive(f)) continue;
+            // hit out: a real launch (hitstun) frees them from the pool
+            if (f.hitstun > 14) { f._inWhirl = false; continue; }
+            const dx = w.x - f.x, dy = (w.y - f.height * 0.35) - f.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > w.r + f.width * 0.5) { f._inWhirl = false; continue; }
+            if (!f._inWhirl) { f.interrupt(); f._inWhirl = true; }
+            // soft continuous stun while inside
+            f.clashStunTimer = Math.max(f.clashStunTimer, 10);
+            const pull = w.pull || 2;
+            if (dist > 10) {
+                f.vx = dx / dist * pull;
+                f.vy = dy / dist * pull * 0.5;
+            } else {
+                f.vx *= 0.65; f.vy *= 0.65;
+            }
+            f.grounded = false;
+        }
+    }
+}
 
 function updateOrbs() {
     for (let i = Math.min(orbs.length, 64) - 1; i >= 0; i--) {
@@ -2408,6 +2637,17 @@ function updateOrbs() {
                 const a = cur + Math.max(-o.curve, Math.min(o.curve, da)) * ok;
                 o.vx = Math.cos(a) * sp; o.vy = Math.sin(a) * sp;
             }
+        }
+        if (o.ctrl) {                                             // Enlightened: steered by its caster
+            const c = o.ctrl;
+            if (!isAlive(c) || !c.sx || c.sx.k !== 'thunder' || c.sx.oid !== o.id) { dropOrb(o); explodeOrb(o); continue; }       // the caster got hit: it goes off
+            let want;
+            if (c === p1 && mouse.touchMode && mouse.joy) want = Math.atan2(mouse.joy[1], mouse.joy[0]);
+            else if (c === p1 && mouse.touchMode) want = null;
+            else { const a = aimOf(c); want = Math.atan2(a.y - o.y, a.x - o.x); }
+            if (want !== null) { let da = want - o.ang; da = Math.atan2(Math.sin(da), Math.cos(da)); o.ang += Math.max(-0.16, Math.min(0.16, da)); }
+            o.vx = Math.cos(o.ang) * o.spd; o.vy = Math.sin(o.ang) * o.spd;
+            if (Math.random() < 0.6) createParticles(o.x, o.y, '#fde047', 1);
         }
         if (o.cap) { o.capT++; o.vx *= 0.97; o.vy = -0.8; if (o.capT >= 180) { dropOrb(o); explodeOrb(o); continue; } }
         if (o.grav) o.vy += o.grav * ok;
@@ -2662,8 +2902,8 @@ function renderHUD() {
     if (fBadge) {
         let cls, txt, col;
         if (me.charging) { col = '#ddd6fe'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/60'; txt = `CORE ${Math.min(100, Math.round(me.chargeFrames / CHARGE_MAX * 100))}%`; }
-        else if (!me.grounded && me.airSpecials >= AIR_F_MAX) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
-        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${AIR_F_MAX - me.airSpecials}/${AIR_F_MAX}`; }
+        else if (!me.grounded && me.airSpecials >= trainAirF()) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
+        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${trainAirF() - me.airSpecials}/${trainAirF()}`; }
         const key = cls + txt + col;
         if (hudCache.fb !== key) { hudCache.fb = key; fBadge.className = cls; fBadge.textContent = txt; fBadge.style.color = col; }
     }
@@ -2688,6 +2928,31 @@ function triggerDramaticZoom(winnerCharacter) {
 }
 
 const TEAM_COLORS = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', green: '#22c55e' };
+/** name above a fighter: username / guest, or Easy/Medium/Hard Bot (numbered when several of the same) */
+export function assignTagNames() {
+    const bots = {};
+    for (const f of fighters) {
+        if (!f.active) { f.tagName = ''; continue; }
+        if (f.isAI) {
+            // Training static dummy is not a Hard Bot
+            if (S.gameMode === 'training' && (!f.diff || (S.train && S.train.botType === 'static'))) {
+                f.tagName = 'Static Bot';
+                continue;
+            }
+            const lv = f.diff || (typeof f.level === 'string' ? f.level : null)
+                || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard');
+            const base = lv === 'easy' ? 'Easy Bot' : lv === 'medium' ? 'Medium Bot' : 'Hard Bot';
+            (bots[base] || (bots[base] = [])).push(f);
+        } else {
+            f.tagName = (f === p1) ? (displayName() || f.name || 'Player') : (f.name || 'Player');
+        }
+    }
+    for (const [base, list] of Object.entries(bots)) {
+        if (list.length === 1) list[0].tagName = base;
+        else list.forEach((f, i) => { f.tagName = base + ' ' + (i + 1); });
+    }
+}
+
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
@@ -2716,6 +2981,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
     orbs.length = 0; drops.length = 0;
+    whirlpools.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
     if (S.match) {
@@ -2739,6 +3005,17 @@ function startMatchSequence(mode, cfg) {
     p2.shieldHold = 0;
     p2.isAI = !S.online;                                   // online: p2 is a person
     }
+    if (!S.match) {
+        p1.name = displayName() || p1.name || 'Player';
+        if (p2.isAI) {
+            p2.diff = S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : S.gameMode === 'hard' ? 'hard' : (p2.diff || 'hard');
+            p2.name = p2.diff === 'easy' ? 'Easy Bot' : p2.diff === 'medium' ? 'Medium Bot' : 'Hard Bot';
+        } else if (S.opponentName) {
+            p2.name = S.opponentName;
+        }
+    }
+    assignTagNames();
+
     p2.remoteAim = null;
     S.winnerRole = null;
     remote.helds = {};
@@ -2753,43 +3030,39 @@ function startMatchSequence(mode, cfg) {
 
     if (S.gameMode === 'lobby') {
         modeLabel.textContent = S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL';
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'easy') {
         modeLabel.textContent = "MODE: EASY";
         aiDiffLabel.textContent = "Easy Bot";
         aiDescText.textContent = "Slower movement, passive attacks & defensive shield";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'medium') {
         modeLabel.textContent = "MODE: MEDIUM";
         aiDiffLabel.textContent = "Medium Bot";
         aiDescText.textContent = "Uses every move, but reacts slower and doesn't learn your habits";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'hard') {
         modeLabel.textContent = "MODE: HARD"
         aiDiffLabel.textContent = "Hard Bot";
         aiDescText.textContent = "Learns your habits • Core zoning • Ledge Guard & Counter-Rolls";
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'online') {
         modeLabel.textContent = "MODE: ONLINE 1v1";
         aiDiffLabel.textContent = S.opponentName || 'Opponent';
         aiDescText.textContent = S.online === 'host' ? 'You are hosting: you are the blue fighter' : 'Connected to the host: you are the blue fighter';
-        document.getElementById('trainingControlPanel').classList.add('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
     } else if (S.gameMode === 'training') {
         modeLabel.textContent = "MODE: TRAINING";
-        aiDiffLabel.textContent = "Training Dummy";
-        aiDescText.textContent = "Stationary practice dummy with infinite stocks";
-        document.getElementById('trainingControlPanel').classList.remove('hidden');
-        document.getElementById('openTrainingPanelBtn').classList.add('hidden');
+        aiDiffLabel.textContent = "Static Bot";
+        aiDescText.textContent = "Static Bot — stationary practice dummy with infinite stocks";
     }
 
     document.getElementById('gameHud').classList.remove('hidden');
     document.getElementById('aimMatrixHud').classList.remove('hidden');
     document.getElementById('inGameMenuContainer').classList.remove('hidden');
+
+    // Training: apply prefs, no countdown — jump straight into playing
+    if (S.gameMode === 'training') {
+        applyTrainPrefs();
+        document.getElementById('countdownScreen').classList.add('hidden');
+        S.gameState = 'playing';
+        return;
+    }
 
     S.gameState = 'countdown';
     const countdownScreen = document.getElementById('countdownScreen');
@@ -2811,6 +3084,25 @@ function startMatchSequence(mode, cfg) {
             S.gameState = 'playing';
         }
     }, 1000);
+}
+
+/** Apply S.train to arena, p1/p2 characters, bot type */
+export function applyTrainPrefs() {
+    const t = ensureTrain();
+    if (t.stage === 'lobby' || t.stage === 'frontier') setArena('lobby');
+    else setArena('normal');
+    if (t.char) { p1.char = charOf(t.char).id; }
+    else p1.char = getMyChar();
+    p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;
+    const bt = t.botType || 'static';
+    p2.isAI = true;
+    if (bt === 'static') { p2.diff = null; p2.name = 'Static Bot'; }
+    else { p2.diff = bt; p2.name = bt === 'easy' ? 'Easy Bot' : bt === 'medium' ? 'Medium Bot' : 'Hard Bot'; }
+    p2.char = charOf(t.botChar || t.char || getMyChar()).id;
+    p2.maxJumps = charOf(p2.char).jumps; p2.jumpsLeft = p2.maxJumps;
+    try { assignTagNames(); } catch (e) { /* ok */ }
+    const btn = document.getElementById('trainMenuBtn');
+    if (btn) btn.classList.toggle('hidden', S.gameMode !== 'training');
 }
 
 const gameOverModal = document.getElementById('gameOverModal');
@@ -2859,9 +3151,9 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk;   // charging a core: 1.5x the old 4.5
-            if (h.left) { if (f.isHanging) f.isHanging = false; f.vx = -spd; if (!swinging) f.facing = -1; }
-            if (h.right) { if (f.isHanging) f.isHanging = false; f.vx = spd; if (!swinging) f.facing = 1; }
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1);   // training walk mult for p1
+            if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
+            if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
         }
         f.isShielding = !!h.shield && f.canShield();
         if (h.drop) f.dropT = 12;
@@ -3078,6 +3370,7 @@ export function step() {
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
+        updateWhirlpools();
         updateOrbs(); updateDrops();
         updateItems();
         const live2 = fighters.filter(isAlive);
@@ -3091,9 +3384,13 @@ export function step() {
         drive(p1, { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') });
         p1.update();
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
-        else { p2.updateAI(p1); aiWalk(p2); }
+        else {
+            const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
+            if (!staticBot) { p2.updateAI(p1); aiWalk(p2); }
+        }
         p2.update();
 
+        updateWhirlpools();
         updateOrbs(); updateDrops();
 
         checkCombatCollisions(p1, p2);
