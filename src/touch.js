@@ -8,6 +8,7 @@
 //   shield       hold = shield | joystick left/right while shielding = roll
 import { S, mouse, fighters, p1 } from './core.js';
 import { virtual } from './controls.js';
+import { spec } from './specials.js';
 import { getLayout, touchMode, onLayout } from './layout.js';
 
 export const MATRIX_BASE = 230;
@@ -216,7 +217,14 @@ export class TouchControls {
             }
             let sel = null;
             if (len > this.geo.d * 0.45) sel = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN');
-            if (sel !== g.sel) { g.sel = sel; clearSel(); if (sel) dirButton(sel).classList.add('sel'); }
+            if (sel !== g.sel) {
+                const me = this.me();
+                if (spec(me.char, 'S').kind === 'roll') {             // Ember: dragging onto a side starts the roll charge at once; another direction = release
+                    if (g.rolling) { g.rolling = false; g.spent = true; this.api.releaseAction('special'); }
+                    else if (!g.spent && (sel === 'SIDE_LEFT' || sel === 'SIDE_RIGHT') && me.cd.BLINK <= 0) { g.rolling = true; clearTimeout(g.timer); this.act('special', sel); }
+                }
+                g.sel = sel; clearSel(); if (sel) dirButton(sel).classList.add('sel');
+            }
             if (len > 10) g.aim = [dx / len, dy / len]; else g.aim = null;
             mouse.touchAim = g.aim;                                   // the dotted guide shows what the grid is aiming
         });
@@ -225,8 +233,10 @@ export class TouchControls {
             clearTimeout(g.timer);
             const s = g; g = null;
             main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null);
-            if (e.type === 'pointercancel') { mouse.touchAim = null; if (s.charging) this.api.cancelF(); return; }
-            if (s.sel) {
+            if (e.type === 'pointercancel') { mouse.touchAim = null; if (s.charging || s.rolling) this.api.cancelF(); return; }
+            if (s.rolling) { mouse.touchAim = null; this.api.releaseAction('special'); }
+            else if (s.spent) { mouse.touchAim = null; }
+            else if (s.sel) {
                 mouse.touchAim = null;
                 this.act('special', s.sel); this.api.releaseAction('special');          // directional F move
             } else if (s.charging) {                                                                  // release Core / Ember breath where the matrix aimed

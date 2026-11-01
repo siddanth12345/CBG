@@ -4,6 +4,7 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
+import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
 import { SoundEngine } from './audio.js';
@@ -97,6 +98,7 @@ export function setArena(kind) {
 // ----------------------------------------------------------------- tuning (frames @ 60 Hz)
 export const ATTACK_FRAMES = 18;
 const LOCK = 36;              // 0.6 s: after ANY move you can't start another one (you can still walk)
+const lk = (f, n) => (f.char === 'bulwark' || f.char === 'terra') ? Math.round(n * 0.7) : n;   // Bulwark / Terra: 0.7x the lock after a move
 const JUMP_OK = 24;           // ...but you may jump once 0.2 s of that lock has passed (36 - 12)
 const MELEE_CHARGE_MAX = 102; // 1.7 s to fully charge a held side / up / down melee
 const MELEE_CHARGE_BONUS = 0.3;   // fully charged = +30% damage and knockback
@@ -399,6 +401,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
+        this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
         this.trapId = 0;                     // id of the bubble this fighter is trapped in (Tide's Bubble Trap)
         this.sx = null;                      // running character special: { k: 'burst'|'breath'|'pound'|'dash', t, ... }
@@ -490,6 +493,7 @@ class Fighter {
     update() {
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
+        if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) this.glide = false;
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
             if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
@@ -688,7 +692,7 @@ class Fighter {
             this.vx *= 0.92;
         } else if (!this.grounded) {
             this.vy = Math.min(this.vy + WORLD.gravity * (this.gravT > 0 ? 0.65 : 1), WORLD.terminalVelocity);
-            this.vx *= WORLD.airFriction;
+            if (!this.glide) this.vx *= WORLD.airFriction;
         } else {
             this.vx *= WORLD.friction;
         }
@@ -872,7 +876,7 @@ class Fighter {
                     createParticles(cx, cy + sp.h / 2, this.color, 14);
                 }
             }
-            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, sp.lock || trainLock()); }
+            if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, lk(this, sp.lock || trainLock())); }
         } else if (x.k === 'rocket') {
             const sp = spec(this.char, 'U');
             this.activeMove = { type: 'SPIRAL', t: 3 };
@@ -914,7 +918,7 @@ class Fighter {
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
                 this.vx = Math.cos(x.ang) * sp.speed * 0.45; this.vy = Math.sin(x.ang) * sp.speed * 0.45;
                 const over = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
-                this.actionLock = Math.max(this.actionLock, sp.missile ? 16 : over ? 20 : 70);
+                this.actionLock = Math.max(this.actionLock, lk(this, sp.missile ? 16 : over ? 20 : 70));
             }
         } else if (x.k === 'erupt') {
             const sp = spec(this.char, 'U');
@@ -936,7 +940,7 @@ class Fighter {
                 this.vx = Math.cos(ang) * spd; this.vy = Math.sin(ang) * spd - 2; if (Math.abs(this.vx) > 3) this.facing = this.vx > 0 ? 1 : -1;
                 fx('gust', this.x, this.y, 90, 0, 'water'); fx('trail', this.x, this.y, Math.round(ang * 100) / 100, 1, 'water');
             }
-            if (x.t >= sp.windup + sp.rideFrames + 4) { this.sx = null; this.activeMove = null; }
+            if (x.t >= sp.windup + sp.rideFrames + 4) { this.sx = null; this.activeMove = null; this.glide = !this.grounded && !this.isHanging; }
         } else if (x.k === 'dash') {
             const sp = spec(this.char, 'S');
             if (x.t <= sp.frames) {
@@ -1031,7 +1035,7 @@ class Fighter {
         this.activeHitbox = { x: this.x, y: this.y + this.height / 2 - 30, w, h: 64, type: 'HEADBUTT', ttl: 8, ...hit };
         this.activeMove = { type: 'HEADBUTT', t: 10 };
         this.specialKind = null; this.specialDur = 0;
-        this.freezeTimer = sp.lock !== undefined ? sp.lock : FREEZE;
+        this.freezeTimer = lk(this, sp.lock !== undefined ? sp.lock : FREEZE);
         if (sp.vx) { this.vy = -8; this.grounded = false; this.freezeTimer = Math.min(this.freezeTimer, 8); }   // the diagonal kick bounces back up
         if (hit.multi) this.swingHitSet = new Set();
         fx('stomp', this.x, this.y + this.height / 2, w, 0, STYLE_OF[this.char]);
@@ -1086,7 +1090,7 @@ class Fighter {
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
         this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
-        this.actionLock = sp.lock !== undefined ? sp.lock : trainLock();
+        this.actionLock = lk(this, sp.lock !== undefined ? sp.lock : trainLock());
 
         switch (kind) {
             case 'CORE': this.startCore(tx, ty, charge); break;
@@ -1755,7 +1759,7 @@ class Fighter {
         this.attackHeld = !!(hold && this.swing.chargeable);
         this.meleeCharge = 0;
         this.activeHitbox = null;
-        this.actionLock = trainLock() + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
+        this.actionLock = lk(this, trainLock()) + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
         return true;
     }
@@ -1766,7 +1770,7 @@ class Fighter {
         if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
         orbs.push({ x: this.x + dx * 40, y: this.y + dy * 40 - 4, vx: dx * 19, vy: dy * 19, r: 24, charge: 0.1, owner: this, life: 200, color: '#a8a29e', id: ++orbSerial,
             d: 5, R: 45, bkb: 4, kbg: 0.45, grav: WORLD.gravity * 0.55 * 0.85, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' });
-        this.rockT = 24; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14;
+        this.rockT = 30; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14;
         audio.playThrow();
         return true;
     }
@@ -1841,6 +1845,10 @@ const botMem = (() => {
     try { return JSON.parse(localStorage.getItem(BOT_MEM_KEY)) || {}; } catch (e) { return {}; }
 })();
 function saveBotMemory() { try { localStorage.setItem(BOT_MEM_KEY, JSON.stringify(botMem)); } catch (e) { /* storage unavailable */ } }
+/** per difficulty: how well each character's special moves worked for the bots ("char:slot" -> {use, hit}); starts from the self-play priors */
+export const aiStats = { easy: {}, medium: {}, hard: {} };
+for (const lv of Object.keys(aiStats)) for (const k of Object.keys((AI_PRIOR && AI_PRIOR[lv]) || {})) aiStats[lv][k] = { ...AI_PRIOR[lv][k] };
+const aiRate = (lv, key) => { const e = aiStats[lv] && aiStats[lv][key]; return e ? (e.hit + 1) / (e.use + 2) : 0.5; };
 const MEM_KEYS = ['SHIELD', 'J', 'GRAB', 'CORE', 'BLINK', 'SPIRAL', 'SUPLEX', 'HEADBUTT'];
 /** how often the player uses `k` (0..1, smoothed so a short history can't be extreme) */
 function habitOf(k) {
@@ -1962,6 +1970,8 @@ class AIBot extends Fighter {
             this.vx = Math.max(-6, Math.min(6, this.vx + (this.x < stageCenterX ? 0.9 : -0.9)));
             return;
         }
+        if (this.aiMove && --this.aiMove.t <= 0) this.aiMove = null;
+        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll') { const dd = target.x - this.x; if (Math.abs(dd) > 40) this.sx.d = dd > 0 ? 1 : -1; }   // steer the fireball roll at the foe
         if (this.suplexT > 0 || this.diving || this.isRolling || this.sx) return;
 
         const isOverVoid = this.x < STAGE.x || this.x > STAGE.x + STAGE.width;
@@ -2006,6 +2016,7 @@ class AIBot extends Fighter {
                     this.vx += this.facing * movementSpeed;
                 }
 
+                if (Math.random() < 0.12 && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
                 if (dist < 130 && Math.random() < 0.65) {
                     this.raiseShield(54);
                 } else if (dist < 90 && Math.random() < 0.3) {
@@ -2109,6 +2120,9 @@ class AIBot extends Fighter {
                 this.jump();
             }
 
+            // 5b) the character's own special moves
+            if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.65) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
+
             // 6) neutral game at close / mid range
             if (dist < 130 && !this.grabHolding) {
                 const opts = [];
@@ -2130,6 +2144,49 @@ class AIBot extends Fighter {
                 this.raiseShield(24);
             }
         }
+    }
+
+
+    /** Special moves for every character (Luminent keeps its classic plan): picks by range / height, weighted by what has worked for this level */
+    aiSpecial(t, dist, dx, dy) {
+        const lv = this.level, adx = Math.abs(dx), ch = this.char, g = this.grounded;
+        if (ch === 'luminent' || (lv !== 'easy' && lv !== 'medium' && lv !== 'hard')) return false;
+        if (this.actionBlocked() || this.actionLock > 0) return false;
+        const N = spec(ch, 'N'), S1 = spec(ch, 'S'), U = spec(ch, 'U'), DG = spec(ch, 'DG'), DA = spec(ch, 'DA');
+        const opts = [], add = (w, slot, fn) => opts.push([w * (0.35 + 1.65 * aiRate(lv, ch + ':' + slot)), slot, fn]);
+        const charge = lv === 'hard' ? 0.4 + Math.random() * 0.6 : lv === 'medium' ? Math.random() * 0.7 : Math.random() * 0.4;
+        const cdOk = (k) => this.cd[k] <= 0;
+        if (cdOk('CORE')) {
+            if (N.kind === 'burst' && adx < 190 && Math.abs(dy) < 130) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
+            else if (N.kind === 'breath' && dist < 360) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
+            else if (N.kind === 'thunder' && g && dist > 220 && dist < 900) add(2, 'N', () => this.useSpecial('CORE', t.x, t.y, lv === 'hard' ? 0.6 + Math.random() * 0.4 : charge));
+        }
+        if (cdOk('BLINK')) {
+            const dd = S1.dist || 300;
+            if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
+            else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+        }
+        if (cdOk('SPIRAL')) {
+            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+        }
+        if (cdOk('SUPLEX') && g) {
+            const reach = DG.atTarget ? 620 : Math.max(170, STAGE.width * (DG.w || 0.1) * 0.5 + 40);
+            if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
+        }
+        if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
+        if (!opts.length) return false;
+        let tot = 0; for (const o of opts) tot += o[0];
+        let r = Math.random() * tot, pick = opts[0];
+        for (const o of opts) { r -= o[0]; if (r <= 0) { pick = o; break; } }
+        if (!pick[2]()) return false;
+        const key = ch + ':' + pick[1]; const e = aiStats[lv][key] || (aiStats[lv][key] = { use: 0, hit: 0 });
+        e.use++; this.aiMove = { slot: pick[1], t: 100, hit: false };
+        return true;
     }
 
     pickWeighted(opts) {
@@ -2485,6 +2542,7 @@ function balloonPop(attacker, defender, hb) {
 }
 
 function launch(attacker, defender, hb) {
+    if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit++; }
     if (hb.radial || hb.mirror) {                           // area hits push away from their centre / mirror to the victim's side
         hb = { ...hb };
         if (hb.radial) hb.angle = Math.atan2(defender.y - hb.y - 20, (defender.x - hb.x) || 1);
@@ -3209,8 +3267,16 @@ function drive(f, h) {
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
             const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1);   // training walk mult for p1
+            if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
+                const dr = h.left ? -1 : h.right ? 1 : 0;
+                if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
+                const jy = (f === p1 || !f.isAI) && mouse.joy ? mouse.joy[1] : 0;
+                if (h.drop || jy > 0.5) f.vy = Math.min(f.vy + 0.45, 7);
+                else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
+            } else {
             if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
             if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
+            }
         }
         f.isShielding = !!h.shield && f.canShield();
         if (h.drop) f.dropT = 12;
