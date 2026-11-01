@@ -401,6 +401,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
+        this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
         this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
@@ -495,6 +496,7 @@ class Fighter {
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
         if (this.sideT > 0) this.sideT--;
+        if (this.upT > 0) this.upT--;
         if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) this.glide = false;
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
@@ -1092,6 +1094,7 @@ class Fighter {
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
         this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
+        if (kind === 'SPIRAL') this.upT = (sp.frames || 20) + (sp.windup || 0) + 12;
         if (kind === 'BLINK' && sp.kind !== 'roll' && sp.kind !== 'bubble' && this.char !== 'umbra') this.sideT = (sp.frames || 0) + (sp.windup || 0) + 22;
         this.actionLock = lk(this, sp.lock !== undefined ? sp.lock : trainLock());
 
@@ -2550,12 +2553,12 @@ function balloonPop(attacker, defender, hb) {
 
 /** Ember (rolling) vs a foe in the middle of a Side-F move: cancel the foe's move and stun them. True when it happened. */
 function emberCounter(em, foe) {
-    if (!em.sx || em.sx.k !== 'roll' || em.sx.ph !== 'roll' || !em.activeHitbox || foe.sideT <= 0 || (foe.sx && foe.sx.k === 'roll')) return false;
+    if (!em.sx || em.sx.k !== 'roll' || em.sx.ph !== 'roll' || !em.activeHitbox || (foe.sideT <= 0 && foe.upT <= 0) || (foe.sx && foe.sx.k === 'roll')) return false;
     const h = em.activeHitbox;
     const near = (b) => Math.abs(b.x - foe.x) < (b.w + foe.width) / 2 && Math.abs(b.y - foe.y) < (b.h + foe.height) / 2;
     const fb = foe.activeHitbox, hitEm = fb && Math.abs(fb.x - em.x) < (fb.w + em.width) / 2 && Math.abs(fb.y - em.y) < (fb.h + em.height) / 2;
     if (!near(h) && !hitEm) return false;
-    foe.sideT = 0; foe.sx = null; foe.activeHitbox = null; foe.activeMove = null; foe.armorT = 0; foe.invincibleTimer = 0;
+    foe.sideT = 0; foe.upT = 0; foe.spiralT = 0; foe.sx = null; foe.activeHitbox = null; foe.activeMove = null; foe.armorT = 0; foe.invincibleTimer = 0;
     foe.attackTimer = 0; foe.swing = null; foe.actionLock = Math.max(foe.actionLock, 20);
     (em.swingHitSet || (em.swingHitSet = new Set())).add(foe);
     fx('block', foe.x, foe.y); S.screenShake = Math.max(S.screenShake, 8);
@@ -2763,7 +2766,16 @@ function updateWhirlpools() {
 function updateOrbs() {
     for (let i = Math.min(orbs.length, 64) - 1; i >= 0; i--) {
         const o = orbs[i];
-        if (!o) continue;                                         // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
+        if (!o) continue;                                         // a pop
+        if (o.owner && (o.charge || 0) < 1) {                     // Ember's rolling Side-F wipes out every thrown rock and uncharged projectile it touches
+            const em = fighters.find(e => e.active && !e.out && e !== o.owner && e.sx && e.sx.k === 'roll' && e.sx.ph === 'roll' && foesOf(e).includes(o.owner) &&
+                Math.abs(e.x - o.x) < (e.activeHitbox ? e.activeHitbox.w : e.width) / 2 + o.r && Math.abs(e.y - o.y) < (e.activeHitbox ? e.activeHitbox.h : e.height) / 2 + o.r);
+            if (em) {
+                if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
+                dropOrb(o); fx('block', o.x, o.y); createParticles(o.x, o.y, '#fb923c', 10); audio.playHit(false); continue;
+            }
+        }
+        // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
         const ok = slowAt(o.x, o.y, o.owner);
         o.age = (o.age || 0) + 1;
         if (o.curve) {                                            // Void Orb bends toward the nearest foe
