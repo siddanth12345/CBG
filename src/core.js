@@ -28,6 +28,7 @@ export const fxEvents = [];
 export const orbs = [];                    // CBG Core projectiles
 export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, life, owner, pull }
 let orbSerial = 0;
+const pillars = [];                  // Ember's twin fire pillars (host only)
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 102;             // Ember's rolling charge: 1.7 s to full
 function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
@@ -397,6 +398,7 @@ class Fighter {
         this.suplexAng = 0;                  // backflip angle during a suplex (radians)
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
+        this.rockT = 0;
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
         this.trapId = 0;                     // id of the bubble this fighter is trapped in (Tide's Bubble Trap)
         this.sx = null;                      // running character special: { k: 'burst'|'breath'|'pound'|'dash', t, ... }
@@ -487,6 +489,7 @@ class Fighter {
 
     update() {
         if (this.armorT > 0) this.armorT--;
+        if (this.rockT > 0) this.rockT--;
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
             if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
@@ -844,7 +847,8 @@ class Fighter {
             this.activeMove = { type: 'SPIRAL', t: 3 };
             this.vx = 0;
             const pt = x.t - sp.windup, n = sp.hits || 1, ev = sp.every || 6;
-            if (pt >= 0 && pt < n * ev && pt % ev === 0) {
+            if (sp.pillars && pt === 0) this.spawnPillars(sp.pillars);
+            if (!sp.pillars && pt >= 0 && pt < n * ev && pt % ev === 0) {
                 const w = STAGE.width * sp.w, feet = this.y + this.height / 2;
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
@@ -888,14 +892,12 @@ class Fighter {
             }
             this.vx = this.vy = 0;
             this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
-            if (sp.drill) {                                                // Phoenix Dash: a drill of quick hits that carry foes along with the flame; only the final blast knocks
-                if (x.t % 4 === 1 && (x.hits || 0) < sp.maxHits) {
-                    const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
-                    if (foesOf(this).some(t => isAlive(t) && Math.abs(t.x - hx) < sp.w / 2 + t.width / 2 && Math.abs(t.y - hy) < sp.h / 2 + t.height / 2)) x.hits = (x.hits || 0) + 1;
-                    this.swingHitSet = new Set();
-                    this.activeHitbox = { x: hx, y: hy, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true, damage: sp.dmg, bkb: 0, kbg: 0, angle: x.ang,
-                        fixed: { vx: Math.cos(x.ang) * sp.speed * 0.95, vy: Math.sin(x.ang) * sp.speed * 0.95, hitstun: 7 } };
-                }
+            if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
+                const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
+                if (x.t % 6 === 1) this.swingHitSet = new Set();
+                if (!this.swingHitSet) this.swingHitSet = new Set();
+                this.activeHitbox = { x: hx, y: hy, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true, damage: sp.dmg, bkb: 0, kbg: 0, angle: x.ang,
+                    fixed: { vx: Math.cos(x.ang) * sp.speed * 0.95, vy: Math.sin(x.ang) * sp.speed * 0.95, hitstun: 7 } };
             } else if (x.t % 3 === 1) {
                 if (!this.swingHitSet) this.swingHitSet = new Set();
                 this.activeHitbox = { x: this.x + Math.cos(x.ang) * 34, y: this.y + Math.sin(x.ang) * 34, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true,
@@ -963,14 +965,18 @@ class Fighter {
                 this.vx = 0; this.vy = 0; this.activeMove = null; this.facing = x.d;
                 if (x.t % 4 === 0) createParticles(this.x, this.y, '#fb923c', 2);
                 if (!this.fActive && !this.isAI) { this.launchRoll(); }          // the button is up (released without an event): go
+                else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();   // phones: dragging to another arrow mid-charge lets go
             } else {
                 const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;
-                this.vx = x.d * speed / (this.grounded ? WORLD.friction : WORLD.airFriction); this.facing = x.d;
+                if (x.v === undefined) x.v = x.d * speed;
+                const acc = speed / 22;                                        // turning around: a smooth slowdown, then back up to speed the other way
+                x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
+                this.vx = x.v / (this.grounded ? WORLD.friction : WORLD.airFriction); if (Math.abs(x.v) > speed * 0.15) this.facing = x.v > 0 ? 1 : -1;
                 const sz = lerpR(sp.w, c);
                 this.activeMove = { type: 'BLINK', t: 2 };
-                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 2, multi: true, mirror: true, damage: lerpR(sp.dmg, c), bkb: 5, kbg: 0.3, angle: -0.6,
+                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true, damage: lerpR(sp.dmg, c), bkb: 5, kbg: 0.3, angle: -0.6,
                     burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
-                if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -x.d, c, st);              // the fire left on the ground behind
+                if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);              // the fire left on the ground behind
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, '#fb923c', 2);
                 if (x.t >= (sp.maxFrames || 300)) this.endRoll();
             }
@@ -989,11 +995,24 @@ class Fighter {
         }
     }
 
+    spawnPillars(pl) {
+        const feet = this.y + this.height / 2, st = STYLE_OF[this.char], w = STAGE.width * pl.w;
+        for (const sd of [-1, 1]) {
+            pillars.push({ x: this.x + sd * pl.off, feet, w, aw: w * 2.6, h: pl.h, dmg: pl.dmg, burn: pl.burn, tick: pl.tick, life: 24, owner: this, hit: new Set() });
+            fx('pillar', this.x + sd * pl.off, feet, w * 1.6, pl.h, st + '!'); fx('quake', this.x + sd * pl.off, feet, w * 2.2, 0, st);
+        }
+        S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+    }
+
     /** Bulwark's swords / Terra's rocks: they rain down on the path just travelled and land a moment later */
     dropAt(px, dr) {
-        const feet = this.y + this.height / 2, fall = dr.fall || 16;
-        drops.push({ x: px, y: feet, t: fall, owner: this, ...dr });
-        fx('drop', px, feet - 460, fall, feet, dr.kind);
+        const y0 = this.y - 520, v = dr.speed || 26;
+        let yl = BLAST_ZONES.bottom, surface = false;                       // they keep falling until a stage / platform stops them, or they leave through the kill zone
+        if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > y0 && STAGE.y < yl) { yl = STAGE.y; surface = true; }
+        for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > y0 && pl.y < yl) { yl = pl.y; surface = true; }
+        const frames = Math.max(2, Math.ceil((yl - y0) / v));
+        drops.push({ x: px, y: y0, yl, v, surface, owner: this, hit: new Set(), ...dr });
+        fx('drop', px, y0, frames, yl, dr.kind);
     }
 
     endSpiral() {
@@ -1718,6 +1737,7 @@ class Fighter {
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
+        if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
         let kind = 'JAB';
         switch (aimDirection) {
@@ -1737,6 +1757,17 @@ class Fighter {
         this.activeHitbox = null;
         this.actionLock = trainLock() + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
+        return true;
+    }
+    /** Terra's neutral melee: a rock thrown as fast as the ball (and pulled down by gravity the same way), ball-sized, 5 damage and half the ball's knockback */
+    throwRock() {
+        if (this.rockT > 0) return false;
+        const aim = aimOf(this); let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+        if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
+        orbs.push({ x: this.x + dx * 40, y: this.y + dy * 40 - 4, vx: dx * 19, vy: dy * 19, r: 24, charge: 0.1, owner: this, life: 200, color: '#a8a29e', id: ++orbSerial,
+            d: 5, R: 45, bkb: 4, kbg: 0.45, grav: WORLD.gravity * 0.55 * 0.85, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' });
+        this.rockT = 24; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14;
+        audio.playThrow();
         return true;
     }
     /** melee button released: a charging swing is let go */
@@ -2579,21 +2610,47 @@ function dropOrb(o) { const k = orbs.indexOf(o); if (k >= 0) orbs.splice(k, 1); 
 function updateDrops() {
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i];
-        if (--d.t > 0) continue;
-        drops.splice(i, 1);
-        const st = d.kind === 'rock' ? 'rock' : 'iron';
-        fx('stomp', d.x, d.y, d.w * 1.4, 0, st); S.screenShake = Math.max(S.screenShake, 5); audio.playHit(false);
-        createParticles(d.x, d.y, d.kind === 'rock' ? '#a8a29e' : '#cbd5e1', 8);
-        for (const t of foesOf(d.owner)) {
-            if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
-            if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && t.y + t.height / 2 > d.y - d.h && t.y - t.height / 2 < d.y + 30) {
+        d.y += d.v;
+        for (const t of foesOf(d.owner)) {                      // anyone in the path gets hit once
+            if (d.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+            if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
+                d.hit.add(t);
                 const res = interaction('SPIRAL', t);
                 if (res === 'hit') launch(d.owner, t, { damage: d.dmg, bkb: d.bkb, kbg: d.kbg, angle: -1.25, mirror: true, x: d.x, y: d.y });
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             }
         }
+        if (d.y >= d.yl) {
+            drops.splice(i, 1);
+            if (d.surface) {
+                fx('stomp', d.x, d.yl, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
+                createParticles(d.x, d.yl, d.kind === 'rock' ? '#a8a29e' : '#cbd5e1', 8);
+            }
+        }
     }
 }
+
+/** Ember's twin fire pillars: a direct hit deals damage and sets you on fire; standing in the flames only burns */
+function updatePillars() {
+    for (let i = pillars.length - 1; i >= 0; i--) {
+        const p = pillars[i];
+        if (--p.life <= 0) { pillars.splice(i, 1); continue; }
+        for (const t of foesOf(p.owner)) {
+            if (p.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+            const dy = Math.abs(t.y - (p.feet - p.h / 2));
+            if (dy > p.h / 2 + t.height / 2) continue;
+            const ax = Math.abs(t.x - p.x);
+            if (ax < p.w / 2 + t.width / 2) {
+                const res = interaction('SPIRAL', t);
+                if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: 0, kbg: 0, angle: -1.4, stun: 20, lift: 5, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
+                else if (res === 'shield') { p.hit.add(t); audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
+            } else if (ax < p.aw / 2 + t.width / 2) {
+                p.hit.add(t); t.burnT = Math.max(t.burnT, p.burn); t.burnDmg = p.tick; t.burnBy = p.owner; fx('burn', t.x, t.y - 30);
+            }
+        }
+    }
+}
+
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
         const w = whirlpools[i];
@@ -2980,7 +3037,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
-    orbs.length = 0; drops.length = 0;
+    orbs.length = 0; drops.length = 0; pillars.length = 0;
     whirlpools.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
@@ -3371,7 +3428,7 @@ export function step() {
             f.update();
         }
         updateWhirlpools();
-        updateOrbs(); updateDrops();
+        updateOrbs(); updateDrops(); updatePillars();
         updateItems();
         const live2 = fighters.filter(isAlive);
         for (const a of live2) for (const b of live2) {
@@ -3391,7 +3448,7 @@ export function step() {
         p2.update();
 
         updateWhirlpools();
-        updateOrbs(); updateDrops();
+        updateOrbs(); updateDrops(); updatePillars();
 
         checkCombatCollisions(p1, p2);
         checkCombatCollisions(p2, p1);
