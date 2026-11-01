@@ -401,6 +401,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
+        this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
         this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
         this.trapId = 0;                     // id of the bubble this fighter is trapped in (Tide's Bubble Trap)
@@ -493,6 +494,7 @@ class Fighter {
     update() {
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
+        if (this.sideT > 0) this.sideT--;
         if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) this.glide = false;
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
@@ -1090,6 +1092,7 @@ class Fighter {
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
         this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
+        if (kind === 'BLINK' && sp.kind !== 'roll' && sp.kind !== 'bubble' && this.char !== 'umbra') this.sideT = (sp.frames || 0) + (sp.windup || 0) + 22;
         this.actionLock = lk(this, sp.lock !== undefined ? sp.lock : trainLock());
 
         switch (kind) {
@@ -2016,6 +2019,7 @@ class AIBot extends Fighter {
                     this.vx += this.facing * movementSpeed;
                 }
 
+                if (this.char === 'terra' && this.rockT <= 0 && dist > 160 && dist < 700 && Math.random() < 0.3 && this.attack('NEUTRAL')) return;
                 if (Math.random() < 0.12 && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
                 if (dist < 130 && Math.random() < 0.65) {
                     this.raiseShield(54);
@@ -2119,6 +2123,9 @@ class AIBot extends Fighter {
             if (distToTargetY < -90 && this.grounded) {
                 this.jump();
             }
+
+            // 5a) Terra throws his neutral rock at range
+            if (this.char === 'terra' && this.rockT <= 0 && dist > 140 && dist < 800 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.35 : 0.6)) { if (this.attack('NEUTRAL')) return; }
 
             // 5b) the character's own special moves
             if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.65) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
@@ -2541,6 +2548,21 @@ function balloonPop(attacker, defender, hb) {
     fx('burn', attacker.x, attacker.y - 40); audio.playHit(false);
 }
 
+/** Ember (rolling) vs a foe in the middle of a Side-F move: cancel the foe's move and stun them. True when it happened. */
+function emberCounter(em, foe) {
+    if (!em.sx || em.sx.k !== 'roll' || em.sx.ph !== 'roll' || !em.activeHitbox || foe.sideT <= 0 || (foe.sx && foe.sx.k === 'roll')) return false;
+    const h = em.activeHitbox;
+    const near = (b) => Math.abs(b.x - foe.x) < (b.w + foe.width) / 2 && Math.abs(b.y - foe.y) < (b.h + foe.height) / 2;
+    const fb = foe.activeHitbox, hitEm = fb && Math.abs(fb.x - em.x) < (fb.w + em.width) / 2 && Math.abs(fb.y - em.y) < (fb.h + em.height) / 2;
+    if (!near(h) && !hitEm) return false;
+    foe.sideT = 0; foe.sx = null; foe.activeHitbox = null; foe.activeMove = null; foe.armorT = 0; foe.invincibleTimer = 0;
+    foe.attackTimer = 0; foe.swing = null; foe.actionLock = Math.max(foe.actionLock, 20);
+    (em.swingHitSet || (em.swingHitSet = new Set())).add(foe);
+    fx('block', foe.x, foe.y); S.screenShake = Math.max(S.screenShake, 8);
+    launch(em, foe, { ...h, stun: 36, bkb: 0, kbg: 0 });
+    return true;
+}
+
 function launch(attacker, defender, hb) {
     if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit++; }
     if (hb.radial || hb.mirror) {                           // area hits push away from their centre / mirror to the victim's side
@@ -2910,6 +2932,9 @@ function checkCombatCollisions(attacker, defender) {
             return;
         }
     }
+
+    // ---- Ember's Fireball Roll beats every other Side-F move (except Tide's bubble and Umbra's step): it cancels the move, ignores armour / vanish and stuns
+    if (emberCounter(attacker, defender) || emberCounter(defender, attacker)) return;
 
     // ---- swings, headbutt, spiral
     if (!attacker.activeHitbox || defender.invincibleTimer > 0) return;
