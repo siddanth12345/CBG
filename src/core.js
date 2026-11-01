@@ -1773,7 +1773,7 @@ class Fighter {
         if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
         orbs.push({ x: this.x + dx * 40, y: this.y + dy * 40 - 4, vx: dx * 19, vy: dy * 19, r: 24, charge: 0.1, owner: this, life: 200, color: '#a8a29e', id: ++orbSerial,
             d: 5, R: 45, bkb: 4, kbg: 0.45, grav: WORLD.gravity * 0.55 * 0.85, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' });
-        this.rockT = 30; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14;
+        this.rockT = 60; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14;
         audio.playThrow();
         return true;
     }
