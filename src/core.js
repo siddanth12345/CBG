@@ -1790,7 +1790,9 @@ class Fighter {
     }
 
     takeKO() {
-        if (S.gameMode === 'training' && this.isAI) {
+        if (S.gameMode === 'training') {                      // training: infinite stocks for everyone, nobody wins or loses
+            audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
+            this.stocks = 3; this.lastHitBy = null; this.lastHitT = 9999;
             this.reset(false);
             return;
         }
