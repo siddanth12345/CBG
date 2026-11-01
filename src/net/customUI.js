@@ -1,5 +1,5 @@
 // Custom match: create / join a lobby (up to 8 players), pick FFA or teams, starting damage and stocks.
-import { S } from '../core.js';
+import { S, MAP_NAMES } from '../core.js';
 import { Online, hostRoom, joinRoom, leaveRoom, setLobbySetting, setMemberTeam, setMemberChar, kickMember, beginLobbyMatch, addBot } from './online.js';
 import { Party } from './party.js';
 import { CHAR_IDS, CHARS, charOf } from '../characters.js';
@@ -11,7 +11,7 @@ const SKEYS = ['teams', 'startDamage', 'stocks', 'mode', 'timeLimit', 'items', '
 const loadPresets = () => { try { const a = JSON.parse(localStorage.getItem(PKEY) || '[]'); return Array.isArray(a) ? a.slice(0, MAX_PRESETS) : []; } catch (e) { return []; } };
 const savePresets = (a) => { try { localStorage.setItem(PKEY, JSON.stringify(a)); } catch (e) { /* storage blocked */ } };
 const pickSettings = (st) => JSON.parse(JSON.stringify(Object.fromEntries(SKEYS.map(k => [k, st[k]]))));
-const describe = (st) => `${st.teams ? 'Teams' : 'FFA'} • ${st.mode === 'timer' ? st.timeLimit + ' min timer' : st.stocks + ' stocks'} • ${st.startDamage}% • ${st.map === 'frontier' ? '€Frontier' : '¥Frontier'}${st.items && st.items.on ? ' • items' : ''}`;
+const describe = (st) => `${st.teams ? 'Teams' : 'FFA'} • ${st.mode === 'timer' ? st.timeLimit + ' min timer' : st.stocks + ' stocks'} • ${st.startDamage}% • ${MAP_NAMES[st.map] || '¥Frontier'}${st.items && st.items.on ? ' • items' : ''}`;
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEAMS = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', green: '#22c55e' };
@@ -146,7 +146,7 @@ export class CustomUI {
             <div class="lm-card"><h4>Match settings</h4>
               <div class="lm-setrow"><span>Mode</span><span><button class="lm-btn ${st.teams ? 'lm-btn-ghost' : ''} lm-mini" data-a="mode" data-v="ffa">Free for all</button> <button class="lm-btn ${st.teams ? '' : 'lm-btn-ghost'} lm-mini" data-a="mode" data-v="teams">Teams</button></span></div>
               <div class="lm-setrow"><span>Win by</span><span><button class="lm-btn ${timer ? 'lm-btn-ghost' : ''} lm-mini" data-a="smode" data-v="stock">Stocks</button> <button class="lm-btn ${timer ? '' : 'lm-btn-ghost'} lm-mini" data-a="smode" data-v="timer">Timer (kills)</button></span></div>
-              <div class="lm-setrow"><span>Map</span><span><button class="lm-btn ${st.map === 'frontier' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="frontier">€Frontier</button> <button class="lm-btn ${st.map === 'frontier' ? 'lm-btn-ghost' : ''} lm-mini" data-a="map" data-v="big">¥Frontier</button></span></div>
+              <div class="lm-setrow"><span>Map</span><span class="lm-maps"><button class="lm-btn ${st.map === 'frontier' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="frontier">€Frontier</button> <button class="lm-btn ${st.map === 'big' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="big">¥Frontier</button> <button class="lm-btn ${st.map === 'horizon' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="horizon">€Horizon</button> <button class="lm-btn ${st.map === 'bighorizon' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="bighorizon">¥Horizon</button> <button class="lm-btn ${st.map === 'randS' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="randS">Random €</button> <button class="lm-btn ${st.map === 'randB' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="randB">Random ¥</button> <button class="lm-btn ${st.map === 'rand' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="rand">Random (all)</button></span></div>
               <div class="lm-setrow"><span>Starting damage %</span><span class="lm-step"><button class="lm-btn lm-btn-ghost lm-mini" data-a="dmg" data-k="startDamage" data-d="-10">−</button><input data-dmg type="number" min="0" max="249" step="10" value="${st.startDamage}"><button class="lm-btn lm-btn-ghost lm-mini" data-a="dmg" data-k="startDamage" data-d="10">+</button></span></div>
               ${timer
                 ? `<div class="lm-setrow"><span>Time limit (min)</span><span class="lm-step"><button class="lm-btn lm-btn-ghost lm-mini" data-a="dmg" data-k="timeLimit" data-d="-1">−</button><input data-tlim type="number" min="1" max="10" value="${st.timeLimit}"><button class="lm-btn lm-btn-ghost lm-mini" data-a="dmg" data-k="timeLimit" data-d="1">+</button></span></div>`

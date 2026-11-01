@@ -2,7 +2,7 @@
 //   Host  : runs the real simulation (core.step), steers the guest's fighter from their inputs and
 //           streams snapshots.
 //   Guest : sends inputs, mirrors snapshots. See "Online play" in core.js.
-import { S, p1, p2, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter } from '../core.js';
+import { S, p1, p2, cleanMap, resolveMap, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter } from '../core.js';
 import { openTransport, hasRealtime, onlineBlocked } from './transport.js';
 import { isDown } from '../controls.js';
 import { displayName } from '../account.js';
@@ -147,7 +147,7 @@ export function setLobbySetting(k, v) {
     if (k === 'startDamage') v = Math.max(0, Math.min(249, Math.round(+v) || 0));
     if (k === 'timeLimit') v = Math.max(1, Math.min(10, Math.round(+v) || 5));
     if (k === 'items') v = cleanItems(v);
-    if (k === 'map') v = v === 'frontier' ? 'frontier' : 'big';
+    if (k === 'map') v = cleanMap(v);
     if (JSON.stringify(Online.lobby.settings[k]) === JSON.stringify(v)) return;       // no change: don't rebuild the panel under the user's mouse
     Online.lobby.settings[k] = v; lobbyPush();
 }
@@ -188,7 +188,7 @@ export function beginLobbyMatch() {
     const L = Online.lobby;
     if (L.members.length < 2) { Online.note = 'You need at least 2 players'; Online.onChange(); return false; }
     L.started = true;
-    const cfg = { players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })), teams: L.settings.teams, startDamage: Math.min(249, +L.settings.startDamage || 0), stocks: +L.settings.stocks || 3, mode: L.settings.mode === 'timer' ? 'timer' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: L.settings.map === 'frontier' ? 'frontier' : 'big', items: cleanItems(L.settings.items) };
+    const cfg = { players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })), teams: L.settings.teams, startDamage: Math.min(249, +L.settings.startDamage || 0), stocks: +L.settings.stocks || 3, mode: L.settings.mode === 'timer' ? 'timer' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: resolveMap(L.settings.map), items: cleanItems(L.settings.items) };
     S.online = 'host'; S.opponentName = null;
     NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
     Online.t.send({ t: 'start', cfg });

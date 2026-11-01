@@ -383,3 +383,5 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .lm-charpick small{color:#94a3b8;font-size:11px}
 .lm-charpick.on{border-color:#22d3ee;background:#0c2430;box-shadow:0 0 0 1px #22d3ee55}
 .lm-botrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+
+.lm-maps{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:70%}

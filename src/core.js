@@ -84,14 +84,40 @@ const ARENAS = {
         },
     },
 };
-export function setArena(kind) {
+export function setArena(kind, theme = 'frontier') {
     const a = ARENAS[kind] || ARENAS.normal;
     Object.assign(WORLD, a.world);
     Object.assign(STAGE, a.stage);
     STAGE.platforms = a.platforms(STAGE);
     Object.assign(BLAST_ZONES, a.bz);
     S.arena = kind === 'lobby' ? 'lobby' : 'normal';
+    S.theme = theme === 'horizon' ? 'horizon' : 'frontier';          // look only: Horizon has the exact same collision as Frontier
     S.arenaVersion = (S.arenaVersion || 0) + 1;
+}
+/** map ids: frontier (small), big (big Frontier), horizon (small), bighorizon, and the random picks rand / randS / randB */
+export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon'];
+export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
+export const cleanMap = (m) => (MAP_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
+export function resolveMap(m) {
+    m = cleanMap(m);
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    if (m === 'rand') return pick(MAP_IDS);
+    if (m === 'randS') return pick(['frontier', 'horizon']);
+    if (m === 'randB') return pick(['big', 'bighorizon']);
+    return m;
+}
+export function setArenaByMap(m) {
+    m = resolveMap(m);
+    setArena(m === 'frontier' || m === 'horizon' ? 'normal' : 'lobby', m === 'horizon' || m === 'bighorizon' ? 'horizon' : 'frontier');
+    return m;
+}
+/** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
+function placeDuel(move) {
+    const big = S.arena === 'lobby';
+    for (const [f, k] of [[p1, 0.4], [p2, 0.6]]) {
+        if (big) { f.startX = STAGE.x + STAGE.width * k; f.startY = STAGE.y - 120; } else { f.startX = f.home.x; f.startY = f.home.y; }
+        if (move) { f.x = f.startX; f.y = f.startY; f.vx = f.vy = 0; }
+    }
 }
 
 
@@ -915,8 +941,11 @@ class Fighter {
             if (x.t >= sp.frames) {
                 if (sp.missile) {                                           // the fire rocket detaches and keeps flying the way Ember was heading until it explodes
                     const m = sp.missile;
-                    orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(x.ang) * m.speed, vy: Math.sin(x.ang) * m.speed, r: m.r, charge: 0.2, owner: this,
-                        life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', flat: false });
+                    for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one straight on, one 20 degrees either side
+                        const a = x.ang + da * Math.PI / 180;
+                        orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
+                            life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', flat: false });
+                    }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
                 }
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
@@ -3123,13 +3152,15 @@ function startMatchSequence(mode, cfg) {
         S.itemTimer = Math.round(S.match.items.interval * 30);
         S.mySlot = cfg.mySlot || 0;
         S.matchCfg = cfg;
-        setArena(cfg.map === 'frontier' ? 'normal' : 'lobby');
+        cfg.map = setArenaByMap(cfg.map);                     // a random pick is resolved here (the host's choice is sent to guests already resolved)
     } else {
         S.match = null; S.mySlot = 0; S.matchCfg = null;
-        if (S.arena !== 'normal') setArena('normal');
+        if (S.gameMode === 'easy' || S.gameMode === 'medium' || S.gameMode === 'hard') setArenaByMap('rand');     // bot modes: a random map every game
+        else if (S.arena !== 'normal' || S.theme !== 'frontier') setArena('normal');
         for (let i = 2; i < fighters.length; i++) fighters[i].active = false;
         p1.active = p2.active = true; p1.team = p2.team = null; p1.out = p2.out = false; p2.diff = null; p2.isAI = true;
-        for (const f of [p1, p2]) { f.startX = f.home.x; f.startY = f.home.y; f.color = f.home.color; f.name = f.home.name; }
+        for (const f of [p1, p2]) { f.color = f.home.color; f.name = f.home.name; }
+        placeDuel(false);
     }
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverModal').classList.add('hidden');
@@ -3243,8 +3274,9 @@ function startMatchSequence(mode, cfg) {
 /** Apply S.train to arena, p1/p2 characters, bot type */
 export function applyTrainPrefs() {
     const t = ensureTrain();
-    if (t.stage === 'lobby' || t.stage === 'frontier') setArena('lobby');
-    else setArena('normal');
+    const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
+    const kind = (stg === 'lobby' || stg === 'bighorizon') ? 'lobby' : 'normal', theme = (stg === 'horizon' || stg === 'bighorizon') ? 'horizon' : 'frontier';
+    if (S.arena !== kind || S.theme !== theme) { setArena(kind, theme); placeDuel(true); }
     if (t.char) { p1.char = charOf(t.char).id; }
     else p1.char = getMyChar();
     p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;

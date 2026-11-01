@@ -181,8 +181,10 @@ export class TrainUI {
         if (this.tab === 'configure') {
             html = `<div class="lm-card"><h4>Stage & feel</h4>
                 <div class="lm-setrow"><span>Stage</span><span>
-                    <button class="lm-btn lm-mini ${t.stage === 'normal' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="normal">Standard</button>
-                    <button class="lm-btn lm-mini ${t.stage === 'lobby' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lobby">Big Frontier</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'normal' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="normal">€Frontier</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'lobby' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lobby">¥Frontier</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'horizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="horizon">€Horizon</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'bighorizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="bighorizon">¥Horizon</button>
                 </span></div>
                 <div class="lm-setrow"><span>Stun (frames)</span><input data-k="stun" type="number" min="0" max="120" value="${t.stun}"></div>
                 <div class="lm-setrow"><span>Move cooldown (frames)</span><input data-k="lock" type="number" min="0" max="120" value="${t.lock}"></div>

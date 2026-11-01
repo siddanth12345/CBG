@@ -2,7 +2,8 @@
 // drifting rocks and the dashed blast-zone frame. Collision is still the original
 // rectangle, so what you see is exactly what you stand on.
 import * as THREE from 'three';
-import { STAGE, BLAST_ZONES } from '../core.js';
+import { S, STAGE, BLAST_ZONES } from '../core.js';
+import { buildHorizon } from './horizon.js';
 import { wx, wy } from './space.js';
 
 export const STAGE_DEPTH = 560;
@@ -29,6 +30,7 @@ function glowMat(color, intensity = 2) {
 }
 
 export function buildStage(scene) {
+    if (S.theme === 'horizon') return buildHorizon(scene, { D: STAGE_DEPTH });
     const root = new THREE.Group();
     scene.add(root);
     const anim = []; // per-frame callbacks (t, dt)

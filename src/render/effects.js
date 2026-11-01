@@ -754,6 +754,16 @@ export class Effects {
                 if (Math.random() < 0.15) this.sparks(g.position.clone(), '#e0f2fe', 1, 50, 0.4, 'up');
             } else { this.#paintOrb(g, o.r * pulse, o.color, 1); if (Math.random() < 0.8) this.sparks(g.position.clone(), o.color, 1, 70, 0.28); }
         }
+        // ---- Ember's jetpack: three rocket boosters blaze on his back while Phoenix Dash lasts
+        for (const f of fighters) {
+            if (!f.active || !f.sx || f.sx.k !== 'rocket' || f.char !== 'ember') continue;
+            const ax = Math.cos(f.sx.ang), ay = Math.sin(f.sx.ang);
+            for (let k = -1; k <= 1; k++) {
+                const pos = new THREE.Vector3(wx(f.x) - ax * 18 - ay * k * 12 * 0, wy(f.y) + ay * 18 + k * 12, -8);
+                this.sparks(pos, k === 0 ? '#fde047' : '#fb923c', 2, 220, 0.3, 'down');
+                if (Math.random() < 0.35) this.sparks(pos, '#ffffff', 1, 120, 0.2, 'down');
+            }
+        }
         // ---- the orb a fighter is charging (grows with the charge). Every character has its own look.
         fighters.forEach((f, i) => {
             const g = this.chargePool[i]; if (!g) return;

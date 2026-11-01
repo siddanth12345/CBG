@@ -43,7 +43,8 @@ export class View {
         this.v2 = new THREE.Vector3();
 
         // ---- lights
-        scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x1a1033, 1.15));
+        const hemi = this.hemi = new THREE.HemisphereLight(0x8fb4ff, 0x1a1033, 1.15);
+        scene.add(hemi);
         const key = this.key = new THREE.DirectionalLight(0xdbeafe, 2.6);
         key.position.set(-900, 1500, 1200);
         key.target.position.set(0, -150, 0);
@@ -53,7 +54,7 @@ export class View {
         sc.left = -1500; sc.right = 1500; sc.top = 1000; sc.bottom = -1000; sc.near = 100; sc.far = 4500;
         key.shadow.bias = -0.0004; key.shadow.normalBias = 1.2;
         scene.add(key, key.target);
-        const rim = new THREE.DirectionalLight(0x8b5cf6, 1.6);
+        const rim = this.rim = new THREE.DirectionalLight(0x8b5cf6, 1.6);
         rim.position.set(1100, 600, -1400);
         scene.add(rim);
 
@@ -65,6 +66,7 @@ export class View {
         this.fx.models = this.models;
         this.items = new ItemsView(scene);
         this.arenaVersion = S.arenaVersion || 0;
+        this.themeName = null;
 
         // ---- post
         const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
@@ -73,6 +75,7 @@ export class View {
         this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.5, 0.55, 0.92);
         this.composer.addPass(this.bloom);
         this.composer.addPass(new OutputPass());
+        this.applyTheme();
 
         this.clientX = window.innerWidth / 2;
         this.clientY = window.innerHeight / 2;
@@ -102,6 +105,7 @@ export class View {
             this.fx.setStageTop(this.stage.topY);
             this.models.forEach((m, i) => m.setStageBounds(STAGE.x, STAGE.x + STAGE.width, this.stage.topY));
             this.camDist = 0;
+            this.applyTheme();
             this.applyQuality();
             for (const g of this.stage.rocks) g.visible = this.inMatch !== false;
         }
@@ -109,6 +113,31 @@ export class View {
             const m = this.models[i];
             if (m.builtColor !== f.color || m.builtChar !== f.char) { m.dispose(); this.models[i] = this.makeModel(f, i); this.fx.models = this.models; }
         });
+    }
+
+    /** Frontier is the dark neon night; Horizon is a bright morning valley (sky, haze, warm sun, softer bloom) */
+    applyTheme() {
+        const hz = this.stage.theme === 'horizon', sc = this.stage.sc || 1, scene = this.scene, r = this.renderer;
+        if (hz) {
+            scene.background = this.stage.sky;
+            scene.fog = new THREE.FogExp2(0xdbe8f3, 0.00009 / sc);
+            this.hemi.color.set(0xdcecff); this.hemi.groundColor.set(0xf2e2c4); this.hemi.intensity = 1.55;
+            this.key.color.set(0xfff0d0); this.key.intensity = 3.0;
+            this.rim.color.set(0xbcd6ff); this.rim.intensity = 0.7;
+            r.toneMappingExposure = 0.95;
+            this.bloom.strength = 0.2; this.bloom.threshold = 1.0;
+            this.camera.far = 70000;
+        } else {
+            scene.background = new THREE.Color(0x060913);
+            scene.fog = new THREE.FogExp2(0x060913, 0.00009);
+            this.hemi.color.set(0x8fb4ff); this.hemi.groundColor.set(0x1a1033); this.hemi.intensity = 1.15;
+            this.key.color.set(0xdbeafe); this.key.intensity = 2.6;
+            this.rim.color.set(0x8b5cf6); this.rim.intensity = 1.6;
+            r.toneMappingExposure = 1.05;
+            this.bloom.strength = 0.5; this.bloom.threshold = 0.92;
+            this.camera.far = 20000;
+        }
+        this.camera.updateProjectionMatrix();
     }
 
     applyQuality() {

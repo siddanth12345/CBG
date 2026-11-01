@@ -534,6 +534,12 @@ export class FighterModel {
             p.lean = 22 * c; p.headX = 14 * c; p.torsoX = 10 * c;
             return p;
         }
+        if (f.sx && f.sx.k === 'rocket' && f.char === 'ember') {      // Ember's Phoenix Dash: no spinning, he rides three rocket boosters like a jetpack (Diddy Kong)
+            this.visFacing = f.facing;
+            p.dy = -3 + Math.sin(t * 30) * 1.2; p.rSx = -24; p.lSx = -30; p.rSz = 14; p.lSz = 14; p.rE = 10; p.lE = 14;
+            p.rK = 26; p.lK = 40; p.rHx = -8; p.lHx = -12; p.headX = 6; p.lean = 10 + Math.sin(t * 22) * 2; p.aura = 1;
+            return p;
+        }
         if (f.specialKind === 'SPIRAL') {
             p.spin = f.specialT * 52; p.dy = -2; p.rSx = 172; p.lSx = 172; p.rSz = 8; p.lSz = 8; p.rE = 4; p.lE = 4;
             p.rHx = 8; p.lHx = -6; p.rK = 22; p.lK = 30; p.headX = -10; p.aura = 1; p.blade = 1;
