@@ -722,12 +722,15 @@ class Fighter {
         } else if (this.diving || this.spiralT > 0 || (this.sx && this.sx.k === 'rocket')) {
             this.vx *= 0.92;
         } else if (!this.grounded) {
-            this.vy = Math.min(this.vy + WORLD.gravity * (this.gravT > 0 ? 0.65 : 1), WORLD.terminalVelocity);
+            let gMul = (this.gravT > 0 ? 0.65 : 1);
+            // charging Fireball Roll: 0.6× gravity only while charging
+            if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') gMul *= 0.6;
+            this.vy = Math.min(this.vy + WORLD.gravity * gMul, WORLD.terminalVelocity);
             if (!this.glide) this.vx *= WORLD.airFriction;
         } else {
             this.vx *= WORLD.friction;
         }
-        // Ember Fireball charge: normal gravity (above), but no sideways drift / walk
+        // Ember Fireball charge: no sideways drift / walk
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
             this.vx = 0;
         }
@@ -790,9 +793,13 @@ class Fighter {
     // ------------------------------------------------------------ F specials: per-frame state
     updateSpecials() {
         if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + 1);
-        if (this.fActive && !this.sx && spec(this.char, 'S').kind === 'roll' && this.cd.BLINK <= 0 && this.canRollStart()) {       // Ember: holding F while aiming sideways starts the roll charge at once
+        if (this.fActive && !this.sx && spec(this.char, 'S').kind === 'roll' && this.cd.BLINK <= 0 && this.canRollStart()) {
             const dr = this === p1 && !(S.online === 'guest') ? mouse.direction : this.fDirPress;
             if (dr === 'SIDE_LEFT' || dr === 'SIDE_RIGHT') { if (!this.grounded) this.airSpecials++; this.startRollCharge(dr === 'SIDE_LEFT' ? -1 : 1); }
+        }
+        // hard lock: while Side-F is on cooldown, never start / charge a roll
+        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge' && this.cd.BLINK > 0) {
+            this.sx = null; this.fActive = false; this.chargeFrames = 0;
         }
 
         if (this.sx) this.updateSx();
@@ -1013,16 +1020,24 @@ class Fighter {
                 if (!this.fActive && !this.isAI) { this.launchRoll(); }
                 else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();
             } else {
-                const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;
+                const c = x.c, walk = 8.5 * charOf(this.char).walk;
+                // tiers first (needed for distance)
+                const full = c >= 0.9, mid = c >= 0.4 && !full;
+                // white travels 1.4× as far as red (same speed, longer life); blue uses full charged life
+                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk;  // white distance = 1.4× red via longer life
                 if (x.v === undefined) x.v = x.d * speed;
                 const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
                 this.vx = x.v / (this.grounded ? WORLD.friction : WORLD.airFriction); if (Math.abs(x.v) > speed * 0.15) this.facing = x.v > 0 ? 1 : -1;
                 const sz = lerpR(sp.w, c);
-                const life = sp.life ? Math.round(lerpR(sp.life, c)) : 60;
+                // life: red 60, white 84 (1.4×), blue 90 — jump cancel does NOT extend this
+                const life = full ? 90 : (mid ? 84 : 60);
                 const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
-                // tiers: low carry-only | mid carry | full instant KB
-                const full = c >= 0.9, mid = c >= 0.4 && !full;
+                // delayed jump-cancel: ride the ball 0.6 s then drop it (life still ends on schedule)
+                if (x.jumpCancelT > 0) {
+                    x.jumpCancelT--;
+                    if (x.jumpCancelT <= 0) { this.endRoll(); return; }
+                }
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
                 const every = full ? 2 : (mid ? 5 : 6);
@@ -1066,10 +1081,10 @@ class Fighter {
                         audio.playHit(false);
                     }
                 }
-                // BLUE: 16 dmg — same launch path as Phoenix missile explodeOrb, KB ×2
+                // BLUE: 19 dmg — missile explodeOrb angle, KB ×0.4
                 if (full) {
                     if (!x.blueHit) x.blueHit = new Set();
-                    const mBkb = 9.6 * 2, mKbg = 0.72 * 2;   // missile bkb/kbg ×2
+                    const mBkb = 9.6 * 0.4, mKbg = 0.72 * 0.4;
                     for (const f of foesOf(this)) {
                         if (!isAlive(f) || f.invincibleTimer > 0 || x.blueHit.has(f)) continue;
                         const hw = sz / 2 + f.width / 2 + 8, hh = sz / 2 + f.height / 2 + 8;
@@ -1077,9 +1092,8 @@ class Fighter {
                         x.blueHit.add(f);
                         f._rollCarry = null;
                         f.grounded = false;
-                        // identical angle math to explodeOrb for missiles
                         const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.vx || this.facing || 1);
-                        launch(this, f, { damage: 16, bkb: mBkb, kbg: mKbg, angle: ang, x: this.x, y: this.y });
+                        launch(this, f, { damage: 19, bkb: mBkb, kbg: mKbg, angle: ang, x: this.x, y: this.y });
                         fx('explosion', this.x, this.y, 70, 0.6, 'fire');
                         S.screenShake = Math.max(S.screenShake, 12);
                     }
@@ -1204,7 +1218,7 @@ class Fighter {
             case 'CORE': this.startCore(tx, ty, charge); break;
             case 'BLINK': {
                 const d = tx >= this.x ? 1 : -1;
-                if (sp.kind === 'roll') { this.startRollCharge(d); this.launchRoll(charge); } else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
+                if (sp.kind === 'roll') { if (this.cd.BLINK > 0) return false; this.startRollCharge(d); this.launchRoll(charge); } else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
                 break;
             }
             case 'SPIRAL': if (sp.kind === 'rocket') this.startRocket(sp); else if (sp.kind === 'erupt') this.startErupt(sp); else if (sp.kind === 'bolt') this.startBolt(sp); else this.startSpiral(tx); break;
@@ -1270,7 +1284,7 @@ class Fighter {
         fx('pillar', this.x, this.y - 300, 40, 600, 'volt!'); fx('core', this.x, this.y - 300, c, Math.PI / 2, 'volt'); fx('gust', this.x, this.y, 100, 0, 'volt');
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
     }
-    canRollStart() { return this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < AIR_F_MAX); }
+    canRollStart() { return this.cd.BLINK <= 0 && this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < AIR_F_MAX); }
     /** Ember's Fireball Roll, step 1: charge under gravity (1.2 s to full). A hit now stuns for 1 s. */
     startRollCharge(d) {
         this.facing = d;
@@ -1826,13 +1840,28 @@ class Fighter {
     }
 
     jump() {
-        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll' && this.hitstun <= 0 && this.clashStunTimer <= 0) this.endRoll();       // jumping is the way out of the roll
         if (this.hitstun > 0 || this.isShielding || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.grabHolding || this.isRolling) return false;
-        if (this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0 || this.sx) return false;
-        if (this.actionLock > JUMP_OK) return false;                // 0.3 s after a move you may jump again
+        if (this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0) return false;
+        // rolling: jump WITH the ball (same height); cancel only after 0.6 s — does not extend roll life
+        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll') {
+            if (this.sx.jumpCancelT > 0) return false;          // already mid jump-cancel
+            if (this.actionLock > JUMP_OK) return false;
+            let did = false;
+            if (this.grounded) {
+                this.vy = -15.2; this.grounded = false; this.jumpsLeft = Math.max(0, this.jumpsLeft - 1); did = true;
+            } else if (this.jumpsLeft > 0) {
+                this.vy = -13.5; this.jumpsLeft--; did = true;
+            }
+            if (!did) return false;
+            this.sx.jumpCancelT = 36;                           // 0.6 s then endRoll (life timer still runs)
+            audio.playJump();
+            createParticles(this.x, this.y + this.height / 2, '#fb923c', 10);
+            return true;
+        }
+        if (this.sx) return false;                              // other specials still lock jump
+        if (this.actionLock > JUMP_OK) return false;
 
         if (this.isHanging) {
-            // hangSide is -1 on the left ledge, +1 on the right: jump ONTO the stage
             const side = this.hangSide;
             this.leaveLedge();
             this.vy = -14.5;
@@ -2701,8 +2730,34 @@ function balloonPop(attacker, defender, hb) {
 }
 
 /** Ember (rolling) vs a foe in the middle of a Side-F move: cancel the foe's move and stun them. True when it happened. */
+function rollTier(c) { return c >= 0.9 ? 2 : (c >= 0.4 ? 1 : 0); }   // 0 red, 1 white, 2 blue
+
+/** Ember Fireball Roll beats other side/up specials; white beats red, blue beats white when both rolling */
 function emberCounter(em, foe) {
-    if (!em.sx || em.sx.k !== 'roll' || em.sx.ph !== 'roll' || !em.activeHitbox || (foe.sideT <= 0 && foe.upT <= 0) || (foe.sx && foe.sx.k === 'roll')) return false;
+    if (!em.sx || em.sx.k !== 'roll' || em.sx.ph !== 'roll') return false;
+    const nearBody = (a, b, pad = 8) => Math.abs(a.x - b.x) < (a.width + b.width) / 2 + pad && Math.abs(a.y - b.y) < (a.height + b.height) / 2 + pad;
+    // roll vs roll: higher tier wins
+    if (foe.sx && foe.sx.k === 'roll' && foe.sx.ph === 'roll') {
+        if (!nearBody(em, foe, 12)) return false;
+        const te = rollTier(em.sx.c || 0), tf = rollTier(foe.sx.c || 0);
+        if (te === tf) {                                     // same tier: both bounce out
+            em.endRoll(); foe.endRoll();
+            em.vx = -em.facing * 6; foe.vx = -foe.facing * 6;
+            fx('block', (em.x + foe.x) / 2, (em.y + foe.y) / 2); S.screenShake = Math.max(S.screenShake, 10);
+            return true;
+        }
+        if (te < tf) return false;                           // handled when roles swap
+        // em wins: cancel foe roll, stun + light hit
+        foe.sx = null; foe.activeHitbox = null; foe.activeMove = null; foe._rollCarry = null;
+        for (const f of fighters) if (f._rollCarry === foe) f._rollCarry = null;
+        foe.armorT = 0; foe.invincibleTimer = 0; foe.actionLock = Math.max(foe.actionLock, 24);
+        const ang = Math.atan2(foe.y - em.y - 25, (foe.x - em.x) || em.facing || 1);
+        const dmg = te >= 2 ? 19 : 8;
+        launch(em, foe, { damage: dmg, bkb: te >= 2 ? 9.6 * 0.4 : 8, kbg: te >= 2 ? 0.72 * 0.4 : 0.7, angle: ang, x: em.x, y: em.y });
+        fx('block', foe.x, foe.y); S.screenShake = Math.max(S.screenShake, 10);
+        return true;
+    }
+    if (!em.activeHitbox || (foe.sideT <= 0 && foe.upT <= 0)) return false;
     const h = em.activeHitbox;
     const near = (b) => Math.abs(b.x - foe.x) < (b.w + foe.width) / 2 && Math.abs(b.y - foe.y) < (b.h + foe.height) / 2;
     const fb = foe.activeHitbox, hitEm = fb && Math.abs(fb.x - em.x) < (fb.w + em.width) / 2 && Math.abs(fb.y - em.y) < (fb.h + em.height) / 2;
