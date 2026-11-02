@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { S, p1, p2, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX } from '../core.js';
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
 import { getHitboxes } from '../gfx.js';
+import { FireTrail } from './fireTrail.js';
 
 // colours per character style (main, bright)
 const PAL = { core: ['#a78bfa', '#ede9fe'], iron: ['#94a3b8', '#e2e8f0'], wind: ['#6ee7b7', '#ecfdf5'], fire: ['#fb923c', '#fde047'], water: ['#38bdf8', '#e0f2fe'], volt: ['#facc15', '#fef9c3'], dark: ['#7c3aed', '#c4b5fd'], rock: ['#a8a29e', '#d6d3d1'] };
@@ -85,6 +86,7 @@ export class Effects {
         this.up = new THREE.Vector3(0, 1, 0);
         this.stageTop = 0;
 
+        this.flames = new FireTrail(scene);
         this.starGeo = starGeometry(8, 0.2);
         this.starGeo4 = starGeometry(4, 0.16);
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
@@ -655,6 +657,8 @@ export class Effects {
         this.#consumeEvents();
         const M = this.tmpM, Q = this.tmpQ, V = this.tmpV, Sc = this.tmpS, C = this.tmpC;
 
+        this.flames.update(dt);
+
         // ---- timed effects
         for (let i = this.timed.length - 1; i >= 0; i--) {
             const f = this.timed[i];
@@ -848,9 +852,22 @@ export class Effects {
                     g.rotation.x += dt * 8 * dir;
                     g.scale.set(r * 1.08, r * 0.9, r);
                 }
+                // fire: rises when still, is swept into a trail when the ball moves, white then smooth blue
+                this.flames.feed(i, g.position, r * 0.8, c, (f.vx || 0) * 60, -(f.vy || 0) * 60, dt, f.sx.ph === 'charge');
+                // the magma shell burns away as the white fire takes over, and the blue phase is one smooth fireball
+                const burn = Math.max(0, Math.min(1, (c - 0.3) / 0.45));
+                u.magmaRock.scale.setScalar(1 - 0.5 * burn * burn);
+                u.magmaRock.material.emissive.set(bT > 0.3 ? '#2f8cff' : (burn > 0.5 ? '#fdba74' : '#7c2d12'));
+                u.magmaFire.scale.setScalar((1.04 + 0.1 * burn) * (1 + Math.sin(this.chargeT * 17) * 0.03));
+                u.magmaFire.material.opacity = Math.min(0.55, wT * 0.55) * (1 - 0.6 * bT);
+                if (bT > 0) u.magmaGlow.material.color.set('#2f8cff').multiplyScalar(1.8);
+                u.magmaFire.material.color.set('#fff7ed').lerp(new THREE.Color('#38bdf8'), bT).multiplyScalar(1.15);
+                u.magmaHalo.material.color.set('#2f8cff').multiplyScalar(1.1);
+                u.magmaHalo.material.opacity = bT * 0.7;
+                u.magmaHalo.scale.setScalar((1.2 + 0.25 * bT) * (1 + Math.sin(this.chargeT * 9) * 0.025));
                 // sparks match phase
                 const sparkCol = bT > 0.4 ? '#7dd3fc' : (wT > 0.4 ? '#f8fafc' : '#fb923c');
-                if (Math.random() < 0.75) this.sparks(g.position.clone(), sparkCol, 2, 120 + 80 * c, 0.28);
+                if (Math.random() < 0.3) this.sparks(g.position.clone(), sparkCol, 1, 120 + 80 * c, 0.28);
                 if (f.sx.ph === 'charge' && Math.random() < 0.4 + c * 0.4) {
                     const a = Math.random() * 6.28;
                     this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2, 0)), a + Math.PI, sparkCol, 1, 360, 0.1, 0.16);

@@ -63,6 +63,7 @@ export class View {
         this.stage = buildStage(scene);
         this.fx = new Effects(scene);
         this.fx.setStageTop(this.stage.topY);
+        this.fx.flames.K = (innerHeight || 600) * this.pr / (2 * Math.tan(FOV * Math.PI / 360));
         this.models = fighters.map((f, i) => this.makeModel(f, i));
         this.fx.models = this.models;
         this.items = new ItemsView(scene);
@@ -164,6 +165,7 @@ export class View {
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
         this.w = w; this.h = h;
+        if (this.fx && this.fx.flames) this.fx.flames.K = h * this.pr / (2 * Math.tan(FOV * Math.PI / 360));
     }
 
     /** distance at which the whole 3800x2100 map fills the view (like the original's scale-to-fit) */
