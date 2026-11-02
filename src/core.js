@@ -974,20 +974,39 @@ class Fighter {
                 const w = STAGE.width * sp.w, px = this.x, feet = this.y + this.height / 2;
                 this.swingHitSet = new Set();
                 this.activeHitbox = { x: px, y: feet - sp.h / 2 + 30, w, h: sp.h, type: 'SPIRAL', ttl: sp.rideFrames, multi: true, mirror: true,
-                    damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.45, stun: sp.stun || 0, lift: sp.lift || 0 };      // foes in it are lifted and stunned (grey), no knockback
+                    damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.45, stun: sp.stun || 0, lift: sp.lift || 0 };
                 fx('pillar', px, feet, w, sp.h, STYLE_OF[this.char] + '!'); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                 x.px = px;
             }
-            if (x.t > sp.windup && x.t <= sp.windup + sp.rideFrames) {      // the pillar pushes Tide up
-                this.vy = -sp.ride; this.grounded = false; this.vx *= 0.5;
+            // ride: smooth upward push (additive) so gravity still shapes the arc
+            if (x.t > sp.windup && x.t <= sp.windup + sp.rideFrames) {
+                this.grounded = false;
+                this.vy -= sp.ride * 0.42;                       // soft continuous lift (not a hard lock)
+                this.vy = Math.max(this.vy, -sp.ride * 1.35);    // cap climb speed
+                this.vx *= 0.88;
                 if (x.t % 3 === 0) fx('trail', this.x, this.y + 30, -Math.PI / 2, 0, 'water');
             }
-            if (x.t === sp.windup + sp.rideFrames) {                           // then a boost toward the aim: 3x his walk speed
-                const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x), spd = 3 * 8.5 * charOf(this.char).walk;
-                this.vx = Math.cos(ang) * spd; this.vy = Math.sin(ang) * spd - 2; if (Math.abs(this.vx) > 3) this.facing = this.vx > 0 ? 1 : -1;
+            // aim boost: 1.5× the old 3× walk speed, eased in over several frames (gravity still applies after)
+            if (x.t === sp.windup + sp.rideFrames) {
+                const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x);
+                const spd = 4.5 * 8.5 * charOf(this.char).walk;  // was 3×, now 1.5× faster → 4.5× walk
+                x.bvx = Math.cos(ang) * spd;
+                x.bvy = Math.sin(ang) * spd - 1.2;
+                x.boostLeft = 10;
+                if (Math.abs(x.bvx) > 3) this.facing = x.bvx > 0 ? 1 : -1;
                 fx('gust', this.x, this.y, 90, 0, 'water'); fx('trail', this.x, this.y, Math.round(ang * 100) / 100, 1, 'water');
             }
-            if (x.t >= sp.windup + sp.rideFrames + 4) { this.sx = null; this.activeMove = null; this.glide = !this.grounded && !this.isHanging; }
+            if (x.boostLeft > 0) {
+                const a = 0.2;                                   // ease toward boost vector (smooth, not a snap)
+                this.vx += (x.bvx - this.vx) * a;
+                this.vy += (x.bvy - this.vy) * a;
+                this.grounded = false;
+                x.boostLeft--;
+            }
+            if (x.t >= sp.windup + sp.rideFrames + 12) {
+                this.sx = null; this.activeMove = null;
+                this.glide = !this.grounded && !this.isHanging;
+            }
         } else if (x.k === 'dash') {
             const sp = spec(this.char, 'S');
             if (x.t <= sp.frames) {

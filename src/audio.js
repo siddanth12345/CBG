@@ -1,4 +1,4 @@
-// Procedural SFX (Web Audio) + sampled BGM. Two volume buses: music & sfx (0–1, saved).
+// Smooth procedural SFX (Web Audio) + sampled BGM. Two volume buses: music & sfx (0–1, saved).
 const VOL_KEY = 'cbg.vol';
 const loadVol = () => {
     try {
@@ -23,7 +23,7 @@ const BGM = {
 export class SoundEngine {
     constructor() {
         this._ctx = null;
-        this.muted = false;                       // menu showcase fights silently
+        this.muted = false;
         this._vol = loadVol();
         this._sfxGain = null;
         this._music = null;
@@ -89,40 +89,79 @@ export class SoundEngine {
         if (this._vol.sfx <= 0 || this.muted) return;
         const name = { n: 'neutral', s: 'side', u: 'up', dg: 'down_ground', da: 'down_air' }[slot] || slot;
         const a = new Audio('audio/f/' + char + '_' + slot + '_' + name + '.wav');
-        a.volume = this._vol.sfx;
+        a.volume = this._vol.sfx * 0.9;
         a.play().catch(() => {});
     }
 
-    _beep(type, f0, f1, dur, vol) {
+    /** soft tone through optional lowpass — avoids harsh square/saw “8-bit” hits */
+    _tone({ type = 'sine', f0 = 220, f1 = null, dur = 0.15, vol = 0.2, filter = 1800, Q = 0.7 }) {
         if (!this.ctx || this._vol.sfx <= 0) return;
+        const t0 = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
+        const filt = this.ctx.createBiquadFilter();
         osc.type = type;
-        osc.frequency.setValueAtTime(f0, this.ctx.currentTime);
-        if (f1 != null) osc.frequency.exponentialRampToValueAtTime(Math.max(1, f1), this.ctx.currentTime + dur);
-        gain.gain.setValueAtTime(vol * this._vol.sfx, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
-        osc.connect(gain); gain.connect(this.dest());
-        osc.start(); osc.stop(this.ctx.currentTime + dur);
+        osc.frequency.setValueAtTime(f0, t0);
+        if (f1 != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+        filt.type = 'lowpass';
+        filt.frequency.setValueAtTime(filter, t0);
+        filt.Q.setValueAtTime(Q, t0);
+        const v = vol * this._vol.sfx;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, v), t0 + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(filt); filt.connect(gain); gain.connect(this.dest());
+        osc.start(t0); osc.stop(t0 + dur + 0.02);
     }
 
-    playJump() { this._beep('sine', 180, 480, 0.12, 0.15); }
-    playDash() { this._beep('sawtooth', 250, 850, 0.16, 0.2); }
-    playHit(heavy = false) {
+    _noiseBurst(dur = 0.12, vol = 0.12, filter = 1200) {
         if (!this.ctx || this._vol.sfx <= 0) return;
-        const osc = this.ctx.createOscillator();
+        const t0 = this.ctx.currentTime;
+        const n = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+        const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / n * 4);
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'lowpass';
+        filt.frequency.setValueAtTime(filter, t0);
         const gain = this.ctx.createGain();
-        osc.type = heavy ? 'sawtooth' : 'square';
-        const duration = heavy ? 0.35 : 0.15;
-        osc.frequency.setValueAtTime(heavy ? 160 : 280, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(heavy ? 30 : 80, this.ctx.currentTime + duration);
-        gain.gain.setValueAtTime((heavy ? 0.35 : 0.2) * this._vol.sfx, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain); gain.connect(this.dest());
-        osc.start(); osc.stop(this.ctx.currentTime + duration);
+        gain.gain.setValueAtTime(vol * this._vol.sfx, t0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        src.connect(filt); filt.connect(gain); gain.connect(this.dest());
+        src.start(t0); src.stop(t0 + dur);
     }
-    playGrab() { this._beep('triangle', 450, 120, 0.3, 0.3); }
-    playThrow() { this._beep('sawtooth', 320, 980, 0.22, 0.35); }
-    playShield() { this._beep('sine', 540, null, 0.08, 0.12); }
-    playKO() { this._beep('sawtooth', 160, 25, 0.7, 0.45); }
+
+    playJump() {
+        this._tone({ type: 'sine', f0: 240, f1: 520, dur: 0.11, vol: 0.12, filter: 2400 });
+        this._noiseBurst(0.04, 0.04, 3000);
+    }
+    playDash() {
+        this._tone({ type: 'triangle', f0: 180, f1: 420, dur: 0.14, vol: 0.14, filter: 1600 });
+        this._noiseBurst(0.08, 0.08, 1400);
+    }
+    playHit(heavy = false) {
+        if (heavy) {
+            this._tone({ type: 'sine', f0: 120, f1: 45, dur: 0.28, vol: 0.28, filter: 800 });
+            this._noiseBurst(0.18, 0.16, 900);
+        } else {
+            this._tone({ type: 'triangle', f0: 220, f1: 90, dur: 0.12, vol: 0.16, filter: 1400 });
+            this._noiseBurst(0.08, 0.08, 1600);
+        }
+    }
+    playGrab() {
+        this._tone({ type: 'sine', f0: 360, f1: 140, dur: 0.22, vol: 0.18, filter: 1800 });
+    }
+    playThrow() {
+        this._tone({ type: 'triangle', f0: 280, f1: 620, dur: 0.18, vol: 0.2, filter: 2200 });
+        this._noiseBurst(0.1, 0.07, 2000);
+    }
+    playShield() {
+        this._tone({ type: 'sine', f0: 480, f1: 360, dur: 0.07, vol: 0.09, filter: 2000 });
+    }
+    playKO() {
+        this._tone({ type: 'sine', f0: 140, f1: 40, dur: 0.55, vol: 0.32, filter: 700 });
+        this._noiseBurst(0.35, 0.18, 600);
+    }
 }
