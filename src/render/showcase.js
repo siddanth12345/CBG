@@ -2,7 +2,7 @@
 // circles the camera around the stage, changes shots, and every so often CUTS to another map with a procedural
 // transition (iris, slash, shutters, glitch, warp). Silent, no HUD, no input.
 import * as THREE from 'three';
-import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS } from '../core.js';
+import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS, audio } from '../core.js';
 import { wx, wy } from './space.js';
 import { CHARS } from '../characters.js';
 
@@ -82,6 +82,20 @@ export class Showcase {
         this.caption = { title: this.info.title, sub: this.info.sub, vs: `${nm(a.char)}  vs  ${nm(b.char)}`.toUpperCase() };
     }
 
+    /** the menu cinematic only runs while the menu is actually showing; any button that takes the menu away (play, tutorial, a pop-up) stops it, so nothing is simulated or drawn for it. Local only: never networked. */
+    guard() {
+        if (S.gameState !== 'start') return;
+        const ss = document.getElementById('startScreen');
+        const covered = !ss || ss.classList.contains('hidden') || !!document.querySelector('.lm-modal:not(.lm-hidden)');
+        if (S.demo && covered) this.stop();
+        else if (!S.demo && !covered && !S.online) this.start();
+    }
+    stop() {
+        if (!S.demo) return;
+        S.demo = false; audio.muted = false; this.cut = null; this.info = null;
+        for (const f of [fighters[2], fighters[3]]) if (f) f.active = false;
+        this.cv.style.display = 'none'; this.cap.style.opacity = '0';
+    }
     start() { this.#spawn('rand'); this.#caption(); }
 
     #caption() {

@@ -267,6 +267,7 @@ export class View {
 
     update(dt, alpha) {
         this.clock += dt;
+        this.showcase.guard();
         const demo = this.showcase.active;
         if (demo !== this._demo) { this._demo = demo; this.showcase.show(demo); if (!demo) { this.showcase.release(); this.camDist = 0; } }
         this.syncWorld();
