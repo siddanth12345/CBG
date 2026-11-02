@@ -1022,7 +1022,7 @@ class Fighter {
                 const life = sp.life ? Math.round(lerpR(sp.life, c)) : 60;
                 const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
                 // tiers: low carry-only | mid carry | full instant KB
-                const full = c >= 0.95, mid = c >= 0.4 && !full;
+                const full = c >= 0.9, mid = c >= 0.4 && !full;
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
                 const every = full ? 2 : (mid ? 5 : 6);
@@ -1066,21 +1066,22 @@ class Fighter {
                         audio.playHit(false);
                     }
                 }
-                // BLUE: 16 dmg, same KB strength as before, fixed 22° above horizontal away from contact
+                // BLUE: 16 dmg — same launch path as Phoenix missile explodeOrb, KB ×2
                 if (full) {
                     if (!x.blueHit) x.blueHit = new Set();
+                    const mBkb = 9.6 * 2, mKbg = 0.72 * 2;   // missile bkb/kbg ×2
                     for (const f of foesOf(this)) {
                         if (!isAlive(f) || f.invincibleTimer > 0 || x.blueHit.has(f)) continue;
-                        const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
+                        const hw = sz / 2 + f.width / 2 + 8, hh = sz / 2 + f.height / 2 + 8;
                         if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
                         x.blueHit.add(f);
-                        let dx = f.x - this.x;
-                        const travel = (x.v !== undefined ? Math.sign(x.v) : 0) || this.facing || x.d || 1;
-                        const side = Math.sign(dx) || travel;
-                        // y grows downward → negative sin = up; 22° above ground level
-                        const rad = 22 * Math.PI / 180;
-                        const ang = Math.atan2(-Math.sin(rad), Math.cos(rad) * side);
-                        launch(this, f, { damage: 16, bkb: rb * 1.7, kbg: rk * 1.7, angle: ang });
+                        f._rollCarry = null;
+                        f.grounded = false;
+                        // identical angle math to explodeOrb for missiles
+                        const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.vx || this.facing || 1);
+                        launch(this, f, { damage: 16, bkb: mBkb, kbg: mKbg, angle: ang, x: this.x, y: this.y });
+                        fx('explosion', this.x, this.y, 70, 0.6, 'fire');
+                        S.screenShake = Math.max(S.screenShake, 12);
                     }
                 }
 
@@ -1295,21 +1296,33 @@ class Fighter {
         if (x && x.k === 'roll' && x.ph === 'roll') {
             const sp = spec(this.char, 'S'), c = x.c || 0;
             const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
-            const full = c >= 0.95, mid = c >= 0.4 && !full;
+            const full = c >= 0.9, mid = c >= 0.4 && !full;
             for (const f of foesOf(this)) {
                 if (f._rollCarry !== this) continue;
                 f._rollCarry = null;
                 if (full) continue;                          // full already knocked during roll
                 if (mid) {
-                    // white: 12 damage + knockback at the end of the carry (ticks deal 0)
-                    let dx = f.x - this.x, dy = f.y - this.y;
-                    if (Math.hypot(dx, dy) < 12) { dx = this.facing || 1; dy = -0.4; }
-                    launch(this, f, { damage: 12, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: Math.atan2(dy, dx) });
+                    // white: all damage ×1/1.5 → 8 (rounded) + KB (missile-style angle)
+                    f._rollCarry = null; f.grounded = false;
+                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
+                    launch(this, f, { damage: 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
                     f.vx *= 0.2; f.vy *= 0.2;
                     fx('hit', f.x, f.y, 6, -0.5);
+                }
+            }
+            // white: also hit anyone still overlapping even if not flagged carried
+            if (mid) {
+                const sp2 = sp, sz2 = lerpR(sp2.w, c);
+                for (const f of foesOf(this)) {
+                    if (!isAlive(f) || f.invincibleTimer > 0) continue;
+                    if (Math.abs(f.x - this.x) > sz2 / 2 + f.width / 2 + 10 || Math.abs(f.y - this.y) > sz2 / 2 + f.height / 2 + 10) continue;
+                    if (f.lastHitBy === this && f.lastHitT < 3) continue; // already launched above
+                    f.grounded = false;
+                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
+                    launch(this, f, { damage: 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
                 }
             }
         }
