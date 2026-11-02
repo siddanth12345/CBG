@@ -1042,11 +1042,11 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
-                // past the main stage side edges (ledge line) or under the stage → end roll
-                // stops dragging foes off into the kill zone; white/blue get end hit, red does not
-                {
+                // past stage side edges / under stage → end roll (skip if you STARTED already in that void)
+                // so side-F still works when used from off-stage / under-stage recovery spots
+                if (!x.fromVoid) {
                     const top = STAGE.y, bot = STAGE.y + STAGE.height;
-                    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;   // same inset as shield-roll ledge stop
+                    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;
                     let pastSide = false;
                     if (this.x < L) { this.x = L; pastSide = true; }
                     else if (this.x > R) { this.x = R; pastSide = true; }
@@ -1293,6 +1293,8 @@ class Fighter {
         const sp = spec(this.char, 'S');
         if (charge !== undefined && x.ph === 'charge') x.c = Math.max(x.c, Math.min(1, charge));
         x.ph = 'roll'; x.t = 0;
+        // if you already started off-stage / under stage, allow the roll (don't auto-cancel on frame 1)
+        x.fromVoid = rollInVoidZone(this);
         this.cd.BLINK = sp.cd; this.fActive = false; this.chargeFrames = 0;
         this.swingHitSet = new Set();
         this.setMove('BLINK', 6); this.activeMove = null;
@@ -2753,6 +2755,15 @@ function balloonPop(attacker, defender, hb) {
 }
 
 /** Ember (rolling) vs a foe in the middle of a Side-F move: cancel the foe's move and stun them. True when it happened. */
+function rollInVoidZone(f) {
+    const top = STAGE.y, bot = STAGE.y + STAGE.height;
+    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;
+    if (f.x < L || f.x > R) return true;
+    if (f.y > bot + 4) return true;
+    if (f.y > top + 8 && (f.x <= L || f.x >= R)) return true;
+    return false;
+}
+
 function rollTier(c) { return c >= 0.9 ? 2 : (c >= 0.4 ? 1 : 0); }   // 0 red, 1 white, 2 blue
 
 /** Ember Fireball Roll beats other side/up specials; white beats red, blue beats white when both rolling */
