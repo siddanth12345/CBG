@@ -12,7 +12,8 @@ import { buildStage } from './stage.js';
 import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
 import { ItemsView } from './items.js';
-import { getGfx } from '../gfx.js';
+import { getGfx, getZoom } from '../gfx.js';
+import { Showcase } from './showcase.js';
 
 const FOV = 38;
 const PITCH = 7 * Math.PI / 180;   // slight look-down so the platform top reads in 3D
@@ -67,6 +68,8 @@ export class View {
         this.items = new ItemsView(scene);
         this.arenaVersion = S.arenaVersion || 0;
         this.themeName = null;
+        this.showcase = new Showcase(this);        // the start menu's cinematic
+        this._demo = false;
 
         // ---- post
         const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
@@ -178,15 +181,36 @@ export class View {
     followGoal(out) {
         const d0 = this.fitDistance();
         const t = Math.tan(FOV * Math.PI / 360);
-        let live = fighters.filter(f => f.active && !f.out);
-        if (!live.length) live = [p1, p2];
-        const xs = live.map(f => wx(f.x)), ys = live.map(f => wy(f.y));
-        const ax = Math.min(...xs), bx = Math.max(...xs), ay = Math.min(...ys), by = Math.max(...ys);
-        const halfW = (bx - ax) / 2 + 520, halfH = (by - ay) / 2 + 380;   // breathing room around the group
-        let dist = Math.max(halfH / t, halfW / (t * this.camera.aspect));
+        const mode = getZoom();                                   // this player's own camera preference (never shared online)
+        const me = fighters[S.mySlot || 0] || p1;
+        const alive = (f) => f.active && !f.out;
         const big = WORLD.width / 3800;
-        dist = Math.min(d0, Math.max(d0 / 2.7 / (big > 1 ? 1.6 : 1), dist));
         const lim = (v, m) => Math.max(-m, Math.min(m, v));
+        if (mode === 'full') { out.set(0, 0, 0); return d0; }     // the whole map, always
+        let pts;                                                  // [x, y] in render units; the box around them is what the camera frames
+        let mx = 520, my = 380;                                   // breathing room
+        if (mode === 'stage') {
+            const top = Math.min(STAGE.y - 380, ...(STAGE.platforms || []).map(p => p.y - 120));
+            pts = [[wx(STAGE.x), wy(top)], [wx(STAGE.x + STAGE.width), wy(STAGE.y + STAGE.height + 140)]];
+            const offStage = alive(me) && (me.x < STAGE.x - 20 || me.x > STAGE.x + STAGE.width + 20 || me.y > STAGE.y + 30 || me.y < top - 40);
+            if (offStage) pts.push([wx(me.x), wy(me.y)]);          // you left the stage: widen to keep you and the stage in frame, then settle back
+            mx = 260; my = 160;
+        } else if (mode === 'player') {
+            let near = null, nd = Infinity;
+            for (const f of fighters) { if (f === me || !alive(f)) continue; const d = Math.hypot(f.x - me.x, f.y - me.y); if (d < nd) { nd = d; near = f; } }
+            pts = [[wx(me.x), wy(me.y)]];
+            if (near) pts.push([wx(near.x), wy(near.y)]);
+            if (!alive(me) && !near) pts = [[wx(STAGE.x + STAGE.width / 2), wy(STAGE.y)]];
+        } else {                                                  // all: every fighter still in the match (the original behaviour)
+            let live = fighters.filter(alive);
+            if (!live.length) live = [p1, p2];
+            pts = live.map(f => [wx(f.x), wy(f.y)]);
+        }
+        const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+        const ax = Math.min(...xs), bx = Math.max(...xs), ay = Math.min(...ys), by = Math.max(...ys);
+        const halfW = (bx - ax) / 2 + mx, halfH = (by - ay) / 2 + my;
+        let dist = Math.max(halfH / t, halfW / (t * this.camera.aspect));
+        dist = Math.min(d0, Math.max(d0 / 2.7 / (big > 1 ? 1.6 : 1), dist));
         out.set(lim((ax + bx) / 2, WORLD.width / 2), lim((ay + by) / 2, WORLD.height / 2), 0);
         return dist;
     }
@@ -243,10 +267,11 @@ export class View {
 
     update(dt, alpha) {
         this.clock += dt;
+        const demo = this.showcase.active;
+        if (demo !== this._demo) { this._demo = demo; this.showcase.show(demo); if (!demo) { this.showcase.release(); this.camDist = 0; } }
         this.syncWorld();
-        this.placeCamera(dt);
-        this.updateAim();
-        this.updateAimOrigin();
+        if (demo) this.showcase.place(dt);
+        else { this.placeCamera(dt); this.updateAim(); this.updateAimOrigin(); }
 
         // screen shake (the original shook the canvas by up to +-shake/2 pixels)
         if (S.screenShake > 0 && !dramaticZoom.active) {
@@ -268,7 +293,7 @@ export class View {
         }
 
         // outside a match (menu / lobby) keep the scene light: no rocks, fewer stars, no fighters or shadows
-        const inMatch = S.gameState !== 'start';
+        const inMatch = S.gameState !== 'start' || !!S.demo;
         if (inMatch !== this.inMatch) {
             this.inMatch = inMatch;
             for (const g of this.stage.rocks) g.visible = inMatch;

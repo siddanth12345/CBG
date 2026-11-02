@@ -2008,6 +2008,13 @@ class AIBot extends Fighter {
             return;
         }
         if (this.aiMove && --this.aiMove.t <= 0) this.aiMove = null;
+        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll' && this.level === 'hard') {      // hard bots bail out of the side-F (a jump cancels it) before it carries them off the stage, so they can recover
+            const margin = 90, off = this.x < STAGE.x + margin || this.x > STAGE.x + STAGE.width - margin;
+            const falling = !this.grounded && this.y > STAGE.y + 20;
+            if (falling || (off && this.vx * (this.x < stageCenterX ? -1 : 1) > 0 && !this.grounded) || (off && this.sx.d * (this.x < stageCenterX ? -1 : 1) > 0 && this.y > STAGE.y - 60)) {
+                this.endRoll(); this.vx = (this.x < stageCenterX ? 1 : -1) * 4; this.jump(); return;
+            }
+        }
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll') { const dd = target.x - this.x; if (Math.abs(dd) > 40) this.sx.d = dd > 0 ? 1 : -1; }   // steer the fireball roll at the foe
         if (this.suplexT > 0 || this.diving || this.isRolling || this.sx) return;
 
@@ -3136,10 +3143,33 @@ export function assignTagNames() {
     }
 }
 
+/** The start menu's live showcase: two hard bots fight on a random map (the camera work and the cuts live in render/showcase.js). Silent, no HUD. */
+export const DEMO_CHARS = ['luminent', 'bulwark', 'zephyr', 'ember', 'tide', 'volt', 'umbra', 'terra'];
+export function startDemo(map, chars) {
+    if (S.gameState !== 'start' && !S.demo) return null;
+    S.demo = true; S.gameMode = 'demo'; S.online = null; audio.muted = true;
+    S.match = { teams: false, startDamage: 0, stocks: 99, mode: 'stock', timeLimit: 5, items: { on: false, types: [], interval: 15 } };
+    S.matchCfg = null; S.mySlot = 2; S.winnerRole = null;
+    const m = setArenaByMap(map || 'rand');
+    const pool = DEMO_CHARS.slice(), pick = () => pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+    const cs = chars || [pick(), pick()];
+    fighters.forEach((f) => { f.active = false; f.out = false; f.team = null; });
+    [2, 3].forEach((slot, i) => {
+        const f = fighters[slot];
+        f.char = charOf(cs[i]).id; f.active = true; f.name = ''; f.tagName = ''; f.isAI = true; f.diff = 'hard'; f.shieldHold = 0;
+        f.color = ['#06b6d4', '#f43f5e'][i]; f.superColor = null; f.stocks = 99; f.kills = 0;
+        f.startX = STAGE.x + STAGE.width * (0.3 + 0.4 * i); f.startY = STAGE.y - 120;
+        f.reset(true); f.shieldHold = 0; f.remoteAim = null; f.maxJumps = charOf(f.char).jumps; f.jumpsLeft = f.maxJumps;
+    });
+    orbs.length = 0; drops.length = 0; pillars.length = 0; whirlpools.length = 0; items.length = 0;
+    return { map: m, chars: cs };
+}
+
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
     S.gameMode = mode;
+    S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
         const lim = clampN(+cfg.timeLimit || 5, 1, 10);
@@ -3555,7 +3585,7 @@ export function step() {
 
     if (S.online === 'guest') {
         guestSmooth();                                      // the host simulates; we only show what it sends
-    } else if (S.gameState === 'playing' && S.match) {      // custom match: up to 8 fighters, steered by their players
+    } else if ((S.gameState === 'playing' || S.demo) && S.match) {      // custom match: up to 8 fighters, steered by their players (the menu showcase runs the same loop with two bots)
         const live = fighters.filter(isAlive);
         flushBuffered();
         for (const f of live) {

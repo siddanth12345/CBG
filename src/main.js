@@ -245,6 +245,7 @@ function backToMenu() {
     dramaticZoom.active = false;
     S.gameState = 'start';
     $('startScreen').classList.remove('hidden');
+    view.showcase.start();
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); backToMenu(); });
@@ -292,6 +293,7 @@ function frame(now) {
 
 Online.onLeft = (msg) => { backToMenu(); lobby.open(msg); };
 updateAimMatrix();
+view.showcase.start();
 requestAnimationFrame(frame);
 
 // handy for debugging / automated tests

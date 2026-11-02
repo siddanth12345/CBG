@@ -19,39 +19,34 @@
         </div>
     </div>
 
-    <!-- START SCREEN -->
-    <div id="startScreen" class="absolute inset-0 z-50 flex flex-col items-center justify-center p-4" style="background:radial-gradient(ellipse at center, rgba(6,9,19,.55) 0%, rgba(6,9,19,.9) 100%)">
-        <div class="glass-panel max-w-xl w-full rounded-3xl p-8 border border-slate-700 text-center shadow-2xl">
-            <h1 id="gameTitle" class="cbg-title smash-font"><span class="cw"><b class="cr">C</b><span class="cu">ool</span></span> <span class="cw"><b class="cr">B</b><span class="cu">attle</span></span> <span class="cw"><b class="cr">G</b><span class="cu">ame</span></span></h1>
-            <p class="text-slate-400 text-sm tracking-widest uppercase mb-8 font-semibold">Arena Fighter &middot; 3D</p>
-            
-            <div class="flex flex-col gap-3">
-                <button id="easyModeBtn" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold px-8 py-3.5 rounded-2xl transition shadow-xl shadow-emerald-500/40 text-lg uppercase tracking-wider">
-                    Easy Mode (Slow &amp; Defensive Bot)
-                </button>
-                <button id="mediumModeBtn" class="lm-medium-btn">
-                    Medium Mode (Balanced Bot)
-                </button>
-                <button id="hardModeBtn" class="bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white font-extrabold px-8 py-3.5 rounded-2xl transition shadow-xl shadow-rose-500/40 text-lg uppercase tracking-wider">
-                    Hard Mode (Aggressive Bot)
-                </button>
-                <button id="trainingModeBtn" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/40 font-extrabold px-8 py-3.5 rounded-2xl transition shadow-xl text-lg uppercase tracking-wider">
-                    Training Mode (Dummy)
-                </button>
-                <button id="onlineBtnStart" class="lm-online-btn">
-                    Play Online (1v1)
-                </button>
-                <div class="lm-start-row">
-                    <button id="customBtnStart" class="lm-btn">Custom Match</button>
-                    <button id="partyBtnStart" class="lm-btn lm-btn-ghost">Party</button>
-                </div>
-                <div class="lm-start-row">
-                    <button id="charBtnStart" class="lm-btn lm-btn-ghost">Characters</button>
-                </div>
-                <div class="lm-start-row">
-                    <button id="tutorialBtnStart" class="lm-btn lm-btn-ghost">How to Play</button>
-                    <button id="settingsBtnStart" class="lm-btn lm-btn-ghost">Settings</button>
-                </div>
+    <!-- START SCREEN: the menu on the left, a live cinematic (two bots fighting, camera circling, cuts between maps) on the right -->
+    <div id="startScreen">
+        <div class="cbg-menu">
+            <div class="cbg-brand">
+                <h1 id="gameTitle" class="cbg-title smash-font"><span class="cw"><b class="cr">C</b><span class="cu">ool</span></span> <span class="cw"><b class="cr">B</b><span class="cu">attle</span></span> <span class="cw"><b class="cr">G</b><span class="cu">ame</span></span></h1>
+                <p class="cbg-tag">Arena Fighter &middot; 3D</p>
+            </div>
+
+            <div class="cbg-sec"><span>Play vs CPU</span><i>a random map every game</i></div>
+            <div class="cbg-botrow">
+                <button id="easyModeBtn" class="cbg-bot easy"><b>Easy</b><small>Slow &amp; defensive</small></button>
+                <button id="mediumModeBtn" class="cbg-bot med"><b>Medium</b><small>Balanced</small></button>
+                <button id="hardModeBtn" class="cbg-bot hard"><b>Hard</b><small>Aggressive</small></button>
+            </div>
+
+            <div class="cbg-sec"><span>Play with others</span></div>
+            <button id="onlineBtnStart" class="cbg-big"><b>Play Online</b><small>1v1 &middot; quick match or room code</small></button>
+            <div class="cbg-grid two">
+                <button id="customBtnStart" class="cbg-tile"><b>Custom Match</b><small>up to 8 &middot; maps &middot; items</small></button>
+                <button id="partyBtnStart" class="cbg-tile"><b>Party</b><small>play with friends</small></button>
+            </div>
+
+            <div class="cbg-sec"><span>Practice &amp; more</span></div>
+            <div class="cbg-grid">
+                <button id="trainingModeBtn" class="cbg-tile"><b>Training</b><small>dummy &amp; tuning</small></button>
+                <button id="charBtnStart" class="cbg-tile"><b>Characters</b><small>8 fighters</small></button>
+                <button id="tutorialBtnStart" class="cbg-tile"><b>How to Play</b><small>guided</small></button>
+                <button id="settingsBtnStart" class="cbg-tile"><b>Settings</b><small>controls &amp; video</small></button>
             </div>
         </div>
     </div>
@@ -187,7 +182,7 @@
     
 </div>
 <script type="module" src="src/loader.js"></script>
-<div id="cbgBuild" style="position:fixed;right:6px;bottom:4px;z-index:2147483001;font:10px monospace;color:#67e8f9;opacity:.55;pointer-events:none">build 2026-11-01 m</div>
-<script type="module" src="src/main.js?v=20261101m"></script>
+<div id="cbgBuild" style="position:fixed;right:6px;bottom:4px;z-index:2147483001;font:10px monospace;color:#67e8f9;opacity:.55;pointer-events:none">build 2026-11-01 n</div>
+<script type="module" src="src/main.js?v=20261101n"></script>
 
 </body></html>

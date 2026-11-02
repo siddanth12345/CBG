@@ -1,12 +1,14 @@
 // Procedural sound effects (Web Audio) - unchanged from the original.
 export class SoundEngine {
     constructor() {
-        this.ctx = null;
+        this._ctx = null;
+        this.muted = false;                       // the menu showcase fights silently
     }
+    get ctx() { return this.muted ? null : this._ctx; }
 
     init() {
-        if (!this.ctx) {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!this._ctx) {
+            this._ctx = new (window.AudioContext || window.webkitAudioContext)();
         }
     }
 
