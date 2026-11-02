@@ -1042,11 +1042,11 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
-                // 0.5 s airborne → force the end direct hit (white/blue only; red has no direct hit)
+                // 0.3 s airborne → force the end direct hit (white/blue only; red has no direct hit)
                 if (this.grounded) x.airT = 0;
                 else {
                     x.airT = (x.airT || 0) + 1;
-                    if (x.airT >= 30 && (mid || full)) { this.endRoll(); return; }
+                    if (x.airT >= 18 && (mid || full)) { this.endRoll(); return; }
                 }
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
@@ -1292,6 +1292,7 @@ class Fighter {
         this.setMove('BLINK', 6); this.activeMove = null;
         fx('rocket', this.x, this.y, 0, 0, 'fire');
         S.screenShake = Math.max(S.screenShake, 6);
+        try { audio.playF(this.char, 's'); } catch (e) {}
     }
     endRoll() {
         const x = this.sx;

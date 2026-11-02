@@ -3,6 +3,7 @@ import { S } from './core.js';
 import { Guide } from './guide.js';
 import { getLayout, setMode } from './layout.js';
 import { getGfx, setGfx, getHitboxes, setHitboxes, getZoom, setZoom } from './gfx.js';
+import { audio } from './core.js';
 import { ACTIONS, bindings, keyLabel, codeName, setBinding, resetBindings } from './controls.js';
 
 const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -162,9 +163,9 @@ export class UI {
         root.appendChild(this.tut);
 
         this.set = document.createElement('div');
-        this.set.className = 'lm-modal lm-hidden';
+        this.set.className = 'lm-modal lm-page lm-hidden';
         this.set.innerHTML = `
-            <div class="lm-panel lm-panel-sm" role="dialog" aria-label="Settings">
+            <div class="lm-panel lm-panel-page" role="dialog" aria-label="Settings">
                 <div class="lm-head"><h2>Settings</h2><button class="lm-x" data-close aria-label="Close">✕</button></div>
                 <p class="lm-note lm-hint">PC controls: click a control, then press the key or mouse button you want. Esc cancels. Binding something that is already used swaps the two.</p>
                 <div class="lm-body lm-rows"></div>
@@ -246,14 +247,20 @@ export class UI {
         const rows = this.set.querySelector('.lm-rows');
         const L = getLayout();
         const gfx = getGfx();
-        let group = '', html = `<h4 class="lm-group">Layout</h4>
-            <div class="lm-row"><span>Control layout<small class="lm-sub">Auto uses touch controls on phones and tablets</small></span>
+        const mv = Math.round(audio.musicVolume * 100), sv = Math.round(audio.sfxVolume * 100);
+        let group = '', html = `<h4 class="lm-group">Audio</h4>
+            <div class="lm-row lm-row-stack"><span>Music<small class="lm-sub">Title, matches and stage themes. Drag to 0 to mute</small></span>
+              <label class="lm-vol"><input type="range" min="0" max="100" value="${mv}" data-vol="music"><b data-vol-label="music">${mv}%</b></label></div>
+            <div class="lm-row lm-row-stack"><span>Sound effects<small class="lm-sub">Hits, jumps, specials. Drag to 0 to mute</small></span>
+              <label class="lm-vol"><input type="range" min="0" max="100" value="${sv}" data-vol="sfx"><b data-vol-label="sfx">${sv}%</b></label></div>
+            <h4 class="lm-group">Layout &amp; video</h4>
+            <div class="lm-row lm-row-wrap"><span>Control layout<small class="lm-sub">Auto uses touch controls on phones and tablets</small></span>
               <span class="lm-seg">${[['auto', 'Auto'], ['pc', 'PC'], ['mobile', 'Mobile']].map(([m, t]) => `<button class="lm-segb${L.mode === m ? ' on' : ''}" data-mode="${m}">${t}</button>`).join('')}</span></div>
-            <div class="lm-row"><span>Mobile button layout<small class="lm-sub">Move the grid, jump and shield buttons and resize them</small></span><button class="lm-key" data-edit-layout>Edit layout…</button></div>
-            <div class="lm-row"><span>Graphics quality<small class="lm-sub">Auto adapts to your device. High is sharpest (phones look pixelated on Low)</small></span>
+            <div class="lm-row lm-row-wrap"><span>Mobile button layout<small class="lm-sub">Move the grid, jump and shield buttons and resize them</small></span><button class="lm-key" data-edit-layout>Edit layout…</button></div>
+            <div class="lm-row lm-row-wrap"><span>Graphics quality<small class="lm-sub">Auto adapts to your device. High is sharpest (phones look pixelated on Low)</small></span>
               <span class="lm-seg">${[['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']].map(([m, t]) => `<button class="lm-segb${gfx === m ? ' on' : ''}" data-gfx="${m}">${t}</button>`).join('')}</span></div>
-            <div class="lm-row"><span>Camera zoom<small class="lm-sub">Only changes YOUR view, never other players'. All = frames every fighter (default). Stage = locked on the stage, and if you leave it the view widens to keep you in frame. Player = you and the nearest fighter. Full map = the whole arena at once (not recommended)</small></span>
-              <span class="lm-seg">${[['all', 'All'], ['stage', 'Stage'], ['player', 'Player'], ['full', 'Full map']].map(([m, t]) => `<button class="lm-segb${getZoom() === m ? ' on' : ''}" data-zoom="${m}">${t}</button>`).join('')}</span></div>
+            <div class="lm-row lm-row-wrap"><span>Camera zoom<small class="lm-sub">Only YOUR view. All = every fighter · Stage = stage lock · Player = you + nearest · Full = whole arena</small></span>
+              <span class="lm-seg lm-seg-wrap">${[['all', 'All'], ['stage', 'Stage'], ['player', 'Player'], ['full', 'Full']].map(([m, t]) => `<button class="lm-segb${getZoom() === m ? ' on' : ''}" data-zoom="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Show hitboxes<small class="lm-sub">Draws the red attack boxes (for learning the moves). Off by default</small></span>
               <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getHitboxes() ? 1 : 0) === m ? ' on' : ''}" data-hb="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Fullscreen<small class="lm-sub">Also the corner button on phones</small></span><button class="lm-key" data-fs>Toggle fullscreen</button></div>
@@ -269,6 +276,18 @@ export class UI {
         rows.querySelectorAll('[data-gfx]').forEach(b => b.addEventListener('click', () => { setGfx(b.dataset.gfx); this.renderSettings(); }));
         rows.querySelectorAll('[data-zoom]').forEach(b => b.addEventListener('click', () => { setZoom(b.dataset.zoom); this.renderSettings(); }));
         rows.querySelectorAll('[data-hb]').forEach(b => b.addEventListener('click', () => { setHitboxes(b.dataset.hb === '1'); this.renderSettings(); }));
+        rows.querySelectorAll('[data-vol]').forEach(inp => {
+            const apply = () => {
+                const v = (+inp.value) / 100;
+                if (inp.dataset.vol === 'music') audio.setMusicVolume(v);
+                else audio.setSfxVolume(v);
+                const lab = rows.querySelector('[data-vol-label="' + inp.dataset.vol + '"]');
+                if (lab) lab.textContent = Math.round(v * 100) + '%';
+                audio.init();
+            };
+            inp.addEventListener('input', apply);
+            inp.addEventListener('change', apply);
+        });
         rows.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { setMode(b.dataset.mode); this.renderSettings(); }));
         const fs = rows.querySelector('[data-fs]');
         if (fs) fs.addEventListener('click', () => document.dispatchEvent(new Event('cbg-fs')));

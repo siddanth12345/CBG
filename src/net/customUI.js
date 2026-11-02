@@ -20,8 +20,8 @@ export class CustomUI {
     constructor({ root, openBtn, openBorgs }) {
         this.openBorgs = openBorgs || (() => {});
         this.el = document.createElement('div');
-        this.el.className = 'lm-modal lm-hidden';
-        this.el.innerHTML = `<div class="lm-panel" role="dialog" aria-label="Custom match">
+        this.el.className = 'lm-modal lm-page lm-hidden';
+        this.el.innerHTML = `<div class="lm-panel lm-panel-page" role="dialog" aria-label="Custom match">
             <div class="lm-head"><h2>Custom match</h2><button class="lm-x" data-close aria-label="Close">✕</button></div>
             <div class="lm-body" data-body></div></div>`;
         root.appendChild(this.el);
@@ -133,7 +133,7 @@ export class CustomUI {
         const rows = L.members.slice().sort((a, b) => a.slot - b.slot).map((m) => {
             const mine = m.slot === me;
             const canTeam = host || mine;
-            const chips = st.teams ? Object.keys(TEAMS).map(t => `<button class="lm-chip${m.team === t ? ' on' : ''}" style="--c:${TEAMS[t]}" title="${t}" ${(host || mine) ? `data-a="team" data-slot="${m.slot}" data-team="${t}"` : 'disabled'}></button>`).join('') : '';
+            const chips = st.teams ? Object.keys(TEAMS).map(t => `<button type="button" class="lm-chip${m.team === t ? ' on' : ''}" style="--c:${TEAMS[t]};background:${TEAMS[t]}" title="${t}" ${(host || mine) ? `data-a="team" data-slot="${m.slot}" data-team="${t}"` : 'disabled'} aria-label="${t}"></button>`).join('') : '';
             return `<div class="lm-prow"><span class="lm-dot" style="background:${st.teams ? TEAMS[m.team] : '#64748b'}"></span><b>${esc(m.name)}</b>${m.slot === 0 ? '<i>host</i>' : ''}${m.bot ? '<i>cpu</i>' : ''}${mine ? '<i>you</i>' : ''}${host && m.bot ? `<select class="lm-charsel" data-charsel data-slot="${m.slot}" aria-label="Character">${CHAR_IDS.map(c => `<option value="${c}"${c === (m.char || 'luminent') ? ' selected' : ''}>${CHARS[c].name}</option>`).join('')}</select>` : `<i>${esc(charOf(m.char).name)}</i>`}<span class="lm-sp"></span>${chips}${host && m.slot !== 0 ? `<button class="lm-btn lm-btn-ghost lm-mini" data-a="kick" data-slot="${m.slot}">${m.bot ? 'Remove' : 'Kick'}</button>` : ''}</div>`;
         }).join('');
         const it = this.items(), timer = st.mode === 'timer';

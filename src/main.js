@@ -298,3 +298,22 @@ requestAnimationFrame(frame);
 
 // handy for debugging / automated tests
 window.__luminary = { S, p1, p2, view, step, keys, mouse, startMatchSequence, touch, trainUI };
+
+let _lastMusicState = '';
+function tickMusic() {
+    const key = S.gameState + '|' + (S.arena || '') + '|' + (S.theme || '') + '|' + !!(S.match);
+    if (key === _lastMusicState) return;
+    _lastMusicState = key;
+    try {
+        if (S.gameState === 'start') audio.playMusic('title');
+        else if (S.gameState === 'playing' || S.gameState === 'countdown') {
+            if (S.match) {
+                const m = S.match.map || (S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier'));
+                audio.playMusic(audio.musicForMap(m));
+            } else audio.playMusic('duel');
+        }
+    } catch (e) { /* */ }
+}
+setInterval(tickMusic, 400);
+document.addEventListener('pointerdown', () => { try { audio.init(); tickMusic(); } catch (e) {} }, { once: true });
+
