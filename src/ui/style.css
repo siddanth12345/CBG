@@ -259,9 +259,12 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .tz-ring{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(148,163,184,.55);background:radial-gradient(circle,rgba(5,12,24,.18) 0,rgba(5,12,24,.42) 100%);box-shadow:0 0 18px rgba(148,163,184,.2),inset 0 0 26px rgba(148,163,184,.12);pointer-events:auto;touch-action:none}
 .tz-hit{position:absolute;inset:-12%;border-radius:50%;pointer-events:auto;touch-action:none}
 /* the four arrows are glows, not outlined buttons: left / right green, up blue, down red */
-.tz-dir{pointer-events:none!important;border:0!important;background:radial-gradient(circle,var(--gc) 0,transparent 68%)!important;box-shadow:none!important;--gc:rgba(34,197,94,.42);color:#dcfce7;opacity:.85;transition:opacity .15s,transform .15s}
+.tz-dir{pointer-events:none!important;border:0!important;background:radial-gradient(circle,var(--gc) 0,transparent 68%)!important;box-shadow:none!important;--gc:rgba(34,197,94,.42);color:#dcfce7;opacity:.85;transition:opacity .15s,transform .15s,filter .15s,color .15s}
 .tz-dir[data-dir="UP"]{--gc:rgba(59,130,246,.5);color:#dbeafe}
 .tz-dir[data-dir="DOWN"]{--gc:rgba(239,68,68,.48);color:#fee2e2}
+/* Ember Fireball Roll cooldown: side arrows grey + grey glow */
+.tz-dir.tz-cd{--gc:rgba(148,163,184,.55)!important;color:#94a3b8!important;opacity:.7;filter:drop-shadow(0 0 8px rgba(148,163,184,.75)) drop-shadow(0 0 16px rgba(100,116,139,.55))!important}
+.tz-dir.tz-cd.sel,.tz-dir.tz-cd.down{opacity:.85;filter:drop-shadow(0 0 10px rgba(148,163,184,.9)) brightness(1.15)!important}
 .tz-dir::after{display:none}
 .tz-dir.down,.tz-dir.sel{opacity:1;transform:scale(1.22)!important;filter:brightness(1.5) drop-shadow(0 0 10px var(--gc))!important}
 .tz-b{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;border-radius:50%;border:3px solid #e2e8f0;color:#f1f5f9;font:800 20px system-ui,sans-serif;pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;padding:0;overflow:visible;

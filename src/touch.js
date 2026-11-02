@@ -97,7 +97,15 @@ export class TouchControls {
         const show = this.on && (S.gameState === 'playing' || S.gameState === 'countdown');
         this.hud.style.display = show ? 'block' : 'none';
         if (!show && (this.joy || virtual.shield)) this.releaseAll();
-        if (this.on) { const m = this.me(); if (!this.pressedAim) { mouse.worldX = m.x + this.facingVec(m)[0] * 400; mouse.worldY = m.y + this.facingVec(m)[1] * 400; } }
+        if (this.on) {
+            const m = this.me();
+            if (!this.pressedAim) { mouse.worldX = m.x + this.facingVec(m)[0] * 400; mouse.worldY = m.y + this.facingVec(m)[1] * 400; }
+            // Ember side-F on cooldown: left/right arrows go grey with a grey glow
+            const sideCd = !!(m && m.active && !m.out && spec(m.char, 'S').kind === 'roll' && m.cd.BLINK > 0);
+            for (const b of this.refs.matrix.querySelectorAll('.tz-dir[data-dir="SIDE_LEFT"], .tz-dir[data-dir="SIDE_RIGHT"]')) {
+                b.classList.toggle('tz-cd', sideCd);
+            }
+        }
     }
 
     releaseAll() {
