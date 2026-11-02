@@ -1029,13 +1029,16 @@ class Fighter {
                 const isTick = (x.tickN % every) === 0;
                 if (isTick) this.swingHitSet = new Set();
                 this.activeMove = { type: 'BLINK', t: 2 };
+                // red: last 5 ticks deal 2 each; white: no tick dmg; blue: contact only
+                // remaining frames in roll
+                const left = life - x.t;
+                // red tick count is ~ every 6 frames; last 5 ticks ≈ last 30 frames
+                const redLate = !full && !mid && isTick && left <= 30;
                 if (full) {
-                    // blue: no activeHitbox ticks that would zero KB — contact handled below
                     this.activeHitbox = null;
                 } else {
-                    // red/white: stick foes; 1 damage only on tick frames
                     this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                        damage: isTick ? 1 : 0, bkb: 0, kbg: 0, angle: -0.6,
+                        damage: redLate ? 2 : 0, bkb: 0, kbg: 0, angle: -0.6,
                         rollCarry: true,
                         fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
                 }
@@ -1045,36 +1048,21 @@ class Fighter {
                         f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false;
                     }
                 }
-                // blue: first contact = 10 + strong directional KB (away from contact side)
-                // later ticks: +1 damage only, do NOT rewrite velocity
+                // blue: one solid 16-dmg hit, knockback away from contact (redo)
                 if (full) {
                     if (!x.blueHit) x.blueHit = new Set();
-                    if (!x.blueTick) x.blueTick = new Map(); // foe -> last tickN we damaged
                     for (const f of foesOf(this)) {
-                        if (!isAlive(f) || f.invincibleTimer > 0) continue;
+                        if (!isAlive(f) || f.invincibleTimer > 0 || x.blueHit.has(f)) continue;
                         const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
                         if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
-                        if (!x.blueHit.has(f)) {
-                            x.blueHit.add(f);
-                            // direction from roller → foe = away from the side they touched
-                            let dx = f.x - this.x, dy = f.y - this.y;
-                            if (Math.hypot(dx, dy) < 12) {
-                                // stacked on top of each other: push along roll travel
-                                dx = (x.v !== undefined ? Math.sign(x.v) : 0) || this.facing || x.d || 1;
-                                dy = -0.4;
-                            }
-                            const ang = Math.atan2(dy, dx);
-                            // solid launch (stronger than before so it actually reads)
-                            launch(this, f, { damage: 10, bkb: Math.max(14, rb * 2.2), kbg: Math.max(1.0, rk * 2.2), angle: ang });
-                        } else if (isTick) {
-                            const last = x.blueTick.get(f) || 0;
-                            if (x.tickN - last >= 2) {
-                                x.blueTick.set(f, x.tickN);
-                                f.damage += 1;
-                                f.lastHitBy = this; f.lastHitT = 0;
-                                // keep existing knockback momentum — do not relaunch
-                            }
-                        }
+                        x.blueHit.add(f);
+                        let dx = f.x - this.x, dy = f.y - this.y;
+                        const travel = (x.v !== undefined ? Math.sign(x.v) : 0) || this.facing || x.d || 1;
+                        if (Math.hypot(dx, dy) < 14) { dx = travel; dy = -0.35; }
+                        // slight upward bias so they pop off the stage floor
+                        const ang = Math.atan2(dy - Math.abs(dx) * 0.15, dx);
+                        // redo KB: strong base + growth, readable send
+                        launch(this, f, { damage: 16, bkb: 16, kbg: 1.15, angle: ang });
                     }
                 }
 
@@ -1295,8 +1283,10 @@ class Fighter {
                 f._rollCarry = null;
                 if (full) continue;                          // full already knocked during roll
                 if (mid) {
-                    // white: 5 damage + knockback at the end of the carry
-                    launch(this, f, { damage: 5, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: -0.55 });
+                    // white: 12 damage + knockback at the end of the carry (ticks deal 0)
+                    let dx = f.x - this.x, dy = f.y - this.y;
+                    if (Math.hypot(dx, dy) < 12) { dx = this.facing || 1; dy = -0.4; }
+                    launch(this, f, { damage: 12, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: Math.atan2(dy, dx) });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
