@@ -1042,11 +1042,14 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
-                // 0.3 s airborne → force the end direct hit (white/blue only; red has no direct hit)
-                if (this.grounded) x.airT = 0;
-                else {
-                    x.airT = (x.airT || 0) + 1;
-                    if (x.airT >= 18 && (mid || full)) { this.endRoll(); return; }
+                // under the main stage (below top surface off-stage, or below stage body) → end roll
+                // stops dragging foes into the under-stage kill zone; white/blue get their end hit, red does not
+                {
+                    const top = STAGE.y, bot = STAGE.y + STAGE.height;
+                    const L = STAGE.x, R = STAGE.x + STAGE.width;
+                    const under = this.y > bot + 4
+                        || (this.y > top + 8 && (this.x + this.width / 2 < L || this.x - this.width / 2 > R));
+                    if (under) { this.endRoll(); return; }
                 }
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
