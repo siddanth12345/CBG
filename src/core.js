@@ -1022,21 +1022,27 @@ class Fighter {
                 const life = sp.life ? Math.round(lerpR(sp.life, c)) : 60;
                 const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
                 // tiers: low carry-only | mid carry | full instant KB
-                const full = c >= 0.95, mid = c >= 0.4 && !full, low = !mid && !full;
-                if (x.t % 5 === 0) this.swingHitSet = new Set();   // continuous multi-hits while rolling
+                const full = c >= 0.95, mid = c >= 0.4 && !full;
+                // tick cadence: 1 dmg every 3 hits (red/white), every 2 hits (blue) — never oneshot from ticks
+                x.tickN = (x.tickN || 0) + 1;
+                const every = full ? 2 : 3;
+                const isTick = (x.tickN % every) === 0;
+                if (isTick) this.swingHitSet = new Set();
                 this.activeMove = { type: 'BLINK', t: 2 };
                 if (full) {
-                    // blue: instant knockback, no carry (rocket ×1.7 already baked into rocketBkb via 0.95)
+                    // blue: 10 dmg + KB on first contact per foe; then 1 dmg every 2 ticks (no burn stack)
+                    if (!x.blueHit) x.blueHit = new Set();
+                    // continuous presence; combat layer uses swingHitSet — clear on tick for 1 dmg
+                    const dmg = isTick ? 1 : 0;
                     this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                        damage: lerpR(sp.dmg, c), bkb: rb * 1.7, kbg: rk * 1.7, angle: -0.55,
-                        burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
+                        damage: dmg, bkb: 0, kbg: 0, angle: -0.55,
+                        rollBlue: true, rollBlueBkb: rb * 1.7, rollBlueKbg: rk * 1.7 };
                 } else {
-                    // red/white: stick foes to this roller (true carry)
+                    // red/white: stick foes; 1 damage only on tick frames
                     this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                        damage: lerpR(sp.dmg, c), bkb: 0, kbg: 0, angle: -0.6,
+                        damage: isTick ? 1 : 0, bkb: 0, kbg: 0, angle: -0.6,
                         rollCarry: true,
-                        fixed: { vx: this.vx, vy: this.vy, hitstun: 10 },
-                        burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
+                        fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
                 }
                 // keep carried foes glued to us
                 for (const f of foesOf(this)) {
@@ -1044,6 +1050,18 @@ class Fighter {
                         f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false;
                     }
                 }
+                // blue first-contact launch (10 dmg) once per foe
+                if (full) {
+                    if (!x.blueHit) x.blueHit = new Set();
+                    for (const f of foesOf(this)) {
+                        if (!isAlive(f) || x.blueHit.has(f) || f.invincibleTimer > 0) continue;
+                        const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
+                        if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
+                        x.blueHit.add(f);
+                        launch(this, f, { damage: 10, bkb: rb * 1.7, kbg: rk * 1.7, angle: -0.55 });
+                    }
+                }
+
                 const trail = full ? '#38bdf8' : (mid ? '#e2e8f0' : '#ef4444');
                 if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
@@ -1261,8 +1279,8 @@ class Fighter {
                 f._rollCarry = null;
                 if (full) continue;                          // full already knocked during roll
                 if (mid) {
-                    // white: knockback at the end of the carry
-                    launch(this, f, { damage: lerpR(sp.dmg, c) * 0.5, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: -0.55 });
+                    // white: 5 damage + knockback at the end of the carry
+                    launch(this, f, { damage: 5, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: -0.55 });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
