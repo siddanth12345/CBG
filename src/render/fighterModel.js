@@ -570,7 +570,7 @@ export class FighterModel {
         }
         if (f.sx && f.sx.k === 'roll') {               // Ember's fireball roll: curled up, then spinning along
             this.visFacing = f.sx.d;
-            if (f.sx.ph === 'charge') { p.dy = -4; p.rSx = 100; p.lSx = 100; p.rE = 90; p.lE = 90; p.rK = 70; p.lK = 70; p.lean = 10; p.twist = Math.sin(t * 40) * 3 * f.sx.c; p.aura = 0.5 + 0.5 * f.sx.c; }
+            if (f.sx.ph === 'charge') { const c = f.sx.c || 0; p.dy = -4; p.rSx = 100; p.lSx = 100; p.rE = 90; p.lE = 90; p.rK = 70; p.lK = 70; p.lean = 12 + c * 38; p.roll = (f.sx.d || f.facing || 1) * c * 55; p.twist = Math.sin(t * 50) * 4 * c; p.aura = 0.5 + 0.5 * c; }
             else { p.spin = -((t * 1100) % 360) * f.sx.d; p.rSx = 100; p.lSx = 100; p.rE = 100; p.lE = 100; p.rK = 110; p.lK = 110; p.rHx = 40; p.lHx = 40; p.aura = 1; }
             return p;
         }

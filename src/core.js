@@ -31,7 +31,8 @@ export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, l
 let orbSerial = 0;
 const pillars = [];                  // Ember's twin fire pillars (host only)
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
-const ROLL_CHARGE = 102;             // Ember's rolling charge: 1.7 s to full
+const ROLL_CHARGE = 72;              // Ember's rolling charge: 1.2 s to full
+const ROLL_AUTO = 30;                // hold full charge 0.5 s → auto release
 function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
 
 const WORLD = {
@@ -716,8 +717,11 @@ class Fighter {
 
         this.updateSpecials();
 
-        if (this.sx && ((this.sx.k === 'roll' && this.sx.ph === 'charge') || this.sx.k === 'thunder')) {
-            this.vx = 0; this.vy = 0;                          // charging the fireball roll: hovering, gravity does not apply
+        if (this.sx && this.sx.k === 'thunder') {
+            this.vx = 0; this.vy = 0;                          // Volt Enlightened: frozen until the bolt ends
+        } else if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
+            // Ember charge: gravity applies (no hover); light horizontal hold only
+            this.vx *= 0.92;
         } else if (this.diving || this.spiralT > 0 || (this.sx && this.sx.k === 'rocket')) {
             this.vx *= 0.92;
         } else if (!this.grounded) {
@@ -999,23 +1003,38 @@ class Fighter {
             const sp = spec(this.char, 'S'), st = STYLE_OF[this.char];
             if (x.ph === 'charge') {
                 x.c = Math.min(1, x.t / ROLL_CHARGE);
-                this.vx = 0; this.vy = 0; this.activeMove = null; this.facing = x.d;
-                if (x.t % 4 === 0) createParticles(this.x, this.y, '#fb923c', 2);
-                if (!this.fActive && !this.isAI) { this.launchRoll(); }          // the button is up (released without an event): go
-                else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();   // phones: dragging to another arrow mid-charge lets go
+                this.activeMove = null; this.facing = x.d;
+                // full charge held: auto-release after 0.5 s
+                if (x.c >= 1) { x.fullT = (x.fullT || 0) + 1; if (x.fullT >= ROLL_AUTO) { this.launchRoll(); return; } }
+                else x.fullT = 0;
+                const col = x.c >= 1 ? '#38bdf8' : '#fb923c';
+                if (x.t % 4 === 0) createParticles(this.x, this.y, col, 2);
+                if (!this.fActive && !this.isAI) { this.launchRoll(); }          // the button is up: go
+                else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();
             } else {
-                const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;
+                const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;   // already 0.8× via specials.speed
                 if (x.v === undefined) x.v = x.d * speed;
-                const acc = speed / 22;                                        // turning around: a smooth slowdown, then back up to speed the other way
+                const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
                 this.vx = x.v / (this.grounded ? WORLD.friction : WORLD.airFriction); if (Math.abs(x.v) > speed * 0.15) this.facing = x.v > 0 ? 1 : -1;
-                const sz = lerpR(sp.w, c);
+                const sz = lerpR(sp.w, c);                                    // 0.6 of original size
+                const life = sp.life ? Math.round(lerpR(sp.life, c)) : 60;
+                // uncharged / light charge: drill-carry, no knockback (like Phoenix drill). Full charge: rocket KB × (1 + 0.7*c) → 1.7× at full
+                const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.6, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.72;
+                const full = c >= 0.95;
+                const useKb = full || c > 0.55;                               // only the stronger half of charge launches
+                const kbMul = full ? 1.7 : (useKb ? (1 + 0.7 * c) : 0);
                 this.activeMove = { type: 'BLINK', t: 2 };
-                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true, damage: lerpR(sp.dmg, c), bkb: 5, kbg: 0.3, angle: -0.6,
+                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
+                    damage: lerpR(sp.dmg, c),
+                    bkb: useKb ? rb * kbMul : 0, kbg: useKb ? rk * kbMul : 0, angle: -0.6,
+                    // low charge: soft fixed shove that carries (drill-like), no real launch
+                    fixed: useKb ? null : { vx: (x.v || x.d * speed) * 0.55, vy: -1.2, hitstun: 10 },
                     burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
-                if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);              // the fire left on the ground behind
-                if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, '#fb923c', 2);
-                if (x.t >= (sp.maxFrames || 300)) this.endRoll();
+                const trail = c >= 1 ? '#38bdf8' : '#fb923c';
+                if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
+                if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
+                if (x.t >= life) this.endRoll();
             }
         } else if (x.k === 'thunder') {                            // arms stretched out, hanging in the air, until the ball is gone
             this.vx = this.vy = 0; this.activeMove = null; this.grounded = false;
@@ -1198,11 +1217,12 @@ class Fighter {
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
     }
     canRollStart() { return this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < AIR_F_MAX); }
-    /** Ember's Fireball Roll, step 1: hover and charge (1.7 s to full, no gravity). A hit now stuns for 1 s. */
+    /** Ember's Fireball Roll, step 1: charge under gravity (1.2 s to full). A hit now stuns for 1 s. */
     startRollCharge(d) {
         this.facing = d;
-        this.sx = { k: 'roll', t: 0, c: 0, tx: null, ty: null, d, ph: 'charge' };
-        this.activeMove = null; this.specialKind = null; this.specialDur = 0; this.vx = this.vy = 0;
+        this.sx = { k: 'roll', t: 0, c: 0, tx: null, ty: null, d, ph: 'charge', fullT: 0 };
+        this.activeMove = null; this.specialKind = null; this.specialDur = 0;
+        // keep current velocity — gravity continues to apply while charging
         audio.playDash();
     }
     /** step 2: let go. Speed, contact damage and burn all scale with the charge. */

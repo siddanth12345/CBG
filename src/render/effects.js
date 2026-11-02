@@ -771,11 +771,20 @@ export class Effects {
             if (!f.active || f.out || !(f.charging || rolling) || S.gameState !== 'playing') { g.visible = false; return; }
             const u = g.userData; u.core.visible = u.mid.visible = u.halo.visible = true; u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
             g.visible = true;
-            if (rolling) {                                  // Ember's fireball roll: the fireball hugs him while charging and rolling
-                const c = f.sx.c || 0, r = (26 + 22 * c) * (1 + Math.sin(this.chargeT * 30) * 0.07);
-                g.position.set(wx(f.x), wy(f.y), 6); this.#paintOrb(g, r, c >= 1 ? '#fde047' : '#fb923c', 0.9);
-                if (Math.random() < 0.8) this.sparks(g.position.clone(), Math.random() < 0.5 ? '#fb923c' : '#fde047', 2, 160 + 80 * c, 0.3);
-                if (f.sx.ph === 'charge' && Math.random() < 0.5) { const a = Math.random() * 6.28; this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 110, Math.sin(a) * 110, 0)), a + Math.PI, '#fb923c', 1, 500, 0.1, 0.18); }
+            if (rolling) {                                  // Ember's fireball roll: smaller ball; full charge turns blue
+                const c = f.sx.c || 0, r = (26 + 22 * c) * 0.6 * (1 + Math.sin(this.chargeT * 30) * 0.07);
+                const col = c >= 1 ? '#38bdf8' : (c > 0.7 ? '#60a5fa' : '#fb923c');
+                g.position.set(wx(f.x), wy(f.y), 6); this.#paintOrb(g, r, col, 0.9);
+                // Sonic spin-dash slant while charging only (not while rolling)
+                if (f.sx.ph === 'charge') {
+                    const slant = c * 0.95 * (f.sx.d || f.facing || 1);   // more charge → more lean into the aim
+                    g.rotation.z = -slant;
+                    g.scale.set(1 + c * 0.15, 1 - c * 0.35, 1);          // squash into a slanted oval
+                } else {
+                    g.rotation.z = 0; g.scale.set(1, 1, 1);
+                }
+                if (Math.random() < 0.8) this.sparks(g.position.clone(), c >= 1 ? '#7dd3fc' : '#fb923c', 2, 140 + 60 * c, 0.3);
+                if (f.sx.ph === 'charge' && Math.random() < 0.5) { const a = Math.random() * 6.28; this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 90, Math.sin(a) * 90, 0)), a + Math.PI, col, 1, 420, 0.1, 0.18); }
                 return;
             }
             const c = Math.min(1, f.chargeFrames / CHARGE_MAX), full = c >= 1;
