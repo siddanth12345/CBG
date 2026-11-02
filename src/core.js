@@ -1023,9 +1023,9 @@ class Fighter {
                 const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
                 // tiers: low carry-only | mid carry | full instant KB
                 const full = c >= 0.95, mid = c >= 0.4 && !full;
-                // tick cadence: 1 dmg every 3 hits (red/white), every 2 hits (blue) — never oneshot from ticks
+                // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
-                const every = full ? 2 : 3;
+                const every = full ? 2 : (mid ? 5 : 6);
                 const isTick = (x.tickN % every) === 0;
                 if (isTick) this.swingHitSet = new Set();
                 this.activeMove = { type: 'BLINK', t: 2 };
@@ -1058,7 +1058,9 @@ class Fighter {
                         const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
                         if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
                         x.blueHit.add(f);
-                        launch(this, f, { damage: 10, bkb: rb * 1.7, kbg: rk * 1.7, angle: -0.55 });
+                        // knockback away from contact: opposite of the side they touched from
+                        const ang = Math.atan2(f.y - this.y, f.x - this.x || (this.facing || 1));
+                        launch(this, f, { damage: 10, bkb: rb * 1.7, kbg: rk * 1.7, angle: ang });
                     }
                 }
 
