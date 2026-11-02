@@ -1042,6 +1042,12 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
+                // 0.5 s airborne → force the end direct hit (white/blue only; red has no direct hit)
+                if (this.grounded) x.airT = 0;
+                else {
+                    x.airT = (x.airT || 0) + 1;
+                    if (x.airT >= 30 && (mid || full)) { this.endRoll(); return; }
+                }
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
                 const every = full ? 2 : (mid ? 5 : 6);
