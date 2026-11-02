@@ -19,6 +19,8 @@ const EP = { easy: 5, medium: 25, hard: +(process.env.HARD || 120) };
     window.__luminaryPaused = true;
     const A = c.fighters[2], B = c.fighters[3];
     for (const lv of ['easy','medium','hard']) for (const id of ids) for (let e = 0; e < EP[lv]; e++) {
+      c.setArenaByMap(['frontier','big','horizon','bighorizon'][(e + ids.indexOf(id)) % 4]);   // small and big arenas (platforms) alike
+      { const S_ = c.STAGE; A.startX = S_.x + S_.width * 0.4; B.startX = S_.x + S_.width * 0.6; A.startY = B.startY = S_.y - 120; }
       A.char = id; B.char = others[(e + ids.indexOf(id)) % others.length]; A.diff = B.diff = lv;
       A.stocks = B.stocks = 99; A.out = B.out = false; A.reset(true); B.reset(true); A.damage = B.damage = 0;
       if (lv === 'easy') { B.x = A.x + 260; B.y = A.y; }   // easy bots barely walk, so start them close

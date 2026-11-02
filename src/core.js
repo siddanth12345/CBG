@@ -391,6 +391,7 @@ class Fighter {
 
         this.hitstun = 0;
         this.invincibleTimer = 0;
+        this.ghostT = 0;                     // Phoenix Dash aftermath: invincible, but nothing this fighter does hurts anyone
         this.facing = 1;
 
         this.attackTimer = 0;
@@ -479,7 +480,7 @@ class Fighter {
         this.dizzyTimer = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
-        this.invincibleTimer = 120;
+        this.invincibleTimer = 120; this.ghostT = 0;
         this.attackTimer = 0;
         this.activeHitbox = null;
         this.incomingHitCount = 0;
@@ -540,6 +541,7 @@ class Fighter {
         }
 
         if (this.invincibleTimer > 0) this.invincibleTimer--;
+        if (this.ghostT > 0) this.ghostT--;
         if (this.lastHitT < 9999) this.lastHitT++;
         if (this.landFlipT > 0) this.landFlipT--;
         if (this.actionLock > 0) this.actionLock--;
@@ -942,7 +944,7 @@ class Fighter {
                 const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
                 if (x.t % 6 === 1) this.swingHitSet = new Set();
                 if (!this.swingHitSet) this.swingHitSet = new Set();
-                this.activeHitbox = { x: hx, y: hy, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true, damage: sp.dmg, bkb: 0, kbg: 0, angle: x.ang,
+                this.activeHitbox = { x: hx, y: hy, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true, damage: sp.dmg, bkb: 0, kbg: 0, angle: x.ang, phoenix: x.t >= sp.frames - 5,
                     fixed: { vx: Math.cos(x.ang) * sp.speed * 0.95, vy: Math.sin(x.ang) * sp.speed * 0.95, hitstun: 7 } };
             } else if (x.t % 3 === 1) {
                 if (!this.swingHitSet) this.swingHitSet = new Set();
@@ -956,7 +958,7 @@ class Fighter {
                     for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one straight on, one 20 degrees either side
                         const a = x.ang + da * Math.PI / 180;
                         orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
-                            life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', flat: false });
+                            life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
                 }
@@ -1024,7 +1026,7 @@ class Fighter {
                 // tiers first (needed for distance)
                 const full = c >= 0.9, mid = c >= 0.4 && !full;
                 // white travels 1.4× as far as red (same speed, longer life); blue uses full charged life
-                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk;  // white distance = 1.4× red via longer life
+                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk * (mid || full ? 1.2 : 1.1);   // white and blue 1.2x faster, red 1.1x  // white distance = 1.4× red via longer life
                 if (x.v === undefined) x.v = x.d * speed;
                 const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
@@ -2799,6 +2801,8 @@ function emberCounter(em, foe) {
 }
 
 function launch(attacker, defender, hb) {
+    if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash: their attacks do nothing
+    if (hb.phoenix && attacker !== defender) { defender.invincibleTimer = Math.max(defender.invincibleTimer, 60); defender.ghostT = 60; }   // hit by the rockets / the last 5 frames of the dash: 1 s of invincibility
     if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit++; }
     if (hb.radial || hb.mirror) {                           // area hits push away from their centre / mirror to the victim's side
         hb = { ...hb };
@@ -2910,7 +2914,7 @@ function explodeOrb(o) {
         if (res === 'hit') {
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,      // half the knockback
-                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0,
+                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
             });
         } else if (res === 'shield') {
             audio.playShield();
