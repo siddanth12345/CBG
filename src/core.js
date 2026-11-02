@@ -1954,6 +1954,32 @@ class AIBot extends Fighter {
         if (this.jumpsLeft > 0 && this.vy > -2 && this.actionTimer % 6 === 0) this.jump();
     }
 
+    /** Soft-platform know-how for the big arenas: drop through a platform to reach a foe below, climb up to one to reach a foe above. Returns true when it took the frame. */
+    platformNav(target, dx, dy) {
+        const lv = this.level, halfW = this.width / 2, bottom = this.y + this.height / 2;
+        const p = (lv === 'easy' ? 0.35 : lv === 'medium' ? 0.7 : 1);
+        if (this.grounded) {
+            const pl = STAGE.platforms.find(q => Math.abs(bottom - q.y) <= 3 && this.x + halfW > q.x && this.x - halfW < q.x + q.w);
+            if (pl && dy > 110 && this.actionTimer % 6 === 0 && Math.random() < p) {          // foe is below: step off the platform edge or fall straight through it
+                this.dropT = 14; this.vy = 2; this.grounded = false; return true;
+            }
+            if (dy < -150 && !pl || (pl && dy < -260)) {                                      // foe is above: find the nearest higher platform and jump onto it
+                let best = null, bd = 1e9;
+                for (const q of STAGE.platforms) { const rise = bottom - q.y; if (rise < 30 || rise > 380) continue; const cx = Math.max(q.x + 20, Math.min(q.x + q.w - 20, this.x)); const d = Math.abs(cx - this.x); if (d < bd) { bd = d; best = { q, cx }; } }
+                if (best && bd < 900 && Math.random() < p + 0.2) {
+                    const gap = best.cx - this.x;
+                    if (Math.abs(gap) > 24) { this.vx = Math.sign(gap) * 8.5 * charOf(this.char).walk; this.facing = gap > 0 ? 1 : -1; }
+                    else this.jump();
+                    return Math.abs(gap) > 24 || this.hitstun > 0 ? false : true;
+                }
+            }
+        } else if (dy < -150 && this.vy > 0 && this.jumpsLeft > 0 && this.dropT <= 0) {        // falling short of a platform above: use the air jump
+            const q = STAGE.platforms.find(q => this.x + halfW > q.x + 10 && this.x - halfW < q.x + q.w - 10 && q.y < bottom && bottom - q.y < 320);
+            if (q && Math.random() < p) { this.jump(); return true; }
+        }
+        return false;
+    }
+
     updateAI(target) {
         // static / training dummy: zero input, no rolls, no attacks
         if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static'))) {
@@ -2039,6 +2065,8 @@ class AIBot extends Fighter {
             }
             return;
         }
+
+        if (STAGE.platforms.length && this.platformNav(target, distToTargetX, distToTargetY)) return;      // big arenas: drop through / climb the soft platforms
 
         if (items.length && this.actionTimer % 18 === 0 && !this.grabHolding) {      // use items: throw what we hold, chase what lies near
             if (this.heldItem) {
