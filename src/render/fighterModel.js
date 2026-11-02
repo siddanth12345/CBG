@@ -570,8 +570,8 @@ export class FighterModel {
         }
         if (f.sx && f.sx.k === 'roll') {               // Ember's fireball roll: curled up, then spinning along
             this.visFacing = f.sx.d;
-            if (f.sx.ph === 'charge') { const c = f.sx.c || 0; p.dy = -4; p.rSx = 100; p.lSx = 100; p.rE = 90; p.lE = 90; p.rK = 70; p.lK = 70; p.lean = 12 + c * 38; p.roll = (f.sx.d || f.facing || 1) * c * 55; p.twist = Math.sin(t * 50) * 4 * c; p.aura = 0.5 + 0.5 * c; }
-            else { p.spin = -((t * 1100) % 360) * f.sx.d; p.rSx = 100; p.lSx = 100; p.rE = 100; p.lE = 100; p.rK = 110; p.lK = 110; p.rHx = 40; p.lHx = 40; p.aura = 1; }
+            if (f.sx.ph === 'charge') { p.dy = -4; p.rSx = 100; p.lSx = 100; p.rE = 90; p.lE = 90; p.rK = 70; p.lK = 70; p.lean = 0; p.roll = 0; p.twist = 0; p.aura = 0; p.hide = 1; }
+            else { p.spin = 0; p.rSx = 100; p.lSx = 100; p.rE = 100; p.lE = 100; p.rK = 110; p.lK = 110; p.rHx = 40; p.lHx = 40; p.aura = 0; p.hide = 1; }
             return p;
         }
         if (f.specialKind === 'CORE') {                // thrust the orb away
@@ -764,6 +764,7 @@ export class FighterModel {
         this.cur.spin = base.spin; this.cur.pitch = base.pitch;
 
         const pose = { ...this.cur };
+        pose.hide = base.hide;                               // Ember fireball: hide body inside the ball
         this.spinYaw = 0;
         const atk = this.#attackOverlay(alpha);
         if (atk) this.#charAnim(atk);
@@ -790,6 +791,8 @@ export class FighterModel {
         const sf = this.visFacing;
         this.flip.rotation.z = sf * pose.pitch * D2R - sf * pose.spin * D2R + (this.tumble || 0);
         this.tilt.rotation.set(pose.lean * D2R, pose.twist * D2R, pose.roll * D2R);
+        if (this.root) this.root.visible = !pose.hide;
+        else if (this.group) this.group.visible = !pose.hide;
         this.tilt.position.set(0, pose.dy, pose.fwd);
 
         this.torso.rotation.set(pose.torsoX * D2R, pose.torsoY * D2R, pose.torsoZ * D2R);

@@ -719,9 +719,6 @@ class Fighter {
 
         if (this.sx && this.sx.k === 'thunder') {
             this.vx = 0; this.vy = 0;                          // Volt Enlightened: frozen until the bolt ends
-        } else if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
-            // Ember charge: gravity applies (no hover); light horizontal hold only
-            this.vx *= 0.92;
         } else if (this.diving || this.spiralT > 0 || (this.sx && this.sx.k === 'rocket')) {
             this.vx *= 0.92;
         } else if (!this.grounded) {
@@ -729,6 +726,10 @@ class Fighter {
             if (!this.glide) this.vx *= WORLD.airFriction;
         } else {
             this.vx *= WORLD.friction;
+        }
+        // Ember Fireball charge: normal gravity (above), but no sideways drift / walk
+        if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
+            this.vx = 0;
         }
 
         this.x += this.vx;
@@ -1004,34 +1005,46 @@ class Fighter {
             if (x.ph === 'charge') {
                 x.c = Math.min(1, x.t / ROLL_CHARGE);
                 this.activeMove = null; this.facing = x.d;
-                // full charge held: auto-release after 0.5 s
                 if (x.c >= 1) { x.fullT = (x.fullT || 0) + 1; if (x.fullT >= ROLL_AUTO) { this.launchRoll(); return; } }
                 else x.fullT = 0;
-                const col = x.c >= 1 ? '#38bdf8' : '#fb923c';
+                // red → white → blue particle gradient
+                const col = x.c < 0.5 ? '#ef4444' : (x.c < 0.95 ? '#f8fafc' : '#38bdf8');
                 if (x.t % 4 === 0) createParticles(this.x, this.y, col, 2);
-                if (!this.fActive && !this.isAI) { this.launchRoll(); }          // the button is up: go
+                if (!this.fActive && !this.isAI) { this.launchRoll(); }
                 else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();
             } else {
-                const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;   // already 0.8× via specials.speed
+                const c = x.c, walk = 8.5 * charOf(this.char).walk, speed = lerpR(sp.speed, c) * walk;
                 if (x.v === undefined) x.v = x.d * speed;
                 const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
                 this.vx = x.v / (this.grounded ? WORLD.friction : WORLD.airFriction); if (Math.abs(x.v) > speed * 0.15) this.facing = x.v > 0 ? 1 : -1;
-                const sz = lerpR(sp.w, c);                                    // 0.6 of original size
+                const sz = lerpR(sp.w, c);
                 const life = sp.life ? Math.round(lerpR(sp.life, c)) : 60;
-                // uncharged / light charge: drill-carry, no knockback (like Phoenix drill). Full charge: rocket KB × (1 + 0.7*c) → 1.7× at full
-                const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.6, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.72;
-                const full = c >= 0.95;
-                const useKb = full || c > 0.55;                               // only the stronger half of charge launches
-                const kbMul = full ? 1.7 : (useKb ? (1 + 0.7 * c) : 0);
+                const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+                // tiers: low carry-only | mid carry | full instant KB
+                const full = c >= 0.95, mid = c >= 0.4 && !full, low = !mid && !full;
+                if (x.t % 5 === 0) this.swingHitSet = new Set();   // continuous multi-hits while rolling
                 this.activeMove = { type: 'BLINK', t: 2 };
-                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                    damage: lerpR(sp.dmg, c),
-                    bkb: useKb ? rb * kbMul : 0, kbg: useKb ? rk * kbMul : 0, angle: -0.6,
-                    // low charge: soft fixed shove that carries (drill-like), no real launch
-                    fixed: useKb ? null : { vx: (x.v || x.d * speed) * 0.55, vy: -1.2, hitstun: 10 },
-                    burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
-                const trail = c >= 1 ? '#38bdf8' : '#fb923c';
+                if (full) {
+                    // blue: instant knockback, no carry (rocket ×1.7 already baked into rocketBkb via 0.95)
+                    this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
+                        damage: lerpR(sp.dmg, c), bkb: rb * 1.7, kbg: rk * 1.7, angle: -0.55,
+                        burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
+                } else {
+                    // red/white: stick foes to this roller (true carry)
+                    this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
+                        damage: lerpR(sp.dmg, c), bkb: 0, kbg: 0, angle: -0.6,
+                        rollCarry: true,
+                        fixed: { vx: this.vx, vy: this.vy, hitstun: 10 },
+                        burn: { t: Math.round(lerpR(sp.burn, c)), dmg: sp.tick } };
+                }
+                // keep carried foes glued to us
+                for (const f of foesOf(this)) {
+                    if (f._rollCarry === this && f.hitstun > 0) {
+                        f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false;
+                    }
+                }
+                const trail = full ? '#38bdf8' : (mid ? '#e2e8f0' : '#ef4444');
                 if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
                 if (x.t >= life) this.endRoll();
@@ -1237,7 +1250,30 @@ class Fighter {
         fx('rocket', this.x, this.y, 0, 0, 'fire');
         S.screenShake = Math.max(S.screenShake, 6);
     }
-    endRoll() { this.sx = null; this.activeHitbox = null; this.activeMove = null; this.vx *= 0.4; }
+    endRoll() {
+        const x = this.sx;
+        if (x && x.k === 'roll' && x.ph === 'roll') {
+            const sp = spec(this.char, 'S'), c = x.c || 0;
+            const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+            const full = c >= 0.95, mid = c >= 0.4 && !full;
+            for (const f of foesOf(this)) {
+                if (f._rollCarry !== this) continue;
+                f._rollCarry = null;
+                if (full) continue;                          // full already knocked during roll
+                if (mid) {
+                    // white: knockback at the end of the carry
+                    launch(this, f, { damage: lerpR(sp.dmg, c) * 0.5, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: -0.55 });
+                } else {
+                    // red: grey stun 0.5 s, no knockback
+                    f.clashStunTimer = Math.max(f.clashStunTimer, 30);
+                    f.vx *= 0.2; f.vy *= 0.2;
+                    fx('hit', f.x, f.y, 6, -0.5);
+                }
+            }
+        }
+        if (this.sx && this.sx.k === 'roll') for (const f of fighters) if (f._rollCarry === this) f._rollCarry = null;
+        this.sx = null; this.activeHitbox = null; this.activeMove = null; this.vx *= 0.4;
+    }
 
     startSx(k, charge = 0, extra = {}) {
         this.sx = { k, t: 0, c: Math.round(charge * 100) / 100, tx: null, ty: null, d: 1, ...extra };
@@ -2692,6 +2728,7 @@ function launch(attacker, defender, hb) {
         defender.vy = hb.fixed.vy;
         defender.hitstun = hb.fixed.hitstun;
         defender.grounded = false;
+        if (hb.rollCarry) defender._rollCarry = attacker;   // Ember roll: stick to the roller
         S.screenShake = Math.max(S.screenShake, 5);
         audio.playHit(false);
         createParticles(defender.x, defender.y, '#c4b5fd', 8);

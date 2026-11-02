@@ -771,20 +771,36 @@ export class Effects {
             if (!f.active || f.out || !(f.charging || rolling) || S.gameState !== 'playing') { g.visible = false; return; }
             const u = g.userData; u.core.visible = u.mid.visible = u.halo.visible = true; u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
             g.visible = true;
-            if (rolling) {                                  // Ember's fireball roll: smaller ball; full charge turns blue
-                const c = f.sx.c || 0, r = (26 + 22 * c) * 0.6 * (1 + Math.sin(this.chargeT * 30) * 0.07);
-                const col = c >= 1 ? '#38bdf8' : (c > 0.7 ? '#60a5fa' : '#fb923c');
-                g.position.set(wx(f.x), wy(f.y), 6); this.#paintOrb(g, r, col, 0.9);
-                // Sonic spin-dash slant while charging only (not while rolling)
+            if (rolling) {                                  // Ember fireball: covers the fighter; red→white→blue gradient
+                const c = f.sx.c || 0;
+                // visual ball large enough to hide the body (hitbox stays smaller in sim)
+                const r = (48 + 18 * c) * (1 + Math.sin(this.chargeT * 28) * 0.06);
+                // smooth gradient: red (0) → white (0.5) → blue (1)
+                const hexLerp = (a, b, t) => {
+                    const p = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+                    const A = p(a), B = p(b);
+                    const m = (i) => Math.round(A[i] + (B[i] - A[i]) * t).toString(16).padStart(2, '0');
+                    return '#' + m(0) + m(1) + m(2);
+                };
+                const col = c < 0.5 ? hexLerp('#ef4444', '#f8fafc', c / 0.5) : hexLerp('#f8fafc', '#38bdf8', (c - 0.5) / 0.5);
+                g.position.set(wx(f.x), wy(f.y), 8); this.#paintOrb(g, r, col, 0.95);
+                // slant THE BALL (spin-dash look) while charging only — not the player model
                 if (f.sx.ph === 'charge') {
-                    const slant = c * 0.95 * (f.sx.d || f.facing || 1);   // more charge → more lean into the aim
+                    const dir = f.sx.d || f.facing || 1;
+                    const slant = c * 1.05 * dir;
                     g.rotation.z = -slant;
-                    g.scale.set(1 + c * 0.15, 1 - c * 0.35, 1);          // squash into a slanted oval
+                    g.scale.set(1 + c * 0.2, Math.max(0.45, 1 - c * 0.42), 1);
                 } else {
-                    g.rotation.z = 0; g.scale.set(1, 1, 1);
+                    // rolling: keep a mild oval in the travel direction
+                    const dir = Math.sign(f.vx || f.sx.d || 1);
+                    g.rotation.z = -dir * 0.25;
+                    g.scale.set(1.15, 0.85, 1);
                 }
-                if (Math.random() < 0.8) this.sparks(g.position.clone(), c >= 1 ? '#7dd3fc' : '#fb923c', 2, 140 + 60 * c, 0.3);
-                if (f.sx.ph === 'charge' && Math.random() < 0.5) { const a = Math.random() * 6.28; this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 90, Math.sin(a) * 90, 0)), a + Math.PI, col, 1, 420, 0.1, 0.18); }
+                if (Math.random() < 0.85) this.sparks(g.position.clone(), col, 2, 150 + 50 * c, 0.3);
+                if (f.sx.ph === 'charge' && Math.random() < 0.55) {
+                    const a = Math.random() * 6.28;
+                    this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 100, Math.sin(a) * 100, 0)), a + Math.PI, col, 1, 400, 0.1, 0.18);
+                }
                 return;
             }
             const c = Math.min(1, f.chargeFrames / CHARGE_MAX), full = c >= 1;
