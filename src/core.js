@@ -1026,7 +1026,9 @@ class Fighter {
                 // tiers first (needed for distance)
                 const full = c >= 0.9, mid = c >= 0.4 && !full;
                 // white travels 1.4× as far as red (same speed, longer life); blue uses full charged life
-                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk * (mid || full ? 1.2 : 1.1);   // white and blue 1.2x faster, red 1.1x  // white distance = 1.4× red via longer life
+                // red base; white 1.2×; blue faster version of white (1.45×)
+                const spdMul = full ? 1.45 : (mid ? 1.2 : 1.1);
+                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk * spdMul;
                 if (x.v === undefined) x.v = x.d * speed;
                 const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
@@ -1050,15 +1052,11 @@ class Fighter {
                 const left = life - x.t;
                 const ticksRemaining = Math.ceil(Math.max(0, left) / every);
                 const redLate = !full && !mid && isTick && ticksRemaining <= 5 && ticksRemaining >= 1;
-                if (full) {
-                    this.activeHitbox = null;
-                } else {
-                    // carry only on the hitbox (0 dmg here); red damage applied directly below so multi-hit set cannot eat it
-                    this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                        damage: 0, bkb: 0, kbg: 0, angle: -0.6,
-                        rollCarry: true,
-                        fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
-                }
+                // red / white / blue all carry (blue = faster white); tick dmg only on red late
+                this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
+                    damage: 0, bkb: 0, kbg: 0, angle: -0.6,
+                    rollCarry: true,
+                    fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
                 // keep carried foes glued to us
                 for (const f of foesOf(this)) {
                     if (f._rollCarry === this && f.hitstun > 0) {
@@ -1083,24 +1081,6 @@ class Fighter {
                         audio.playHit(false);
                     }
                 }
-                // BLUE: 19 dmg — missile explodeOrb angle, KB ×0.4
-                if (full) {
-                    if (!x.blueHit) x.blueHit = new Set();
-                    const mBkb = 9.6 * 0.4, mKbg = 0.72 * 0.4;
-                    for (const f of foesOf(this)) {
-                        if (!isAlive(f) || f.invincibleTimer > 0 || x.blueHit.has(f)) continue;
-                        const hw = sz / 2 + f.width / 2 + 8, hh = sz / 2 + f.height / 2 + 8;
-                        if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
-                        x.blueHit.add(f);
-                        f._rollCarry = null;
-                        f.grounded = false;
-                        const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.vx || this.facing || 1);
-                        launch(this, f, { damage: 19, bkb: mBkb, kbg: mKbg, angle: ang, x: this.x, y: this.y });
-                        fx('explosion', this.x, this.y, 70, 0.6, 'fire');
-                        S.screenShake = Math.max(S.screenShake, 12);
-                    }
-                }
-
                 const trail = full ? '#38bdf8' : (mid ? '#e2e8f0' : '#ef4444');
                 if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
@@ -1313,15 +1293,15 @@ class Fighter {
             const sp = spec(this.char, 'S'), c = x.c || 0;
             const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
             const full = c >= 0.9, mid = c >= 0.4 && !full;
+            // white end 8; blue end 12 (1.5× white) — both drag then launch
+            const endDmg = full ? 12 : (mid ? 8 : 0);
             for (const f of foesOf(this)) {
                 if (f._rollCarry !== this) continue;
                 f._rollCarry = null;
-                if (full) continue;                          // full already knocked during roll
-                if (mid) {
-                    // white: all damage ×1/1.5 → 8 (rounded) + KB (missile-style angle)
-                    f._rollCarry = null; f.grounded = false;
+                if (endDmg) {
+                    f.grounded = false;
                     const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
@@ -1329,16 +1309,16 @@ class Fighter {
                     fx('hit', f.x, f.y, 6, -0.5);
                 }
             }
-            // white: also hit anyone still overlapping even if not flagged carried
-            if (mid) {
-                const sp2 = sp, sz2 = lerpR(sp2.w, c);
+            // white/blue: also hit anyone still overlapping even if not flagged carried
+            if (endDmg) {
+                const sz2 = lerpR(sp.w, c);
                 for (const f of foesOf(this)) {
                     if (!isAlive(f) || f.invincibleTimer > 0) continue;
                     if (Math.abs(f.x - this.x) > sz2 / 2 + f.width / 2 + 10 || Math.abs(f.y - this.y) > sz2 / 2 + f.height / 2 + 10) continue;
-                    if (f.lastHitBy === this && f.lastHitT < 3) continue; // already launched above
+                    if (f.lastHitBy === this && f.lastHitT < 3) continue;
                     f.grounded = false;
                     const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
                 }
             }
         }
