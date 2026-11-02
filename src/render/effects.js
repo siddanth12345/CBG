@@ -218,8 +218,42 @@ export class Effects {
             }
             const FW = ['#fb923c', '#fde047', '#f472b6', '#38bdf8', '#a3e635', '#f87171', '#c084fc', '#ffffff'];
             for (let i = 0; i < 8; i++) { const b = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: new THREE.Color(FW[i]).multiplyScalar(2.2), toneMapped: false })); b.scale.setScalar(0.2 + (i % 3) * 0.04); fw.add(b); }
+            // Ember Fireball Roll: cracked magma → white fire → blue fire (diameter ≈ fighter)
+            const magma = new THREE.Group();
+            const magmaRock = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(1, 1),
+                new THREE.MeshStandardMaterial({ color: 0x1c1917, flatShading: true, roughness: 0.95, metalness: 0.15, emissive: 0x7c2d12, emissiveIntensity: 0.85 })
+            );
+            magma.add(magmaRock);
+            // glowing crack veins
+            for (let i = 0; i < 6; i++) {
+                const vein = new THREE.Mesh(
+                    new THREE.TorusGeometry(0.55 + (i % 3) * 0.12, 0.035, 6, 20, Math.PI * (0.6 + (i % 2) * 0.5)),
+                    new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(2.2), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false })
+                );
+                vein.rotation.set(i * 0.9, i * 1.1, i * 0.4);
+                magma.add(vein);
+            }
+            const magmaGlow = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({
+                color: new THREE.Color('#ef4444').multiplyScalar(1.8), transparent: true, opacity: 0.35, blending: ADD, depthWrite: false, toneMapped: false
+            }));
+            magmaGlow.scale.setScalar(1.08);
+            magma.add(magmaGlow);
+            const magmaFire = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({
+                color: new THREE.Color('#f8fafc').multiplyScalar(1.6), transparent: true, opacity: 0, blending: ADD, depthWrite: false, toneMapped: false
+            }));
+            magmaFire.scale.setScalar(1.12);
+            magma.add(magmaFire);
+            const magmaHalo = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({
+                color: new THREE.Color('#38bdf8').multiplyScalar(1.4), transparent: true, opacity: 0, blending: ADD, depthWrite: false, toneMapped: false
+            }));
+            magmaHalo.scale.setScalar(1.35);
+            magma.add(magmaHalo);
+            magma.visible = false;
+
             rock.visible = voidG.visible = bub.visible = rk.visible = th.visible = chips.visible = fw.visible = false;
-            g.add(rock, voidG, bub, rk, th, chips, fw); Object.assign(g.userData, { rock, voidG, bub, vr, vr2, rk, th, tr1, tr2, chips, fw, rflame, rflame2 });
+            g.add(rock, voidG, bub, rk, th, chips, fw, magma);
+            Object.assign(g.userData, { rock, voidG, bub, vr, vr2, rk, th, tr1, tr2, chips, fw, rflame, rflame2, magma, magmaRock, magmaGlow, magmaFire, magmaHalo });
             g.visible = false; g.renderOrder = 6; this.scene.add(g);
             return g;
         };
@@ -771,13 +805,59 @@ export class Effects {
             if (!f.active || f.out || !(f.charging || rolling) || S.gameState !== 'playing') { g.visible = false; return; }
             const u = g.userData; u.core.visible = u.mid.visible = u.halo.visible = true; u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
             g.visible = true;
-            if (rolling) {                                  // Ember's fireball roll: the fireball hugs him while charging and rolling
-                const c = f.sx.c || 0, r = (26 + 22 * c) * (1 + Math.sin(this.chargeT * 30) * 0.07);
-                g.position.set(wx(f.x), wy(f.y), 6); this.#paintOrb(g, r, c >= 1 ? '#fde047' : '#fb923c', 0.9);
-                if (Math.random() < 0.8) this.sparks(g.position.clone(), Math.random() < 0.5 ? '#fb923c' : '#fde047', 2, 160 + 80 * c, 0.3);
-                if (f.sx.ph === 'charge' && Math.random() < 0.5) { const a = Math.random() * 6.28; this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * 110, Math.sin(a) * 110, 0)), a + Math.PI, '#fb923c', 1, 500, 0.1, 0.18); }
+            if (rolling) {
+                // Full-body magma fireball: diameter ≈ fighter height (covers the model)
+                const c = f.sx.c || 0;
+                const diam = (f.height || 68) * 1.05;          // slightly larger than the body
+                const r = diam * 0.5 * (1 + Math.sin(this.chargeT * 22) * 0.04);
+                const u = g.userData;
+                u.core.visible = u.mid.visible = u.halo.visible = false;
+                u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
+                if (u.bub) u.bub.visible = false;
+                if (u.rk) u.rk.visible = false;
+                if (u.th) u.th.visible = false;
+                u.magma.visible = true;
+                g.position.set(wx(f.x), wy(f.y), 10);
+                g.scale.setScalar(r);
+                // cracked rock always under; fire layers ramp with charge
+                // c 0→0.45: magma cracks brighten; 0.45→0.85: white fire blooms; 0.85→1: blue takes over
+                const rockEm = 0.6 + Math.min(1, c / 0.45) * 1.4;
+                u.magmaRock.material.emissiveIntensity = rockEm;
+                u.magmaRock.rotation.y += dt * (1.2 + c * 2.5);
+                u.magmaRock.rotation.x += dt * 0.7;
+                u.magmaGlow.material.opacity = 0.25 + Math.min(1, c / 0.4) * 0.45;
+                u.magmaGlow.material.color.set(c < 0.5 ? '#ef4444' : '#fb923c').multiplyScalar(1.8);
+                // white fire
+                const wT = Math.max(0, Math.min(1, (c - 0.35) / 0.4));
+                u.magmaFire.material.opacity = wT * 0.7;
+                u.magmaFire.material.color.set('#f8fafc').multiplyScalar(1.5 + wT * 0.6);
+                u.magmaFire.scale.setScalar(1.08 + wT * 0.12);
+                // blue fire
+                const bT = Math.max(0, Math.min(1, (c - 0.7) / 0.3));
+                u.magmaHalo.material.opacity = bT * 0.75;
+                u.magmaHalo.material.color.set('#38bdf8').multiplyScalar(1.6 + bT * 0.8);
+                u.magmaHalo.scale.setScalar(1.2 + bT * 0.25);
+                // spin-dash slant on the BALL only while charging
+                if (f.sx.ph === 'charge') {
+                    const dir = f.sx.d || f.facing || 1;
+                    g.rotation.z = -dir * c * 0.95;
+                    g.scale.set(r * (1 + c * 0.12), r * Math.max(0.5, 1 - c * 0.38), r);
+                } else {
+                    const dir = Math.sign(f.vx || f.sx.d || 1);
+                    g.rotation.z = -dir * 0.2;
+                    g.rotation.x += dt * 8 * dir;
+                    g.scale.set(r * 1.08, r * 0.9, r);
+                }
+                // sparks match phase
+                const sparkCol = bT > 0.4 ? '#7dd3fc' : (wT > 0.4 ? '#f8fafc' : '#fb923c');
+                if (Math.random() < 0.75) this.sparks(g.position.clone(), sparkCol, 2, 120 + 80 * c, 0.28);
+                if (f.sx.ph === 'charge' && Math.random() < 0.4 + c * 0.4) {
+                    const a = Math.random() * 6.28;
+                    this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2, 0)), a + Math.PI, sparkCol, 1, 360, 0.1, 0.16);
+                }
                 return;
             }
+            if (u.magma) u.magma.visible = false;
             const c = Math.min(1, f.chargeFrames / CHARGE_MAX), full = c >= 1;
             const r = (5 + 15 * c) * (1 + Math.sin(this.chargeT * 30) * 0.08);
             g.position.set(wx(f.x + f.facing * (30 + 8 * c)), wy(f.y - 2), 8);
