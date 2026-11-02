@@ -1029,16 +1029,16 @@ class Fighter {
                 const isTick = (x.tickN % every) === 0;
                 if (isTick) this.swingHitSet = new Set();
                 this.activeMove = { type: 'BLINK', t: 2 };
-                // red: last 5 ticks deal 2 each; white: no tick dmg; blue: contact only
-                // remaining frames in roll
+                // remaining frames — red deals 2 on each of the last 5 tick beats only
                 const left = life - x.t;
-                // red tick count is ~ every 6 frames; last 5 ticks ≈ last 30 frames
-                const redLate = !full && !mid && isTick && left <= 30;
+                const ticksRemaining = Math.ceil(Math.max(0, left) / every);
+                const redLate = !full && !mid && isTick && ticksRemaining <= 5 && ticksRemaining >= 1;
                 if (full) {
                     this.activeHitbox = null;
                 } else {
+                    // carry only on the hitbox (0 dmg here); red damage applied directly below so multi-hit set cannot eat it
                     this.activeHitbox = { x: this.x, y: this.y, w: sz, h: sz, type: 'BLINK', ttl: 3, multi: true, mirror: true,
-                        damage: redLate ? 2 : 0, bkb: 0, kbg: 0, angle: -0.6,
+                        damage: 0, bkb: 0, kbg: 0, angle: -0.6,
                         rollCarry: true,
                         fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
                 }
@@ -1048,7 +1048,25 @@ class Fighter {
                         f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false;
                     }
                 }
-                // blue: one solid 16-dmg hit, knockback away from contact (redo)
+                // RED: last 5 ticks × 2 damage (direct, reliable)
+                if (redLate) {
+                    if (!x.redTickHit) x.redTickHit = new Set(); // per tick beat, not per foe forever
+                    const beat = Math.floor(x.tickN / every);
+                    if (x.redBeat !== beat) { x.redBeat = beat; x.redTickHit = new Set(); }
+                    for (const f of foesOf(this)) {
+                        if (!isAlive(f) || f.invincibleTimer > 0 || x.redTickHit.has(f)) continue;
+                        const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
+                        if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
+                        if (f._rollCarry !== this && !(Math.abs(f.x - this.x) <= hw && Math.abs(f.y - this.y) <= hh)) continue;
+                        x.redTickHit.add(f);
+                        f.damage += 2;
+                        f.lastHitBy = this; f.lastHitT = 0;
+                        createParticles(f.x, f.y, '#fb923c', 4);
+                        fx('hit', f.x, f.y, 4, -0.5);
+                        audio.playHit(false);
+                    }
+                }
+                // BLUE: 16 dmg, same KB strength as before, fixed 22° above horizontal away from contact
                 if (full) {
                     if (!x.blueHit) x.blueHit = new Set();
                     for (const f of foesOf(this)) {
@@ -1056,13 +1074,13 @@ class Fighter {
                         const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
                         if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
                         x.blueHit.add(f);
-                        let dx = f.x - this.x, dy = f.y - this.y;
+                        let dx = f.x - this.x;
                         const travel = (x.v !== undefined ? Math.sign(x.v) : 0) || this.facing || x.d || 1;
-                        if (Math.hypot(dx, dy) < 14) { dx = travel; dy = -0.35; }
-                        // slight upward bias so they pop off the stage floor
-                        const ang = Math.atan2(dy - Math.abs(dx) * 0.15, dx);
-                        // redo KB: strong base + growth, readable send
-                        launch(this, f, { damage: 16, bkb: 16, kbg: 1.15, angle: ang });
+                        const side = Math.sign(dx) || travel;
+                        // y grows downward → negative sin = up; 22° above ground level
+                        const rad = 22 * Math.PI / 180;
+                        const ang = Math.atan2(-Math.sin(rad), Math.cos(rad) * side);
+                        launch(this, f, { damage: 16, bkb: rb * 1.7, kbg: rk * 1.7, angle: ang });
                     }
                 }
 
