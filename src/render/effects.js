@@ -73,6 +73,45 @@ const CRESCENT_FS = `uniform vec3 uColor; uniform float uReveal; uniform float u
         gl_FragColor = vec4(c * 1.8, a);
     }`;
 
+
+/** Procedural magma ball textures: a dark red crust broken by a network of cracks (Voronoi edges). The same crack map drives
+ *  the glow (yellow-hot core, orange rim) and a height map so the cracks are sunken between raised crust plates (real depth under light). */
+let _magma = null;
+function magmaTextures() {
+    if (_magma) return _magma;
+    const W = 512, H = 256, N = 70;
+    const pts = Array.from({ length: N }, () => [Math.random() * W, Math.random() * H]);
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+    const cc = mk(), gc = mk(), hc = mk();
+    const cx = cc.getContext('2d'), gx = gc.getContext('2d'), hx = hc.getContext('2d');
+    const ci = cx.createImageData(W, H), gi = gx.createImageData(W, H), hi = hx.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        let d1 = 1e9, d2 = 1e9;
+        for (const [px, py] of pts) {
+            let dx = Math.abs(x - px); if (dx > W / 2) dx = W - dx;            // wraps round the sphere
+            const dy = (y - py) * 2;                                              // equirect stretches vertically less than horizontally near the poles, close enough
+            const d = Math.hypot(dx, dy);
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+        }
+        const e = d2 - d1;                                                      // 0 on a crack, grows toward a plate's middle
+        const core = Math.max(0, 1 - e / 4.2), rim = Math.max(0, 1 - e / 8);
+        const n = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.sin(y * 0.33) * 2.0) * Math.sin(y * 0.27 + Math.sin(x * 0.17));
+        const o = (y * W + x) * 4;
+        // crust: dark red, slightly mottled, a touch brighter near the cracks
+        ci.data[o] = 44 + 24 * n + 40 * rim; ci.data[o + 1] = 6 + 4 * n + 10 * rim; ci.data[o + 2] = 6 + 3 * n; ci.data[o + 3] = 255;
+        // glow: yellow-white in the crack, orange at the lips, nothing on the crust
+        const g = core, r2 = Math.pow(rim, 2.2);
+        gi.data[o] = Math.min(255, 255 * (g + r2 * 0.45)); gi.data[o + 1] = Math.min(255, 235 * g + 50 * r2); gi.data[o + 2] = Math.min(255, 120 * g * g); gi.data[o + 3] = 255;
+        // height: plates stand proud, cracks are sunken
+        const hgt = Math.min(1, e / 8) * (0.8 + 0.2 * n);
+        hi.data[o] = hi.data[o + 1] = hi.data[o + 2] = 255 * hgt; hi.data[o + 3] = 255;
+    }
+    cx.putImageData(ci, 0, 0); gx.putImageData(gi, 0, 0); hx.putImageData(hi, 0, 0);
+    const T = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+    _magma = { color: T(cc, true), glow: T(gc, true), height: T(hc, false) };
+    return _magma;
+}
+
 export class Effects {
     constructor(scene) {
         this.scene = scene;
@@ -222,20 +261,12 @@ export class Effects {
             for (let i = 0; i < 8; i++) { const b = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: new THREE.Color(FW[i]).multiplyScalar(2.2), toneMapped: false })); b.scale.setScalar(0.2 + (i % 3) * 0.04); fw.add(b); }
             // Ember Fireball Roll: cracked magma → white fire → blue fire (diameter ≈ fighter)
             const magma = new THREE.Group();
+            const mt = magmaTextures();
             const magmaRock = new THREE.Mesh(
-                new THREE.IcosahedronGeometry(1, 1),
-                new THREE.MeshStandardMaterial({ color: 0x1c1917, flatShading: true, roughness: 0.95, metalness: 0.15, emissive: 0x7c2d12, emissiveIntensity: 0.85 })
+                new THREE.SphereGeometry(1, 56, 36),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, map: mt.color, bumpMap: mt.height, bumpScale: 5, roughness: 0.92, metalness: 0.05, emissive: 0xffffff, emissiveMap: mt.glow, emissiveIntensity: 1.2 })
             );
             magma.add(magmaRock);
-            // glowing crack veins
-            for (let i = 0; i < 6; i++) {
-                const vein = new THREE.Mesh(
-                    new THREE.TorusGeometry(0.55 + (i % 3) * 0.12, 0.035, 6, 20, Math.PI * (0.6 + (i % 2) * 0.5)),
-                    new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(2.2), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false })
-                );
-                vein.rotation.set(i * 0.9, i * 1.1, i * 0.4);
-                magma.add(vein);
-            }
             const magmaGlow = new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({
                 color: new THREE.Color('#ef4444').multiplyScalar(1.8), transparent: true, opacity: 0.35, blending: ADD, depthWrite: false, toneMapped: false
             }));
@@ -825,11 +856,11 @@ export class Effects {
                 g.scale.setScalar(r);
                 // cracked rock always under; fire layers ramp with charge
                 // c 0→0.45: magma cracks brighten; 0.45→0.85: white fire blooms; 0.85→1: blue takes over
-                const rockEm = 0.6 + Math.min(1, c / 0.45) * 1.4;
+                const rockEm = 0.8 + Math.min(1, c / 0.45) * 0.9;
                 u.magmaRock.material.emissiveIntensity = rockEm;
                 u.magmaRock.rotation.y += dt * (1.2 + c * 2.5);
                 u.magmaRock.rotation.x += dt * 0.7;
-                u.magmaGlow.material.opacity = 0.25 + Math.min(1, c / 0.4) * 0.45;
+                u.magmaGlow.material.opacity = 0.02 + Math.min(1, c / 0.4) * 0.18;
                 u.magmaGlow.material.color.set(c < 0.5 ? '#ef4444' : '#fb923c').multiplyScalar(1.8);
                 // white fire
                 const wT = Math.max(0, Math.min(1, (c - 0.35) / 0.4));
@@ -857,7 +888,7 @@ export class Effects {
                 // the magma shell burns away as the white fire takes over, and the blue phase is one smooth fireball
                 const burn = Math.max(0, Math.min(1, (c - 0.3) / 0.45));
                 u.magmaRock.scale.setScalar(1 - 0.5 * burn * burn);
-                u.magmaRock.material.emissive.set(bT > 0.3 ? '#2f8cff' : (burn > 0.5 ? '#fdba74' : '#7c2d12'));
+                u.magmaRock.material.emissive.set(bT > 0.3 ? '#7cc4ff' : '#ffffff');
                 u.magmaFire.scale.setScalar((1.04 + 0.1 * burn) * (1 + Math.sin(this.chargeT * 17) * 0.03));
                 u.magmaFire.material.opacity = Math.min(0.55, wT * 0.55) * (1 - 0.6 * bT);
                 if (bT > 0) u.magmaGlow.material.color.set('#2f8cff').multiplyScalar(1.8);
