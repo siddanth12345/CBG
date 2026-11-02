@@ -81,7 +81,7 @@ document.addEventListener('cbg-fs', toggleFullscreen);
     let v = document.querySelector('meta[name=viewport]');
     if (!v) { v = document.createElement('meta'); v.name = 'viewport'; document.head.appendChild(v); }
     v.content = 'width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover';
-    document.documentElement.style.touchAction = 'manipulation'; document.body.style.touchAction = document.body.style.touchAction || 'manipulation';
+    document.documentElement.style.touchAction = 'pan-x pan-y'; document.body.style.touchAction = document.body.style.touchAction || 'pan-x pan-y';   // pan, never pinch / double-tap zoom
     document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
     document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
     document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
