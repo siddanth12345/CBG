@@ -1042,14 +1042,17 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
-                // under the main stage (below top surface off-stage, or below stage body) → end roll
-                // stops dragging foes into the under-stage kill zone; white/blue get their end hit, red does not
+                // past the main stage side edges (ledge line) or under the stage → end roll
+                // stops dragging foes off into the kill zone; white/blue get end hit, red does not
                 {
                     const top = STAGE.y, bot = STAGE.y + STAGE.height;
-                    const L = STAGE.x, R = STAGE.x + STAGE.width;
+                    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;   // same inset as shield-roll ledge stop
+                    let pastSide = false;
+                    if (this.x < L) { this.x = L; pastSide = true; }
+                    else if (this.x > R) { this.x = R; pastSide = true; }
                     const under = this.y > bot + 4
-                        || (this.y > top + 8 && (this.x + this.width / 2 < L || this.x - this.width / 2 > R));
-                    if (under) { this.endRoll(); return; }
+                        || (this.y > top + 8 && (this.x <= L || this.x >= R));
+                    if (pastSide || under) { this.endRoll(); return; }
                 }
                 // tick cadence: red every 6, white every 5, blue every 2 → 1 dmg
                 x.tickN = (x.tickN || 0) + 1;
