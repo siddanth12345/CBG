@@ -914,14 +914,13 @@ class Fighter {
                 if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
                     const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
-                    // only one whirlpool on the arena — if one is live, keep animation but spawn nothing
+                    // only one whirlpool — if one is live, animation only (no second pool)
                     if (whirlpools.length === 0) {
-                        this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
-                            damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 0 };
+                        // no activeHitbox: zero damage, zero stun — pure pull zone
                         whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
                         fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
-                        S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
-                        createParticles(cx, feet - 10, '#38bdf8', 22);
+                        S.screenShake = Math.max(S.screenShake, 8);
+                        createParticles(cx, feet - 10, '#38bdf8', 16);
                     } else {
                         fx('gust', cx, feet, R * 0.35, 0, 'water');
                     }
@@ -3029,29 +3028,33 @@ function updateWhirlpools() {
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
-        // pull zone = whirlpool itself: diameter horizontally (dist from centre ≤ r), height = radius above surface
+        // pull zone = pool itself (diameter wide, radius tall) — grab-style forced center lock
         for (const f of foesOf(w.owner || p1)) {
             if (!isAlive(f) || f.invincibleTimer > 0) continue;
-            if (f.hitstun > 14) { f._inWhirl = false; continue; }
+            // real launches can still knock you free
+            if (f.hitstun > 18) { f._inWhirl = false; continue; }
             const dx = w.x - f.x;
             const horiz = Math.abs(dx);
             if (horiz > w.r + f.width * 0.35) { f._inWhirl = false; continue; }
-            // vertical: on/near surface up to one radius above the pool (not a huge above-zone)
             const above = w.y - f.y;
             if (above > w.r + f.height * 0.5 || f.y > w.y + f.height) { f._inWhirl = false; continue; }
-            const targetY = w.y - f.height * 0.35;
-            const dy = targetY - f.y;
-            const dist = Math.hypot(dx, dy) || 0.001;
-            if (!f._inWhirl) f._inWhirl = true;
-            // no stun — only strong pull toward centre
-            const pull = w.pull || 2;
-            if (dist > 4) {
-                f.vx = dx / dist * pull;
-                f.vy = dy / dist * pull * 0.7;
-            } else {
-                f.vx *= 0.3; f.vy *= 0.3;
-            }
+
+            // centre of the pool (same idea as grab: force position toward the holder)
+            const tx = w.x;
+            const ty = w.y - f.height * 0.35;
+            // grab-style: zero out velocity, then snap/lerp body toward centre every frame
+            f.clashStunTimer = 0;            // never grey-stun from the pool
+            f.vx = 0;
+            f.vy = 0;
+            // strong lerp into centre (forcible, like being held)
+            const k = 0.55;
+            f.x += (tx - f.x) * k;
+            f.y += (ty - f.y) * k;
+            // residual velocity so physics/other systems still see motion toward centre
+            f.vx = (tx - f.x) * 2.5;
+            f.vy = (ty - f.y) * 2.5;
             f.grounded = false;
+            f._inWhirl = true;
         }
     }
 }
