@@ -6,7 +6,7 @@
 // The centre of the map is the 3D origin, and it is also the point the camera looks at,
 // so the middle of the screen is always the middle of the map. All gameplay stays in the
 // 2D plane z = 0; depth is purely visual.
-import { WORLD } from '../core.js';
+import { WORLD } from 'cbg/core';
 
 export let CX = WORLD.width / 2;   // 1900 (live: the lobby arena is bigger)
 export let CY = WORLD.height / 2;  // 1050

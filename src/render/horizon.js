@@ -2,7 +2,7 @@
 // a hazy sun, drifting clouds, floating islands, one giant waterfall and a huge castle very far off.
 // Collision is exactly Frontier's (the € and ¥ versions share the same rectangles); everything here is looks only.
 import * as THREE from 'three';
-import { STAGE, BLAST_ZONES, WORLD } from '../core.js';
+import { STAGE, BLAST_ZONES, WORLD } from 'cbg/core';
 import { wx, wy } from './space.js';
 
 // small seeded random so every client builds the same valley

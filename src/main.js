@@ -1,10 +1,10 @@
-// BUILD_STAMP 20261103p
+// BUILD_STAMP 20261103q
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf,
-} from './core.js';
+} from 'cbg/core';
 import { held, actionsFor } from './controls.js';
 import { TouchControls } from './touch.js';
 import { LayoutEditor } from './layoutUI.js';

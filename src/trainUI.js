@@ -1,5 +1,5 @@
 // Training menu: Configure / Characters / Bots, with saved preferences (up to 10).
-import { S, p1, p2, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, setArena, assignTagNames } from './core.js';
+import { S, p1, p2, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, setArena, assignTagNames } from 'cbg/core';
 import { CHAR_IDS, CHARS, charOf, getMyChar, setMyChar } from './characters.js';
 import { Party } from './net/party.js';
 

@@ -1,9 +1,9 @@
 // Guided tutorial: plays in a real training match. Each step watches the game state and advances
 // by itself when you do what it asks. Backspace = previous step, Enter = skip, Esc = leave.
-import { S, p1, orbs, startMatchSequence } from './core.js';
+import { S, p1, orbs, startMatchSequence } from 'cbg/core';
 import { keyLabel } from './controls.js';
 import { touchMode } from './layout.js';
-import { items, spawnItem } from './core.js';
+import { items, spawnItem } from 'cbg/core';
 import { charOf } from './characters.js';
 import { spec } from './specials.js';
 

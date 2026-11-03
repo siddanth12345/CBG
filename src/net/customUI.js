@@ -1,5 +1,5 @@
 // Custom match: create / join a lobby (up to 8 players), pick FFA or teams, starting damage and stocks.
-import { S, MAP_NAMES } from '../core.js';
+import { S, MAP_NAMES } from 'cbg/core';
 import { Online, hostRoom, joinRoom, leaveRoom, setLobbySetting, setMemberTeam, setMemberChar, kickMember, beginLobbyMatch, addBot } from './online.js';
 import { Party } from './party.js';
 import { CHAR_IDS, CHARS, charOf } from '../characters.js';
