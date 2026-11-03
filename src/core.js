@@ -525,7 +525,11 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.sideT > 0) this.sideT--;
         if (this.upT > 0) this.upT--;
-        if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) this.glide = false;
+        if (this.glideT > 0) {
+            this.glideT--;
+            if (this.glideT <= 0) this.glide = false;          // boost window over → normal drift / friction
+        }
+        if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) { this.glide = false; this.glideT = 0; }
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
             if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
@@ -901,8 +905,8 @@ class Fighter {
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
                 if (sp.zone) {
-                    // lasting whirlpool on the ground (Tide): initial hit, then zone pulls + stuns for sp.life frames
-                    const R = STAGE.width * (sp.R || sp.w * 0.5);
+                    // fixed pixel radius (rPx) so big maps don't scale the pool up
+                    const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
                     this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
                         damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
                     whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
@@ -974,20 +978,42 @@ class Fighter {
                 const w = STAGE.width * sp.w, px = this.x, feet = this.y + this.height / 2;
                 this.swingHitSet = new Set();
                 this.activeHitbox = { x: px, y: feet - sp.h / 2 + 30, w, h: sp.h, type: 'SPIRAL', ttl: sp.rideFrames, multi: true, mirror: true,
-                    damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.45, stun: sp.stun || 0, lift: sp.lift || 0 };      // foes in it are lifted and stunned (grey), no knockback
+                    damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.45, stun: sp.stun || 0, lift: sp.lift || 0 };
                 fx('pillar', px, feet, w, sp.h, STYLE_OF[this.char] + '!'); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                 x.px = px;
             }
-            if (x.t > sp.windup && x.t <= sp.windup + sp.rideFrames) {      // the pillar pushes Tide up
-                this.vy = -sp.ride; this.grounded = false; this.vx *= 0.5;
+            // ride: smooth upward push (additive) so gravity still shapes the arc
+            if (x.t > sp.windup && x.t <= sp.windup + sp.rideFrames) {
+                this.grounded = false;
+                this.vy -= sp.ride * 0.42;                       // soft continuous lift (not a hard lock)
+                this.vy = Math.max(this.vy, -sp.ride * 1.35);    // cap climb speed
+                this.vx *= 0.88;
                 if (x.t % 3 === 0) fx('trail', this.x, this.y + 30, -Math.PI / 2, 0, 'water');
             }
-            if (x.t === sp.windup + sp.rideFrames) {                           // then a boost toward the aim: 3x his walk speed
-                const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x), spd = 3 * 8.5 * charOf(this.char).walk;
-                this.vx = Math.cos(ang) * spd; this.vy = Math.sin(ang) * spd - 2; if (Math.abs(this.vx) > 3) this.facing = this.vx > 0 ? 1 : -1;
+            // aim boost: 1.5× the old 3× walk speed, eased in over several frames (gravity still applies after)
+            if (x.t === sp.windup + sp.rideFrames) {
+                const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x);
+                const spd = 4.5 * 8.5 * charOf(this.char).walk;  // was 3×, now 1.5× faster → 4.5× walk
+                x.bvx = Math.cos(ang) * spd;
+                x.bvy = Math.sin(ang) * spd - 1.2;
+                x.boostLeft = 10;
+                if (Math.abs(x.bvx) > 3) this.facing = x.bvx > 0 ? 1 : -1;
                 fx('gust', this.x, this.y, 90, 0, 'water'); fx('trail', this.x, this.y, Math.round(ang * 100) / 100, 1, 'water');
             }
-            if (x.t >= sp.windup + sp.rideFrames + 4) { this.sx = null; this.activeMove = null; this.glide = !this.grounded && !this.isHanging; }
+            if (x.boostLeft > 0) {
+                const a = 0.2;                                   // ease toward boost vector (smooth, not a snap)
+                this.vx += (x.bvx - this.vx) * a;
+                this.vy += (x.bvy - this.vy) * a;
+                this.grounded = false;
+                x.boostLeft--;
+            }
+            if (x.t >= sp.windup + sp.rideFrames + 12) {
+                this.sx = null; this.activeMove = null;
+                if (!this.grounded && !this.isHanging) {
+                    this.glide = true;
+                    this.glideT = 42;                          // 0.7 s of boost drift, then normal air control
+                }
+            }
         } else if (x.k === 'dash') {
             const sp = spec(this.char, 'S');
             if (x.t <= sp.frames) {
@@ -1042,11 +1068,11 @@ class Fighter {
                     x.jumpCancelT--;
                     if (x.jumpCancelT <= 0) { this.endRoll(); return; }
                 }
-                // past the main stage side edges (ledge line) or under the stage → end roll
-                // stops dragging foes off into the kill zone; white/blue get end hit, red does not
-                {
+                // past stage side edges / under stage → end roll (skip if you STARTED already in that void)
+                // so side-F still works when used from off-stage / under-stage recovery spots
+                if (!x.fromVoid) {
                     const top = STAGE.y, bot = STAGE.y + STAGE.height;
-                    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;   // same inset as shield-roll ledge stop
+                    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;
                     let pastSide = false;
                     if (this.x < L) { this.x = L; pastSide = true; }
                     else if (this.x > R) { this.x = R; pastSide = true; }
@@ -1293,6 +1319,8 @@ class Fighter {
         const sp = spec(this.char, 'S');
         if (charge !== undefined && x.ph === 'charge') x.c = Math.max(x.c, Math.min(1, charge));
         x.ph = 'roll'; x.t = 0;
+        // if you already started off-stage / under stage, allow the roll (don't auto-cancel on frame 1)
+        x.fromVoid = rollInVoidZone(this);
         this.cd.BLINK = sp.cd; this.fActive = false; this.chargeFrames = 0;
         this.swingHitSet = new Set();
         this.setMove('BLINK', 6); this.activeMove = null;
@@ -2753,6 +2781,15 @@ function balloonPop(attacker, defender, hb) {
 }
 
 /** Ember (rolling) vs a foe in the middle of a Side-F move: cancel the foe's move and stun them. True when it happened. */
+function rollInVoidZone(f) {
+    const top = STAGE.y, bot = STAGE.y + STAGE.height;
+    const L = STAGE.x + 12, R = STAGE.x + STAGE.width - 12;
+    if (f.x < L || f.x > R) return true;
+    if (f.y > bot + 4) return true;
+    if (f.y > top + 8 && (f.x <= L || f.x >= R)) return true;
+    return false;
+}
+
 function rollTier(c) { return c >= 0.9 ? 2 : (c >= 0.4 ? 1 : 0); }   // 0 red, 1 white, 2 blue
 
 /** Ember Fireball Roll beats other side/up specials; white beats red, blue beats white when both rolling */
@@ -2978,24 +3015,39 @@ function updateWhirlpools() {
         const w = whirlpools[i];
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
-        // refresh VFX every ~0.35 s so the spiral keeps spinning for the full 3 s
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        const reach = w.r + 20;                                  // horizontal catch radius
+        const aboveH = w.r;                                      // 0.5 × diameter = radius, vertical near-zone above
         for (const f of foesOf(w.owner || p1)) {
-            if (!isAlive(f)) continue;
-            // hit out: a real launch (hitstun) frees them from the pool
+            if (!isAlive(f) || f.invincibleTimer > 0) continue;
+            // hit out: a real launch frees them
             if (f.hitstun > 14) { f._inWhirl = false; continue; }
-            const dx = w.x - f.x, dy = (w.y - f.height * 0.35) - f.y;
+            const dx = w.x - f.x;
+            const targetY = w.y - f.height * 0.35;
+            const dy = targetY - f.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > w.r + f.width * 0.5) { f._inWhirl = false; continue; }
-            if (!f._inWhirl) { f.interrupt(); f._inWhirl = true; }
-            // soft continuous stun while inside
-            f.clashStunTimer = Math.max(f.clashStunTimer, 10);
+            const horiz = Math.abs(dx);
+            // in the pool OR hovering above it within 0.5 diameter
+            const above = f.y < w.y + 10 && (w.y - f.y) <= aboveH && horiz <= reach;
+            const inside = dist <= w.r + f.width * 0.5;
+            if (!inside && !above) { f._inWhirl = false; continue; }
+            // first contact: hard interrupt + instant stun, snap toward centre
+            if (!f._inWhirl) {
+                f.interrupt();
+                f._inWhirl = true;
+                f.clashStunTimer = Math.max(f.clashStunTimer, 24);
+                f.hitstun = Math.max(f.hitstun, 8);
+                f.vx = dx * 0.35; f.vy = dy * 0.25;
+                audio.playHit(false);
+            }
+            // continuous stun + strong pull to centre
+            f.clashStunTimer = Math.max(f.clashStunTimer, 14);
             const pull = w.pull || 2;
-            if (dist > 10) {
+            if (dist > 8) {
                 f.vx = dx / dist * pull;
-                f.vy = dy / dist * pull * 0.5;
+                f.vy = dy / dist * pull * 0.65;
             } else {
-                f.vx *= 0.65; f.vy *= 0.65;
+                f.vx *= 0.5; f.vy *= 0.5;
             }
             f.grounded = false;
         }

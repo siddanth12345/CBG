@@ -300,20 +300,25 @@ requestAnimationFrame(frame);
 window.__luminary = { S, p1, p2, view, step, keys, mouse, startMatchSequence, touch, trainUI };
 
 let _lastMusicState = '';
-function tickMusic() {
-    const key = S.gameState + '|' + (S.arena || '') + '|' + (S.theme || '') + '|' + !!(S.match);
-    if (key === _lastMusicState) return;
-    _lastMusicState = key;
+function tickMusic(force) {
     try {
-        if (S.gameState === 'start') audio.playMusic('title');
-        else if (S.gameState === 'playing' || S.gameState === 'countdown') {
-            if (S.match) {
-                const m = S.match.map || (S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier'));
-                audio.playMusic(audio.musicForMap(m));
-            } else audio.playMusic('duel');
-        }
+        const key = S.gameState + '|' + (S.arena || '') + '|' + (S.theme || '') + '|' + !!(S.match);
+        const want = (S.gameState === 'start' || S.demo) ? 'title'
+            : (S.gameState === 'playing' || S.gameState === 'countdown')
+                ? (S.match
+                    ? audio.musicForMap(S.match.map || (S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier')))
+                    : 'duel')
+                : null;
+        if (!want) return;
+        // retry while paused (browser autoplay) or on scene change
+        if (!force && key === _lastMusicState && audio._music && !audio._music.paused && audio._musicKey === want) return;
+        _lastMusicState = key;
+        audio.playMusic(want);
     } catch (e) { /* */ }
 }
-setInterval(tickMusic, 400);
-document.addEventListener('pointerdown', () => { try { audio.init(); tickMusic(); } catch (e) {} }, { once: true });
+setInterval(() => tickMusic(false), 500);
+const unlockMusic = () => { try { audio.init(); tickMusic(true); } catch (e) {} };
+for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) {
+    document.addEventListener(ev, unlockMusic, { passive: true });
+}
 
