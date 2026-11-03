@@ -914,13 +914,17 @@ class Fighter {
                 if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
                     const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
-                    // damage only on spawn contact — no stun (pull does the work)
-                    this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
-                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 0 };
-                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, pullScale: sp.pullScale != null ? sp.pullScale : 1, dmg: 0 });
-                    fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
-                    S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
-                    createParticles(cx, feet - 10, '#38bdf8', 22);
+                    // only one whirlpool on the arena — if one is live, keep animation but spawn nothing
+                    if (whirlpools.length === 0) {
+                        this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
+                            damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 0 };
+                        whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                        fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
+                        S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+                        createParticles(cx, feet - 10, '#38bdf8', 22);
+                    } else {
+                        fx('gust', cx, feet, R * 0.35, 0, 'water');
+                    }
                 } else {
                     this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
                         pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
@@ -1001,7 +1005,7 @@ class Fighter {
             // aim boost: 1.5× the old 3× walk speed, eased in over several frames (gravity still applies after)
             if (x.t === sp.windup + sp.rideFrames) {
                 const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x);
-                const spd = 4.5 * 8.5 * charOf(this.char).walk;  // was 3×, now 1.5× faster → 4.5× walk
+                const spd = 4.5 * 0.7 * 8.5 * charOf(this.char).walk;  // 0.7× previous launch strength
                 x.bvx = Math.cos(ang) * spd;
                 x.bvy = Math.sin(ang) * spd - 1.2;
                 x.boostLeft = 10;
@@ -3025,18 +3029,21 @@ function updateWhirlpools() {
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
-        // pull only inside the pool itself, range = whirlpool radius × 0.6 (no above-zone, no stun)
-        const pullR = w.r * (w.pullScale != null ? w.pullScale : 0.6);
+        // pull zone = whirlpool itself: diameter horizontally (dist from centre ≤ r), height = radius above surface
         for (const f of foesOf(w.owner || p1)) {
             if (!isAlive(f) || f.invincibleTimer > 0) continue;
-            if (f.hitstun > 14) { f._inWhirl = false; continue; }   // launched out
+            if (f.hitstun > 14) { f._inWhirl = false; continue; }
             const dx = w.x - f.x;
+            const horiz = Math.abs(dx);
+            if (horiz > w.r + f.width * 0.35) { f._inWhirl = false; continue; }
+            // vertical: on/near surface up to one radius above the pool (not a huge above-zone)
+            const above = w.y - f.y;
+            if (above > w.r + f.height * 0.5 || f.y > w.y + f.height) { f._inWhirl = false; continue; }
             const targetY = w.y - f.height * 0.35;
             const dy = targetY - f.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist > pullR + f.width * 0.35) { f._inWhirl = false; continue; }
-            if (!f._inWhirl) { f._inWhirl = true; }
-            // no stun — only extreme pull toward centre
+            const dist = Math.hypot(dx, dy) || 0.001;
+            if (!f._inWhirl) f._inWhirl = true;
+            // no stun — only strong pull toward centre
             const pull = w.pull || 2;
             if (dist > 4) {
                 f.vx = dx / dist * pull;
