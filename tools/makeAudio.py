@@ -236,7 +236,7 @@ def compose(cfg, seed):
         # --- lead (section B always; A for 'lead_in_A' tracks)
         if sec == 'B' or (cfg.get('lead_a') and sec == 'A' and secidx[bar] >= 4):
             if secidx[bar] % 2 == 0:
-                mot = cfg['motifs'][(secidx[bar] // 2) % len(cfg['motifs'])]
+                mot = cfg['motifs'][((secidx[bar] if sec == 'B' else secidx[bar] - 4) // 2) % len(cfg['motifs'])]
                 pos = 0
                 for deg, ln_ in mot:
                     oct_ = 12 * (deg // 7); m = cfg['gtr'] + 24 + shift + oct_ + sc[deg % 7]
@@ -250,7 +250,7 @@ def compose(cfg, seed):
                     add(tr['lead'], S(bar, pos), ldn * adsr(L, sr, 0.004, 0.05, 0.85, 0.08), 1.0)
                     pos += ln_
         # --- fx: risers into sections, impacts
-        if bar + 1 < bars and secs[bar + 1] != sec and sec != 'brk' or bar in (3, 11, 15) and False:
+        if bar + 1 < bars and secs[bar + 1] != sec:           # a riser into every section change
             n = int(sr * step * spb); t = np.arange(n) / sr
             r = hp(noise(n, rng), 300 + 5000 * (t / t[-1]) ** 2, sr) if False else noise(n, rng) * (t / t[-1]) ** 2
             r = bp(r, 800, 9000, sr) * 1.2
