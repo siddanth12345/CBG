@@ -1,16 +1,17 @@
+// BUILD_STAMP 20261103p — recovery, edgeguard, Side-F, Ember halt/melee
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
-import { AI_PRIOR } from './aiPrior.js?v=20261103o';
-import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js?v=20261103o';
-import { displayName } from './account.js?v=20261103o';
-import { SoundEngine } from './audio.js?v=20261103o';
-import { isDown } from './controls.js?v=20261103o';
-import { ITEM_TYPES } from './items.js?v=20261103o';
-import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js?v=20261103o';
+import { AI_PRIOR } from './aiPrior.js';
+import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
+import { displayName } from './account.js';
+import { SoundEngine } from './audio.js';
+import { isDown } from './controls.js';
+import { ITEM_TYPES } from './items.js';
+import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
 
 export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();

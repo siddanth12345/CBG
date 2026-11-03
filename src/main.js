@@ -1,27 +1,28 @@
+// BUILD_STAMP 20261103p
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf,
-} from './core.js?v=20261103o';
-import { held, actionsFor } from './controls.js?v=20261103o';
-import { TouchControls } from './touch.js?v=20261103o';
-import { LayoutEditor } from './layoutUI.js?v=20261103o';
-import { UI } from './ui.js?v=20261103o';
-import { TrainUI } from './trainUI.js?v=20261103o';
-import { View } from './render/view.js?v=20261103o';
-import { Online, leaveRoom, sendAct, sendHeld, requestRematch, joinRoom } from './net/online.js?v=20261103o';
-import { CustomUI } from './net/customUI.js?v=20261103o';
-import { CharUI } from './charUI.js?v=20261103o';
-import { PartyUI } from './net/partyUI.js?v=20261103o';
-import { Party, joinParty } from './net/party.js?v=20261103o';
-import { LobbyUI } from './net/lobbyUI.js?v=20261103o';
-import { Queue, joinQueue } from './net/queue.js?v=20261103o';
-import { ACC, initAccount, setProfileListener, recordResult } from './account.js?v=20261103o';
-import { AccountUI, Toasts } from './accountUI.js?v=20261103o';
-import { BorgsUI } from './borgsUI.js?v=20261103o';
-import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, declineRequest, sendBorgRequest } from './net/inbox.js?v=20261103o';
-import { isBorg, isSelf, getRequests, onBorgs } from './friends.js?v=20261103o';
+} from './core.js';
+import { held, actionsFor } from './controls.js';
+import { TouchControls } from './touch.js';
+import { LayoutEditor } from './layoutUI.js';
+import { UI } from './ui.js';
+import { TrainUI } from './trainUI.js';
+import { View } from './render/view.js';
+import { Online, leaveRoom, sendAct, sendHeld, requestRematch, joinRoom } from './net/online.js';
+import { CustomUI } from './net/customUI.js';
+import { CharUI } from './charUI.js';
+import { PartyUI } from './net/partyUI.js';
+import { Party, joinParty } from './net/party.js';
+import { LobbyUI } from './net/lobbyUI.js';
+import { Queue, joinQueue } from './net/queue.js';
+import { ACC, initAccount, setProfileListener, recordResult } from './account.js';
+import { AccountUI, Toasts } from './accountUI.js';
+import { BorgsUI } from './borgsUI.js';
+import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, declineRequest, sendBorgRequest } from './net/inbox.js';
+import { isBorg, isSelf, getRequests, onBorgs } from './friends.js';
 
 const $ = (id) => document.getElementById(id);
 const view = new View($('gameCanvas'));
