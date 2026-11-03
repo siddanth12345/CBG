@@ -4,13 +4,13 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
-import { AI_PRIOR } from './aiPrior.js';
-import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
-import { displayName } from './account.js';
-import { SoundEngine } from './audio.js';
-import { isDown } from './controls.js';
-import { ITEM_TYPES } from './items.js';
-import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
+import { AI_PRIOR } from './aiPrior.js?v=20261103o';
+import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js?v=20261103o';
+import { displayName } from './account.js?v=20261103o';
+import { SoundEngine } from './audio.js?v=20261103o';
+import { isDown } from './controls.js?v=20261103o';
+import { ITEM_TYPES } from './items.js?v=20261103o';
+import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js?v=20261103o';
 
 export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();
@@ -2278,13 +2278,13 @@ class AIBot extends Fighter {
         this.actionTimer++;
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
-        // HARD: force Side-F regularly (combo or mid/far gap) so it actually shows up in fights
-        if (this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && this.haltT <= 0 && this.actionTimer % 12 === 0) {
+        // HARD: force Side-F often (combo or gap) — cache-bust build so this is visible
+        if (this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && (this.haltT|0) <= 0 && this.actionTimer % 6 === 0) {
             const adx = Math.abs(target.x - this.x), ady = Math.abs(target.y - this.y);
-            const combo = target.hitstun > 6 || target.clashStunTimer > 4 || (target.lastHitBy === this && target.lastHitT < 45);
-            const gap = adx > 140 && adx < 720 && ady < 170;
-            if ((combo && adx < 500 && ady < 160) || gap) {
-                const c = this.char === 'ember' ? (combo ? 0.25 + Math.random() * 0.35 : 0.55 + Math.random() * 0.4) : 0;
+            const combo = target.hitstun > 4 || target.clashStunTimer > 2 || (target.lastHitBy === this && target.lastHitT < 50);
+            const gap = adx > 100 && adx < 800 && ady < 200;
+            if (combo || gap) {
+                const c = this.char === 'ember' ? (combo ? 0.2 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
                 if (this.useSpecial('BLINK', target.x, target.y, c)) return;
             }
         }
