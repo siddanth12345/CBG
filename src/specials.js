@@ -67,7 +67,7 @@ export const SP = {
         DA: { kind: 'dive', name: 'Dagger Plunge', desc: 'A steep stab-dive with a sharp impact (10).', cd: 120, vy: 27, hitDmg: 0, every: 99, impactDmg: 10, impactW: 0.07, stun: false, bkb: 8, kbg: 0.9, ang: -1.1, lock: 18 },
     },
     terra: {
-        N: { kind: 'orb', look: 'boulder', name: 'Boulder', desc: 'A heavy boulder thrown in an arc: up to 22 damage. Goes through / counters shields. Slow and loud.', cd: 170,
+        N: { kind: 'orb', look: 'boulder', pierce: true, name: 'Boulder', desc: 'A heavy boulder thrown in an arc: up to 22 damage. Breaks shields and knocks back normally (contact + AOE). Slow and loud.', cd: 170,
              speed: [9.5, 8.5], r: [32, 56], dmg: [10, 22], R: [110, 190], bkb: [7, 12], kbg: 0.65, life: 220, grav: 0.3 },
         S: { kind: 'dash', name: 'Boulder Roll', desc: 'An armoured roll for 16 damage; rocks fall from the sky along the path you rolled and keep falling until they hit the stage or leave through the kill zone (6 each). Long recovery.', cd: 160, dist: 340, frames: 17, armor: true, dmg: 16, bkb: 11, kbg: 0.95, w: 105, h: 100, ang: 0.4, lock: 70, drops: { kind: 'rock', dmg: 6, bkb: 9, kbg: 0.7, w: 110, h: 170, fall: 16 } },
         U: { kind: 'rise', name: 'Rubble Launch', desc: 'A rubble blast under your feet throws foes away (12), then an armoured slow lift (twice as long as before) with a hit at the top (8).', cd: 170, frames: 72, vy: 6.5, armor: true, every: 99, hitDmg: 0, lastDmg: 8, lastBkb: 11, lastKbg: 1.0, w: 160, h: 140, start: { R: 140, dmg: 12, bkb: 9, kbg: 0.95 } },

@@ -1294,6 +1294,8 @@ class Fighter {
             vx: dx * speed, vy: dy * speed, r, charge, owner: this, life: sp.life, color, id: ++orbSerial,
             d: lerpR(sp.dmg, charge), R: lerpR(sp.R, charge), bkb: lerpR(sp.bkb, charge), kbg: sp.kbg,
             grav: sp.grav || 0, curve: sp.curve || 0, wobble: sp.wobble || 0, pull: sp.pull || 0, age: 0, kind: sp.look || 0,
+            // Terra Boulder (and any look:'boulder'): pierces / breaks shields on contact + AOE
+            pierce: sp.look === 'boulder' || sp.pierce === true,
         });                                                   // flies straight along the aim (Umbra's curves a little, Terra's arcs)
         this.setMove('CORE', 24);
         this.specialKind = 'CORE'; this.specialT = 0; this.specialDur = 24;
@@ -2955,16 +2957,30 @@ function explodeOrb(o) {
     createParticles(o.x, o.y, o.color, 18 + Math.floor(24 * o.charge));
     createParticles(o.x, o.y, '#ffffff', 10);
 
-    const pierce = o.kind === 'boulder';   // Terra Boulder: goes through shield / counters it
+    const pierce = !!(o.pierce || o.kind === 'boulder');   // Terra Boulder: breaks shield, full knockback
     for (const t of foesOf(o.owner)) {
         if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
         const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > R) continue;
 
-        const res = pierce ? 'hit' : interaction('CORE', t);
+        if (pierce) {
+            // hard-break shield: no block VFX, normal launch
+            if (t.isShielding) {
+                t.isShielding = false;
+                t.shieldHold = 0;
+                t.shieldHealth = 0;
+                fx('counter', t.x, t.y);
+            }
+            launch(o.owner, t, {
+                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
+                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
+            });
+            continue;
+        }
+
+        const res = interaction('CORE', t);
         if (res === 'hit') {
-            if (pierce && t.isShielding) { t.isShielding = false; fx('counter', t.x, t.y); }
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
                 angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
@@ -3124,13 +3140,24 @@ function updateOrbs() {
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r) {
-                const pierce = o.kind === 'boulder';
-                const res = pierce ? 'hit' : interaction('CORE', t);
-                if (o.trap && res === 'hit') {                    // Bubble Trap: swallow them
-                    t.interrupt(); t.trapId = o.id; t.lastHitBy = o.owner; t.lastHitT = 0; o.cap = t; o.capT = 0; o.life = 200; o.r = 50;
-                    fx('explosion', o.x, o.y, 50, 0, 'water'); audio.playGrab();
-                    hitOrb = true; break;
+                const pierce = !!(o.pierce || o.kind === 'boulder');
+                if (o.trap && !pierce) {
+                    const res0 = interaction('CORE', t);
+                    if (res0 === 'hit') {
+                        t.interrupt(); t.trapId = o.id; t.lastHitBy = o.owner; t.lastHitT = 0; o.cap = t; o.capT = 0; o.life = 200; o.r = 50;
+                        fx('explosion', o.x, o.y, 50, 0, 'water'); audio.playGrab();
+                        hitOrb = true; break;
+                    }
                 }
+                // boulder: always explode (AOE + launch), never stop on shield
+                if (pierce) {
+                    if (t.isShielding) { t.isShielding = false; t.shieldHold = 0; t.shieldHealth = 0; }
+                    dropOrb(o);
+                    explodeOrb(o);
+                    hitOrb = true;
+                    break;
+                }
+                const res = interaction('CORE', t);
                 dropOrb(o);
                 if (res === 'hit') explodeOrb(o);
                 else if (res === 'shield') {
