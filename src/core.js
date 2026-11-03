@@ -1635,8 +1635,9 @@ class Fighter {
         const rightLedgeX = STAGE.x + STAGE.width;
         const ledgeY = STAGE.y;
 
-        const magnetRangeX = 225;
-        const magnetRangeY = 165;
+        // 0.65× previous magnet box
+        const magnetRangeX = 225 * 0.65;
+        const magnetRangeY = 165 * 0.65;
 
         if (this.x >= leftLedgeX - magnetRangeX && this.x <= leftLedgeX + 50 &&
             this.y >= ledgeY - 40 && this.y <= ledgeY + magnetRangeY && this.vy >= -3) {
@@ -1654,6 +1655,8 @@ class Fighter {
         this.isHanging = false;
         this.hangTimer = 0;
         this.invincibleTimer = 0;
+        // after dropping off a ledge you can't re-grab for 1 s (stops AI ledge thrash / frame spikes)
+        this.ledgeBan = Math.max(this.ledgeBan, 60);
     }
 
     hangLedge(side) {
@@ -1674,8 +1677,10 @@ class Fighter {
         // (air F moves are NOT refilled here: only the ground does that)
 
         this.invincibleTimer = 90;
-        audio.playShield();
-        createParticles(this.hangSide === -1 ? STAGE.x : STAGE.x + STAGE.width, STAGE.y, '#38bdf8', 10);
+        // white spark only (no extra SFX / heavy particles — keeps FPS stable on rapid ledge cycles)
+        const lx = this.hangSide === -1 ? STAGE.x : STAGE.x + STAGE.width;
+        createParticles(lx, STAGE.y, '#ffffff', 5);
+        fx('hit', lx, STAGE.y, 4, 0);
     }
 
     kickFromLedge(ban) {
@@ -2110,24 +2115,36 @@ class AIBot extends Fighter {
         const cx = STAGE.x + STAGE.width / 2;
         const ledgeX = this.x < cx ? STAGE.x : STAGE.x + STAGE.width;
         let tx = ledgeX, ty = STAGE.y;
-        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 150 : -150); ty = STAGE.y - 80; }   // can't hang: land on the stage
+        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 180 : -180); ty = STAGE.y - 100; }
         const dir = tx > this.x ? 1 : -1;
         const dxAbs = Math.abs(tx - this.x);
         const below = this.y - STAGE.y;
+        const hard = this.level === 'hard';
+        const med = this.level === 'medium';
 
         this.cancelF();
         this.facing = dir;
-        this.vx += dir * 1.2;
+        // drift hard toward stage (easy still tries, hard commits)
+        this.vx += dir * (hard ? 2.0 : med ? 1.55 : 1.15);
 
         let acted = false;
-        if (this.actionTimer % 4 === 0 && below > 40 && dxAbs < 380 && (this.jumpsLeft === 0 || below > 140)) {
-            acted = this.useSpecial('SPIRAL', tx, ty);
+        // Up-F recovery first when below / out of jumps
+        if (this.actionTimer % 3 === 0 && (below > 25 || this.jumpsLeft === 0) && dxAbs < 420) {
+            acted = this.useSpecial('SPIRAL', tx, ty - 40);
         }
-        if (!acted && this.actionTimer % 6 === 0 && dxAbs > 200 && below < 220) acted = this.useSpecial('BLINK', tx, ty);
+        // Ember hard: Side-F (Fireball Roll) toward stage for practice + recovery mix
+        if (!acted && hard && this.char === 'ember' && this.actionTimer % 5 === 0 && dxAbs > 60 && this.cd.BLINK <= 0) {
+            acted = this.useSpecial('BLINK', tx, ty);
+        }
+        // Side special / dash toward stage for everyone else
+        if (!acted && this.actionTimer % 5 === 0 && dxAbs > 120 && below < 280) {
+            acted = this.useSpecial('BLINK', tx, ty);
+        }
         if (!acted && this.actionTimer % 6 === 0) acted = this.executeGrabDash(tx, ty);
-        if (!acted && this.attackTimer === 0 && this.actionTimer % 8 === 0 && dxAbs < 220) acted = this.attack(dir === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-
-        if (this.jumpsLeft > 0 && this.vy > -2 && this.actionTimer % 6 === 0) this.jump();
+        if (!acted && this.attackTimer === 0 && this.actionTimer % 8 === 0 && dxAbs < 240) {
+            acted = this.attack(dir === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+        }
+        if (this.jumpsLeft > 0 && this.vy > -3 && this.actionTimer % 5 === 0) this.jump();
     }
 
     /** Soft-platform know-how for the big arenas: drop through a platform to reach a foe below, climb up to one to reach a foe above. Returns true when it took the frame. */
@@ -2187,7 +2204,7 @@ class AIBot extends Fighter {
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         if (this.isHanging) {
-            // always climb toward stage centre; force a get-up if jump is locked
+            // climb toward stage centre; force a get-up if jump is locked
             const onto = this.x < stageCenterX ? 10 : -10;
             if (!this.jump()) {
                 this.leaveLedge();
@@ -2196,8 +2213,8 @@ class AIBot extends Fighter {
                 this.canGrab = true;
             }
             this.vx = onto;
-            // hard bots: if still near the void edge, burn a recovery special next frame
-            if (this.level === 'hard' && this.actionTimer % 8 === 0) {
+            // all non-static bots: after climb, hard commits recovery specials near the edge
+            if (this.level !== 'static' && this.level === 'hard' && this.actionTimer % 8 === 0) {
                 const lx = this.x < stageCenterX ? STAGE.x + 40 : STAGE.x + STAGE.width - 40;
                 this.useSpecial('SPIRAL', lx, STAGE.y - 40);
             }
@@ -2295,7 +2312,7 @@ class AIBot extends Fighter {
         const nearRightEdge = this.x > STAGE.x + STAGE.width - 180;
         const isOffStage = nearLeftEdge || nearRightEdge || this.y > STAGE.y + 20;
 
-        if (this.y > STAGE.y + 20) {          // under the stage: climb back
+        if (isOffStage && (!this.grounded || this.y > STAGE.y + 10)) {   // off ledge / under stage: all non-static AIs recover
             this.recover();
             return;
         }
@@ -2431,6 +2448,14 @@ class AIBot extends Fighter {
             if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
         }
         if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
+        // hard Ember: practice Side-F (Fireball Roll) in neutral / approach against any character
+        if (this.level === 'hard' && this.char === 'ember' && cdOk('BLINK') && this.grounded) {
+            add(4.2, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+        }
+        // hard bots: more special pressure vs every character (not only mirror matchups)
+        if (this.level === 'hard' && cdOk('BLINK') && dist > 100 && dist < 420 && Math.random() < 0.35) {
+            add(2.8, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+        }
         if (!opts.length) return false;
         let tot = 0; for (const o of opts) tot += o[0];
         let r = Math.random() * tot, pick = opts[0];
@@ -2455,6 +2480,9 @@ class AIBot extends Fighter {
 const particles = [];
 function createParticles(x, y, color, count = 10) {
     if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
+    // hard cap so ledge thrash / KO spam can't melt the frame rate
+    const room = Math.max(0, 220 - particles.length);
+    count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
