@@ -450,3 +450,6 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .lm-chip{width:22px!important;height:22px!important;min-width:22px!important;min-height:22px!important;max-width:22px!important;max-height:22px!important;flex:none!important;aspect-ratio:1/1!important;border-radius:50%!important;padding:0!important;box-sizing:border-box!important;display:inline-block!important}
 .lm-prow{flex-wrap:wrap;row-gap:6px}
 .lm-prow .lm-mini{flex:none}
+
+#cbgMusicHint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:90;padding:7px 14px;border-radius:999px;background:rgba(6,12,24,.78);border:1px solid rgba(56,189,248,.55);color:#bae6fd;font:600 12px Inter,system-ui,sans-serif;letter-spacing:.04em;pointer-events:none;animation:cbgHint 1.6s ease-in-out infinite}
+@keyframes cbgHint{50%{box-shadow:0 0 14px rgba(56,189,248,.55)}}

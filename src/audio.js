@@ -12,12 +12,12 @@ const loadVol = () => {
 const saveVol = (v) => { try { localStorage.setItem(VOL_KEY, JSON.stringify(v)); } catch (e) { /* blocked */ } };
 
 const BGM = {
-    title: 'audio/bgm/01_title_start_screen.wav?v=2',
-    duel: 'audio/bgm/02_duel_1v1.wav?v=2',
-    frontier: 'audio/bgm/03_stage_frontier.wav?v=2',
-    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=2',
-    horizon: 'audio/bgm/05_stage_horizon.wav?v=2',
-    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=2',
+    title: 'audio/bgm/01_title_start_screen.wav?v=3',
+    duel: 'audio/bgm/02_duel_1v1.wav?v=3',
+    frontier: 'audio/bgm/03_stage_frontier.wav?v=3',
+    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=3',
+    horizon: 'audio/bgm/05_stage_horizon.wav?v=3',
+    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=3',
 };
 
 export class SoundEngine {
@@ -102,9 +102,21 @@ export class SoundEngine {
     playF(char, slot) {
         if (this._vol.sfx <= 0 || this.muted) return;
         const name = { n: 'neutral', s: 'side', u: 'up', dg: 'down_ground', da: 'down_air' }[slot] || slot;
-        const a = new Audio('audio/f/' + char + '_' + slot + '_' + name + '.wav');
-        a.volume = this._vol.sfx;
-        a.play().catch(() => {});
+        this._sample('f/' + char + '_' + slot + '_' + name, 1, 'f');
+    }
+
+    /** play a pre-rendered effect (audio/sfx/*.wav, audio/f/*.wav). Cloned from one preloaded element so rapid repeats overlap; very fast repeats are thinned. */
+    _sample(name, gain = 1, dir = 'sfx') {
+        if (this.muted || this._vol.sfx <= 0) return false;
+        const key = name.includes('/') ? name : dir + '/' + name;
+        const now = performance.now();
+        this._sfxLast = this._sfxLast || {}; this._sfxEls = this._sfxEls || {};
+        if (now - (this._sfxLast[key] || 0) < 35) return true;
+        this._sfxLast[key] = now;
+        let a = this._sfxEls[key];
+        if (!a) { a = new Audio('audio/' + key + '.wav?v=3'); a.preload = 'auto'; this._sfxEls[key] = a; }
+        try { const c = a.cloneNode(true); c.volume = Math.max(0, Math.min(1, this._vol.sfx * gain)); c.play().catch(() => {}); } catch (e) { /* */ }
+        return true;
     }
 
     // ---- punchy Smash-like SFX (short, sharp, filtered) ----
@@ -147,14 +159,17 @@ export class SoundEngine {
     }
 
     playJump() {
+        if (this._sample('jump', 0.85)) return;
         this._tone({ type: 'square', f0: 280, f1: 520, dur: 0.09, vol: 0.16, filter: 3200 });
         this._noise(0.04, 0.06, 2500);
     }
     playDash() {
+        if (this._sample('dash', 0.9)) return;
         this._tone({ type: 'sawtooth', f0: 200, f1: 480, dur: 0.11, vol: 0.18, filter: 2200 });
         this._noise(0.07, 0.12, 1800);
     }
     playHit(heavy = false) {
+        if (this._sample(heavy ? 'hit_heavy' : 'hit_light', heavy ? 1 : 0.9)) return;
         if (heavy) {
             this._tone({ type: 'square', f0: 140, f1: 55, dur: 0.2, vol: 0.32, filter: 1200 });
             this._noise(0.16, 0.22, 900);
@@ -165,16 +180,20 @@ export class SoundEngine {
         }
     }
     playGrab() {
+        if (this._sample('grab', 0.9)) return;
         this._tone({ type: 'square', f0: 320, f1: 160, dur: 0.12, vol: 0.18, filter: 2000 });
     }
     playThrow() {
+        if (this._sample('throw', 0.9)) return;
         this._tone({ type: 'sawtooth', f0: 300, f1: 700, dur: 0.14, vol: 0.22, filter: 2800 });
         this._noise(0.08, 0.1, 2200);
     }
     playShield() {
+        if (this._sample('shield', 0.8)) return;
         this._tone({ type: 'triangle', f0: 520, f1: 400, dur: 0.06, vol: 0.12, filter: 3000 });
     }
     playKO() {
+        if (this._sample('ko', 1)) return;
         this._tone({ type: 'sawtooth', f0: 180, f1: 35, dur: 0.55, vol: 0.35, filter: 1000 });
         this._noise(0.4, 0.25, 700);
     }

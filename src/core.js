@@ -391,6 +391,7 @@ class Fighter {
 
         this.hitstun = 0;
         this.invincibleTimer = 0;
+        this.spawnT = 0;                     // respawn pre-animation: frozen and untouchable at the spawn point while the light pillar plays (60 frames = 1 s)
         this.ghostT = 0;                     // Phoenix Dash aftermath: invincible, but nothing this fighter does hurts anyone
         this.facing = 1;
 
@@ -481,6 +482,7 @@ class Fighter {
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
+        this.spawnT = (!fullReset && S.gameState === 'playing') ? 60 : 0;
         this.attackTimer = 0;
         this.activeHitbox = null;
         this.incomingHitCount = 0;
@@ -521,6 +523,11 @@ class Fighter {
     }
 
     update() {
+        if (this.spawnT > 0) {                                          // 1 s pre-spawn: hold still in the light while it plays, then drop in
+            this.spawnT--; this.vx = this.vy = 0; this.y = STAGE.y - 300; this.grounded = false; this.isHanging = false;
+            this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2);
+            return;
+        }
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
         if (this.sideT > 0) this.sideT--;
@@ -2897,7 +2904,8 @@ function launch(attacker, defender, hb) {
     if (hb.pull) {                                          // Whirlpool / Bubble: drag them toward the centre
         const px = hb.px !== undefined ? hb.px : hb.x, py = hb.py !== undefined ? hb.py : hb.y;
         const dx = px - defender.x, dy = py - defender.y, d = Math.hypot(dx, dy) || 1;
-        defender.vx = dx / d * hb.pull; defender.vy = dy / d * hb.pull - 1;
+        const pv = Math.min(hb.pull, d * 0.5);                  // a very strong pull still stops at the centre
+        defender.vx = dx / d * pv; defender.vy = dy / d * pv - 1;
         defender.hitstun = 22; defender.grounded = false;
         S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false);
         createParticles(defender.x, defender.y, '#7dd3fc', 10); fx('hit', defender.x, defender.y, 6, hb.angle);
@@ -3044,8 +3052,9 @@ function updateWhirlpools() {
             f.clashStunTimer = Math.max(f.clashStunTimer, 14);
             const pull = w.pull || 2;
             if (dist > 8) {
-                f.vx = dx / dist * pull;
-                f.vy = dy / dist * pull * 0.65;
+                const pv = Math.min(pull, dist * 0.5);                   // never overshoot the centre, however hard the pull
+                f.vx = dx / dist * pv;
+                f.vy = dy / dist * pv * 0.65;
             } else {
                 f.vx *= 0.5; f.vy *= 0.5;
             }

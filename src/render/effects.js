@@ -398,9 +398,9 @@ export class Effects {
     }
 
     respawn(pos, color) {
-        this.pillar(pos, color, 700, 0.8, 20);
-        this.ring(pos, 4, 70, 0.5, color, 'screen');
-        this.sparks(pos, color, 22, 260, 0.6, 'down');
+        this.pillar(pos, color, 700, 1.0, 20);                        // the 1 s pre-spawn light
+        this.ring(pos, 4, 70, 0.9, color, 'screen');
+        this.sparks(pos, color, 26, 260, 0.9, 'down');
     }
 
     // ============================================================ per-frame

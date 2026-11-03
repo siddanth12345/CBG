@@ -316,9 +316,21 @@ function tickMusic(force) {
         audio.playMusic(want);
     } catch (e) { /* */ }
 }
-setInterval(() => tickMusic(false), 500);
+// browsers keep music silent until the page gets a tap / key press: show a hint on the menu until it is actually playing
+let _hint = null;
+function musicHint() {
+    try {
+        const blocked = !!audio._music && audio._music.paused && audio.musicVolume > 0;
+        const L_ = document.getElementById('cbgLoader'), loaderDone = !L_ || L_.classList.contains('gone');
+        if (blocked && S.gameState === 'start' && loaderDone) {
+            if (!_hint) { _hint = document.createElement('div'); _hint.id = 'cbgMusicHint'; _hint.textContent = '\u{1F50A} Tap or press any key for music'; document.body.appendChild(_hint); }
+            _hint.style.display = '';
+        } else if (_hint) _hint.style.display = 'none';
+    } catch (e) { /* */ }
+}
+setInterval(() => { tickMusic(false); musicHint(); }, 500);
 const unlockMusic = () => { try { audio.init(); tickMusic(true); } catch (e) {} };
-for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) {
-    document.addEventListener(ev, unlockMusic, { passive: true });
+for (const ev of ['pointerdown', 'pointerup', 'keydown', 'touchstart', 'touchend', 'mousedown', 'click']) {
+    document.addEventListener(ev, unlockMusic, { passive: true, capture: true });
 }
 
