@@ -914,9 +914,10 @@ class Fighter {
                 if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
                     const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
+                    // damage only on spawn contact — no stun (pull does the work)
                     this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
-                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
-                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 0 };
+                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, pullScale: sp.pullScale != null ? sp.pullScale : 1, dmg: 0 });
                     fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
                     S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
                     createParticles(cx, feet - 10, '#38bdf8', 22);
@@ -3024,39 +3025,24 @@ function updateWhirlpools() {
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
-        const reach = w.r + 20;                                  // horizontal catch radius
-        const aboveH = w.r;                                      // 0.5 × diameter = radius, vertical near-zone above
+        // pull only inside the pool itself, range = whirlpool radius × 0.6 (no above-zone, no stun)
+        const pullR = w.r * (w.pullScale != null ? w.pullScale : 0.6);
         for (const f of foesOf(w.owner || p1)) {
             if (!isAlive(f) || f.invincibleTimer > 0) continue;
-            // hit out: a real launch frees them
-            if (f.hitstun > 14) { f._inWhirl = false; continue; }
+            if (f.hitstun > 14) { f._inWhirl = false; continue; }   // launched out
             const dx = w.x - f.x;
             const targetY = w.y - f.height * 0.35;
             const dy = targetY - f.y;
             const dist = Math.hypot(dx, dy);
-            const horiz = Math.abs(dx);
-            // in the pool OR hovering above it within 0.5 diameter
-            const above = f.y < w.y + 10 && (w.y - f.y) <= aboveH && horiz <= reach;
-            const inside = dist <= w.r + f.width * 0.5;
-            if (!inside && !above) { f._inWhirl = false; continue; }
-            // first contact: hard interrupt + instant stun, snap toward centre
-            if (!f._inWhirl) {
-                f.interrupt();
-                f._inWhirl = true;
-                f.clashStunTimer = Math.max(f.clashStunTimer, 24);
-                f.hitstun = Math.max(f.hitstun, 8);
-                f.vx = dx * 0.35; f.vy = dy * 0.25;
-                audio.playHit(false);
-            }
-            // continuous stun + strong pull to centre
-            f.clashStunTimer = Math.max(f.clashStunTimer, 14);
+            if (dist > pullR + f.width * 0.35) { f._inWhirl = false; continue; }
+            if (!f._inWhirl) { f._inWhirl = true; }
+            // no stun — only extreme pull toward centre
             const pull = w.pull || 2;
-            if (dist > 8) {
-                const pv = Math.min(pull, dist * 0.5);                   // never overshoot the centre, however hard the pull
-                f.vx = dx / dist * pv;
-                f.vy = dy / dist * pv * 0.65;
+            if (dist > 4) {
+                f.vx = dx / dist * pull;
+                f.vy = dy / dist * pull * 0.7;
             } else {
-                f.vx *= 0.5; f.vy *= 0.5;
+                f.vx *= 0.3; f.vy *= 0.3;
             }
             f.grounded = false;
         }
