@@ -192,6 +192,10 @@ export class SoundEngine {
         if (this._sample('shield', 0.8)) return;
         this._tone({ type: 'triangle', f0: 520, f1: 400, dur: 0.06, vol: 0.12, filter: 3000 });
     }
+    playHoming() {
+        if (this._sample('homing', 0.95)) return;
+        this._tone({ type: 'sawtooth', f0: 300, f1: 1800, dur: 0.4, vol: 0.2, filter: 4000 });
+    }
     playKO() {
         if (this._sample('ko', 1)) return;
         this._tone({ type: 'sawtooth', f0: 180, f1: 35, dur: 0.55, vol: 0.35, filter: 1000 });

@@ -562,8 +562,9 @@ class Fighter {
         if (this.haltT > 0) {
             this.haltT--;
             this.haltElapsed++;
-            this.vx *= 0.88;
-            if (Math.abs(this.vx) < 0.35) this.vx = 0;
+            this.haltV = (this.haltV || 0) * (this.haltK || 0.88);
+            this.vx = this.haltV / (this.grounded ? WORLD.friction : WORLD.airFriction);   // friction is applied later: compensate so the slide distance is exact
+            if (this.haltT === 0) this.haltV = 0;
         }
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
         const bj = trainJumps(this);       // training menu can override jump count
@@ -1009,6 +1010,14 @@ class Fighter {
                         orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
                             life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
+                    // a foe caught by the last frames of the drill (the 'phoenix' hits): a 2x fast, perfectly homing rocket goes after them (8 dmg, 0.8x rocket knockback, ignores shields)
+                    for (const f of foesOf(this)) {
+                        if (!isAlive(f) || f.lastHitBy !== this || !(f.ghostT >= 50)) continue;
+                        orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: 0, vy: 0, r: m.r, charge: 0.3, owner: this,
+                            life: 150, color: '#fde047', id: ++orbSerial, d: 8, R: m.R, bkb: m.bkb * 0.8, kbg: m.kbg * 0.8, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0,
+                            kind: 'firerocket', phoenix: false, flat: true, homing: f, spd: m.speed * 2, shieldPass: true });
+                        audio.playHoming();
+                    }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
                 }
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
@@ -1421,6 +1430,16 @@ class Fighter {
         // 0.7 s halt: keep horizontal speed, decelerate (not an instant stop)
         this.haltT = 42;
         this.haltElapsed = 0;
+        // the slide always covers 1/4 of the SMALL map (1520 / 4 = 380 px), whatever arena it is: pick the per-frame decay k so v*(1-k^42)/(1-k) = 380
+        const v0 = Math.abs(this.vx), dir = this.vx < 0 ? -1 : 1, want = 380;
+        let k = 1;
+        if (v0 > 0.01 && v0 * 42 > want) {
+            let lo = 0, hi = 0.9999;
+            for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; (v0 * (1 - Math.pow(m, 42)) / (1 - m) > want) ? (hi = m) : (lo = m); }
+            k = (lo + hi) / 2;
+        }
+        this.haltV = v0 * dir; this.haltK = k;
+        if (v0 > 0.01 && v0 * 42 <= want) this.haltK = 1;
     }
 
     startSx(k, charge = 0, extra = {}) {
@@ -2183,8 +2202,13 @@ class AIBot extends Fighter {
         if (belowMap) {
             if (offL) tx = STAGE.x + 140;
             else if (offR) tx = STAGE.x + STAGE.width - 140;
-            else tx = Math.max(STAGE.x + 100, Math.min(STAGE.x + STAGE.width - 100, this.x));
-            ty = STAGE.y - 90;
+            else {                                                  // UNDER the stage: aiming straight up just pins the bot against the underside (it wobbles there, frozen). Swim out past the nearest lip first, then climb.
+                const side = this.x < cx ? -1 : 1;
+                tx = (side < 0 ? STAGE.x : STAGE.x + STAGE.width) + side * 150;
+                ty = STAGE.y + 60;
+            }
+            if (offL || offR) ty = STAGE.y - 90;
+            else ty = STAGE.y + 60;
         } else if (offL || offR) {
             // above stage height but off side: drift to center / stage top
             tx = cx;
@@ -2208,7 +2232,9 @@ class AIBot extends Fighter {
         this.facing = dir;
         this.vx += dir * (hard ? 2.1 : med ? 1.7 : 1.35);
         // climb bias when under the stage
-        if (belowMap && this.vy > -2) this.vy -= hard ? 0.9 : 0.55;
+        const underStage = belowMap && !offL && !offR;
+        if (underStage) this.vx += dir * (hard ? 1.2 : 0.8);          // swim out sideways, stronger than the usual nudge
+        // (no free upward push: it cancelled gravity and let bots hover beside the ledge, frozen and wobbling. Recovery is jumps + the Up special only.)
 
         // light dodge vs incoming projectiles while recovering (stage return still primary)
         const threat = orbs.find(o => o.owner && foesOf(this).includes(o.owner) && Math.hypot(o.x - this.x, o.y - this.y) < 160);
@@ -2292,7 +2318,7 @@ class AIBot extends Fighter {
         if (!S.demo && this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && (this.haltT|0) <= 0 && this.actionTimer % 6 === 0) {
             const adx = Math.abs(target.x - this.x), ady = Math.abs(target.y - this.y);
             const combo = target.hitstun > 4 || target.clashStunTimer > 2 || (target.lastHitBy === this && target.lastHitT < 50);
-            const gap = adx > 100 && adx < 800 && ady < 200;
+            const gap = adx > 100 && adx < (this.char === 'ember' ? 1400 : 800) && ady < (this.char === 'ember' ? 260 : 200);
             if (combo || gap) {
                 const c = this.char === 'ember' ? (combo ? 0.2 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
                 if (this.useSpecial('BLINK', target.x, target.y, c)) return;
@@ -2576,7 +2602,7 @@ class AIBot extends Fighter {
         const cdOk = (k) => this.cd[k] <= 0;
         if (cdOk('CORE')) {
             if (N.kind === 'burst' && adx < 190 && Math.abs(dy) < 130) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
-            else if (N.kind === 'breath' && dist < 360) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
+            else if (N.kind === 'breath' && dist < (lv === 'hard' && ch === 'ember' ? 190 : 360)) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
             else if (N.kind === 'thunder' && g && dist > 220 && dist < 900) add(2, 'N', () => this.useSpecial('CORE', t.x, t.y, lv === 'hard' ? 0.6 + Math.random() * 0.4 : charge));
         }
         if (cdOk('BLINK')) {
@@ -2585,7 +2611,7 @@ class AIBot extends Fighter {
                 // Side-F is a primary pressure / combo tool
                 if (S1.kind === 'roll') {
                     const combo = t.hitstun > 8 || t.clashStunTimer > 4 || (t.lastHitBy === this && t.lastHitT < 40);
-                    const far = adx > 260 && adx < 800 && Math.abs(dy) < 160;
+                    const far = adx > (ch === 'ember' ? 200 : 260) && adx < (ch === 'ember' ? 1400 : 800) && Math.abs(dy) < (ch === 'ember' ? 260 : 160);
                     if (combo && adx < 500 && Math.abs(dy) < 150) {
                         // combo string: light charge so you can keep hitting
                         add(9.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, 0.2 + Math.random() * 0.35));
@@ -2593,7 +2619,7 @@ class AIBot extends Fighter {
                         // far: higher charge to cover distance / send
                         let c = 0.55 + Math.random() * 0.4;
                         if (t.damage > 70 || t.isHanging) c = 0.9 + Math.random() * 0.1;
-                        add(g ? 7.0 : 4.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+                        add(ch === 'ember' ? (g ? 14 : 8) : (g ? 7.0 : 4.0), 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
                     }
                 } else if (S1.kind === 'dash' && adx > 50 && adx < dd + 240 && Math.abs(dy) < 150) {
                     add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
@@ -3163,7 +3189,7 @@ function explodeOrb(o) {
 
     const pierce = !!(o.pierce || o.kind === 'boulder');   // Terra Boulder: breaks shield, full knockback
     for (const t of foesOf(o.owner)) {
-        if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
+        if ((t.invincibleTimer > 0 && !o.shieldPass) || t.stocks <= 0) continue;
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
         const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > R) continue;
@@ -3183,7 +3209,7 @@ function explodeOrb(o) {
             continue;
         }
 
-        const res = interaction('CORE', t);
+        const res = o.shieldPass ? 'hit' : interaction('CORE', t);
         if (res === 'hit') {
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
@@ -3316,6 +3342,11 @@ function updateOrbs() {
             o.vx = Math.cos(o.ang) * o.spd; o.vy = Math.sin(o.ang) * o.spd;
             if (Math.random() < 0.6) createParticles(o.x, o.y, '#fde047', 1);
         }
+        if (o.homing) {                                           // Phoenix homing rocket: instant, exact turning toward its victim
+            const h = o.homing;
+            if (isAlive(h)) { const a = Math.atan2(h.y - o.y, h.x - o.x); o.vx = Math.cos(a) * o.spd; o.vy = Math.sin(a) * o.spd; }
+            else if (!o.vx && !o.vy) o.vx = o.spd;
+        }
         if (o.cap) { o.capT++; o.vx *= 0.97; o.vy = -0.8; if (o.capT >= 180) { dropOrb(o); explodeOrb(o); continue; } }
         if (o.grav) o.vy += o.grav * ok;
         if (o.wobble) o.y += Math.sin(o.age * 0.22) * o.wobble * 0.35 * ok;
@@ -3340,10 +3371,11 @@ function updateOrbs() {
         }
         let hitOrb = false;
         for (const t of foesOf(o.owner)) {
-            if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
+            if ((t.invincibleTimer > 0 && !o.homing) || t.stocks <= 0) continue;
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
-            if (Math.hypot(o.x - cx, o.y - cy) < o.r) {
+            if (Math.hypot(o.x - cx, o.y - cy) < o.r + (o.homing ? 6 : 0)) {
+                if (o.shieldPass) { dropOrb(o); explodeOrb(o); hitOrb = true; break; }
                 const pierce = !!(o.pierce || o.kind === 'boulder');
                 if (o.trap && !pierce) {
                     const res0 = interaction('CORE', t);

@@ -378,6 +378,13 @@ def sfx_core(rng):
     out['go'] = fin(drive(osc('saw', 440 * np.exp(-t * 0) * (1 + 0.5 * (t > 0.12)), n, sr) * np.exp(-t / 0.25) + osc('sq', 880 * (1 + 0.5 * (t > 0.12)), n, sr) * 0.3 * np.exp(-t / 0.2), 2.5), sr, 0.15)
     n = int(sr * 0.12); t = np.arange(n) / sr
     out['tick'] = fin(osc('sq', 880, n, sr) * np.exp(-t / 0.03) * 0.6 + osc('sq', 1760, n, sr) * np.exp(-t / 0.015) * 0.2, sr)
+    # homing: fire ignition thump, then a rising missile whine with a crackling tail (own rng so older sounds stay byte-identical)
+    r2 = np.random.default_rng(777)
+    n = int(sr * 0.55); t = np.arange(n) / sr; u = t / t[-1]
+    ign = np.sin(2 * np.pi * np.cumsum(50 + 200 * np.exp(-t / 0.03)) / sr) * np.exp(-t / 0.1) * 1.1 + hp(noise(n, r2), 2000, sr) * np.exp(-t / 0.02) * 0.8
+    whine = osc('saw', 300 + 1800 * u ** 1.6, n, sr) * 0.35 * np.sin(np.pi * np.minimum(1, u * 1.15) ) + osc('sq', 600 + 3600 * u ** 1.6, n, sr) * 0.12 * u
+    fire = bp(noise(n, r2), 800, 5000, sr) * (0.25 + 0.5 * u) * np.exp(-t / 0.4) * (1 + 0.6 * np.sin(2 * np.pi * 38 * t))
+    out['homing'] = fin(drive(ign + whine + fire, 2.0), sr, 0.2)
     return out
 
 
