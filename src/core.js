@@ -3006,24 +3006,39 @@ function updateWhirlpools() {
         const w = whirlpools[i];
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
-        // refresh VFX every ~0.35 s so the spiral keeps spinning for the full 3 s
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        const reach = w.r + 20;                                  // horizontal catch radius
+        const aboveH = w.r;                                      // 0.5 × diameter = radius, vertical near-zone above
         for (const f of foesOf(w.owner || p1)) {
-            if (!isAlive(f)) continue;
-            // hit out: a real launch (hitstun) frees them from the pool
+            if (!isAlive(f) || f.invincibleTimer > 0) continue;
+            // hit out: a real launch frees them
             if (f.hitstun > 14) { f._inWhirl = false; continue; }
-            const dx = w.x - f.x, dy = (w.y - f.height * 0.35) - f.y;
+            const dx = w.x - f.x;
+            const targetY = w.y - f.height * 0.35;
+            const dy = targetY - f.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > w.r + f.width * 0.5) { f._inWhirl = false; continue; }
-            if (!f._inWhirl) { f.interrupt(); f._inWhirl = true; }
-            // soft continuous stun while inside
-            f.clashStunTimer = Math.max(f.clashStunTimer, 10);
+            const horiz = Math.abs(dx);
+            // in the pool OR hovering above it within 0.5 diameter
+            const above = f.y < w.y + 10 && (w.y - f.y) <= aboveH && horiz <= reach;
+            const inside = dist <= w.r + f.width * 0.5;
+            if (!inside && !above) { f._inWhirl = false; continue; }
+            // first contact: hard interrupt + instant stun, snap toward centre
+            if (!f._inWhirl) {
+                f.interrupt();
+                f._inWhirl = true;
+                f.clashStunTimer = Math.max(f.clashStunTimer, 24);
+                f.hitstun = Math.max(f.hitstun, 8);
+                f.vx = dx * 0.35; f.vy = dy * 0.25;
+                audio.playHit(false);
+            }
+            // continuous stun + strong pull to centre
+            f.clashStunTimer = Math.max(f.clashStunTimer, 14);
             const pull = w.pull || 2;
-            if (dist > 10) {
+            if (dist > 8) {
                 f.vx = dx / dist * pull;
-                f.vy = dy / dist * pull * 0.5;
+                f.vy = dy / dist * pull * 0.65;
             } else {
-                f.vx *= 0.65; f.vy *= 0.65;
+                f.vx *= 0.5; f.vy *= 0.5;
             }
             f.grounded = false;
         }

@@ -4,20 +4,20 @@ const loadVol = () => {
     try {
         const v = JSON.parse(localStorage.getItem(VOL_KEY) || '{}');
         return {
-            music: Math.max(0, Math.min(1, v.music != null ? +v.music : 0.7)),
+            music: Math.max(0, Math.min(1, v.music != null ? +v.music : 0.8)),
             sfx: Math.max(0, Math.min(1, v.sfx != null ? +v.sfx : 0.9)),
         };
-    } catch (e) { return { music: 0.7, sfx: 0.9 }; }
+    } catch (e) { return { music: 0.8, sfx: 0.9 }; }
 };
 const saveVol = (v) => { try { localStorage.setItem(VOL_KEY, JSON.stringify(v)); } catch (e) { /* blocked */ } };
 
 const BGM = {
-    title: 'audio/bgm/01_title_start_screen.wav',
-    duel: 'audio/bgm/02_duel_1v1.wav',
-    frontier: 'audio/bgm/03_stage_frontier.wav',
-    frontier_big: 'audio/bgm/04_stage_frontier_big.wav',
-    horizon: 'audio/bgm/05_stage_horizon.wav',
-    horizon_big: 'audio/bgm/06_stage_horizon_big.wav',
+    title: 'audio/bgm/01_title_start_screen.wav?v=2',
+    duel: 'audio/bgm/02_duel_1v1.wav?v=2',
+    frontier: 'audio/bgm/03_stage_frontier.wav?v=2',
+    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=2',
+    horizon: 'audio/bgm/05_stage_horizon.wav?v=2',
+    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=2',
 };
 
 export class SoundEngine {
