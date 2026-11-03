@@ -6,7 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { S, WORLD, STAGE, p1, p2, fighters, mouse, dramaticZoom, updateAimMatrix } from 'cbg/core';
+import { S, WORLD, STAGE, p1, p2, fighters, mouse, dramaticZoom, updateAimMatrix } from '../gameCore.js';
 import { CX, CY, wx, wy, lerp, smooth, clamp01, syncSpace } from './space.js';
 import { buildStage } from './stage.js';
 import { FighterModel } from './fighterModel.js';

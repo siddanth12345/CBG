@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103q — recovery, edgeguard, Side-F, Ember halt/melee
+// BUILD_STAMP 20261103r — recovery, edgeguard, Side-F, Ember halt/melee
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,

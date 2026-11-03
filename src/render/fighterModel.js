@@ -7,7 +7,7 @@
 // is authored once, facing forward.
 import { charOf } from '../characters.js';
 import * as THREE from 'three';
-import { S } from 'cbg/core';
+import { S } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { Trail } from './trail.js';
 

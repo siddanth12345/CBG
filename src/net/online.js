@@ -2,7 +2,7 @@
 //   Host  : runs the real simulation (core.step), steers the guest's fighter from their inputs and
 //           streams snapshots.
 //   Guest : sends inputs, mirrors snapshots. See "Online play" in core.js.
-import { S, p1, p2, cleanMap, resolveMap, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter } from 'cbg/core';
+import { S, p1, p2, cleanMap, resolveMap, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter } from '../gameCore.js';
 import { openTransport, hasRealtime, onlineBlocked } from './transport.js';
 import { isDown } from '../controls.js';
 import { displayName } from '../account.js';

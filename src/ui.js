@@ -1,9 +1,9 @@
 // Tutorial + controls settings. Both are plain DOM modals built here; styles live in ui/style.css (.lm-*).
-import { S } from 'cbg/core';
+import { S } from './gameCore.js';
 import { Guide } from './guide.js';
 import { getLayout, setMode } from './layout.js';
 import { getGfx, setGfx, getHitboxes, setHitboxes, getZoom, setZoom } from './gfx.js';
-import { audio } from 'cbg/core';
+import { audio } from './gameCore.js';
 import { ACTIONS, bindings, keyLabel, codeName, setBinding, resetBindings } from './controls.js';
 
 const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

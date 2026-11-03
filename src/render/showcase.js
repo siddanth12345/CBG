@@ -2,7 +2,7 @@
 // circles the camera around the stage, changes shots, and every so often CUTS to another map with a procedural
 // transition (iris, slash, shutters, glitch, warp). Silent, no HUD, no input.
 import * as THREE from 'three';
-import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS, audio } from 'cbg/core';
+import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS, audio } from '../gameCore.js';
 import { wx, wy } from './space.js';
 import { CHARS } from '../characters.js';
 
