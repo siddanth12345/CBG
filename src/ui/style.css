@@ -386,6 +386,9 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 @keyframes cbgin{from{opacity:0;transform:translateX(-34px)}to{opacity:1;transform:none}}
 .cbg-menu>.cbg-brand{animation:none;margin-bottom:6px}
 .cbg-brand .cbg-title{justify-content:flex-start;font-size:clamp(1.7rem,4.2vw,3.2rem);margin-bottom:.15rem}
+.cbg-build{margin:0 0 .35rem;font:600 12px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em;color:#67e8f9;opacity:.85;text-shadow:0 0 12px rgba(103,232,249,.35)}
+.cbg-brand .cbg-build{text-align:left}
+@media (max-width:720px){.cbg-build{font-size:11px;text-align:center}.cbg-brand .cbg-build{text-align:center}}
 .cbg-tag{margin:0;color:#7dd3fc;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.34em;text-transform:uppercase;opacity:.85}
 .cbg-sec{display:flex;align-items:baseline;gap:10px;margin:8px 0 0;color:#94a3b8;font:800 10px/1 system-ui,sans-serif;letter-spacing:.26em;text-transform:uppercase}
 .cbg-sec::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(148,163,184,.4),transparent)}
