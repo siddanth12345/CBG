@@ -1,13 +1,13 @@
-// Smooth procedural SFX (Web Audio) + sampled BGM. Two volume buses: music & sfx (0–1, saved).
+// Energetic industrial BGM + punchy Smash-style SFX. Music/SFX volume buses (0–1).
 const VOL_KEY = 'cbg.vol';
 const loadVol = () => {
     try {
         const v = JSON.parse(localStorage.getItem(VOL_KEY) || '{}');
         return {
-            music: Math.max(0, Math.min(1, v.music != null ? +v.music : 0.55)),
-            sfx: Math.max(0, Math.min(1, v.sfx != null ? +v.sfx : 0.85)),
+            music: Math.max(0, Math.min(1, v.music != null ? +v.music : 0.7)),
+            sfx: Math.max(0, Math.min(1, v.sfx != null ? +v.sfx : 0.9)),
         };
-    } catch (e) { return { music: 0.55, sfx: 0.85 }; }
+    } catch (e) { return { music: 0.7, sfx: 0.9 }; }
 };
 const saveVol = (v) => { try { localStorage.setItem(VOL_KEY, JSON.stringify(v)); } catch (e) { /* blocked */ } };
 
@@ -23,11 +23,12 @@ const BGM = {
 export class SoundEngine {
     constructor() {
         this._ctx = null;
-        this.muted = false;
+        this.muted = false;                       // SFX only (showcase); music still plays
         this._vol = loadVol();
         this._sfxGain = null;
         this._music = null;
         this._musicKey = null;
+        this._musicUnlocked = false;
     }
     get ctx() { return this.muted ? null : this._ctx; }
     get musicVolume() { return this._vol.music; }
@@ -52,6 +53,9 @@ export class SoundEngine {
             this._sfxGain.connect(this._ctx.destination);
         }
         if (this._ctx.state === 'suspended') this._ctx.resume();
+        this._musicUnlocked = true;
+        // retry title if we failed autoplay earlier
+        if (this._music && this._music.paused) this._music.play().catch(() => {});
     }
 
     dest() {
@@ -62,13 +66,23 @@ export class SoundEngine {
     playMusic(key, { loop = true } = {}) {
         const src = BGM[key];
         if (!src) return;
+        // already playing this track
         if (this._musicKey === key && this._music && !this._music.paused) return;
+        // same track paused (autoplay block) → just try play again
+        if (this._musicKey === key && this._music) {
+            this._music.volume = this._vol.music;
+            this._music.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
+            return;
+        }
         this.stopMusic();
         this._musicKey = key;
         const a = new Audio(src);
         a.loop = loop;
         a.volume = this._vol.music;
-        a.play().catch(() => {});
+        a.preload = 'auto';
+        const tryPlay = () => a.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
+        a.addEventListener('canplaythrough', tryPlay, { once: true });
+        tryPlay();
         this._music = a;
     }
     stopMusic() {
@@ -89,12 +103,12 @@ export class SoundEngine {
         if (this._vol.sfx <= 0 || this.muted) return;
         const name = { n: 'neutral', s: 'side', u: 'up', dg: 'down_ground', da: 'down_air' }[slot] || slot;
         const a = new Audio('audio/f/' + char + '_' + slot + '_' + name + '.wav');
-        a.volume = this._vol.sfx * 0.9;
+        a.volume = this._vol.sfx;
         a.play().catch(() => {});
     }
 
-    /** soft tone through optional lowpass — avoids harsh square/saw “8-bit” hits */
-    _tone({ type = 'sine', f0 = 220, f1 = null, dur = 0.15, vol = 0.2, filter = 1800, Q = 0.7 }) {
+    // ---- punchy Smash-like SFX (short, sharp, filtered) ----
+    _tone({ type = 'square', f0 = 220, f1 = null, dur = 0.1, vol = 0.22, filter = 2800 }) {
         if (!this.ctx || this._vol.sfx <= 0) return;
         const t0 = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
@@ -102,30 +116,29 @@ export class SoundEngine {
         const filt = this.ctx.createBiquadFilter();
         osc.type = type;
         osc.frequency.setValueAtTime(f0, t0);
-        if (f1 != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+        if (f1 != null) osc.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t0 + dur);
         filt.type = 'lowpass';
         filt.frequency.setValueAtTime(filter, t0);
-        filt.Q.setValueAtTime(Q, t0);
+        filt.frequency.exponentialRampToValueAtTime(Math.max(200, filter * 0.4), t0 + dur);
         const v = vol * this._vol.sfx;
-        gain.gain.setValueAtTime(0.0001, t0);
-        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, v), t0 + 0.012);
+        gain.gain.setValueAtTime(v, t0);
         gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
         osc.connect(filt); filt.connect(gain); gain.connect(this.dest());
         osc.start(t0); osc.stop(t0 + dur + 0.02);
     }
-
-    _noiseBurst(dur = 0.12, vol = 0.12, filter = 1200) {
+    _noise(dur = 0.08, vol = 0.15, filter = 2000) {
         if (!this.ctx || this._vol.sfx <= 0) return;
         const t0 = this.ctx.currentTime;
         const n = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
         const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / n * 4);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / n * 5);
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
         const filt = this.ctx.createBiquadFilter();
-        filt.type = 'lowpass';
+        filt.type = 'bandpass';
         filt.frequency.setValueAtTime(filter, t0);
+        filt.Q.setValueAtTime(0.8, t0);
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(vol * this._vol.sfx, t0);
         gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
@@ -134,34 +147,35 @@ export class SoundEngine {
     }
 
     playJump() {
-        this._tone({ type: 'sine', f0: 240, f1: 520, dur: 0.11, vol: 0.12, filter: 2400 });
-        this._noiseBurst(0.04, 0.04, 3000);
+        this._tone({ type: 'square', f0: 280, f1: 520, dur: 0.09, vol: 0.16, filter: 3200 });
+        this._noise(0.04, 0.06, 2500);
     }
     playDash() {
-        this._tone({ type: 'triangle', f0: 180, f1: 420, dur: 0.14, vol: 0.14, filter: 1600 });
-        this._noiseBurst(0.08, 0.08, 1400);
+        this._tone({ type: 'sawtooth', f0: 200, f1: 480, dur: 0.11, vol: 0.18, filter: 2200 });
+        this._noise(0.07, 0.12, 1800);
     }
     playHit(heavy = false) {
         if (heavy) {
-            this._tone({ type: 'sine', f0: 120, f1: 45, dur: 0.28, vol: 0.28, filter: 800 });
-            this._noiseBurst(0.18, 0.16, 900);
+            this._tone({ type: 'square', f0: 140, f1: 55, dur: 0.2, vol: 0.32, filter: 1200 });
+            this._noise(0.16, 0.22, 900);
+            this._tone({ type: 'sine', f0: 80, f1: 40, dur: 0.25, vol: 0.2, filter: 600 });
         } else {
-            this._tone({ type: 'triangle', f0: 220, f1: 90, dur: 0.12, vol: 0.16, filter: 1400 });
-            this._noiseBurst(0.08, 0.08, 1600);
+            this._tone({ type: 'square', f0: 260, f1: 110, dur: 0.09, vol: 0.22, filter: 2400 });
+            this._noise(0.06, 0.14, 2000);
         }
     }
     playGrab() {
-        this._tone({ type: 'sine', f0: 360, f1: 140, dur: 0.22, vol: 0.18, filter: 1800 });
+        this._tone({ type: 'square', f0: 320, f1: 160, dur: 0.12, vol: 0.18, filter: 2000 });
     }
     playThrow() {
-        this._tone({ type: 'triangle', f0: 280, f1: 620, dur: 0.18, vol: 0.2, filter: 2200 });
-        this._noiseBurst(0.1, 0.07, 2000);
+        this._tone({ type: 'sawtooth', f0: 300, f1: 700, dur: 0.14, vol: 0.22, filter: 2800 });
+        this._noise(0.08, 0.1, 2200);
     }
     playShield() {
-        this._tone({ type: 'sine', f0: 480, f1: 360, dur: 0.07, vol: 0.09, filter: 2000 });
+        this._tone({ type: 'triangle', f0: 520, f1: 400, dur: 0.06, vol: 0.12, filter: 3000 });
     }
     playKO() {
-        this._tone({ type: 'sine', f0: 140, f1: 40, dur: 0.55, vol: 0.32, filter: 700 });
-        this._noiseBurst(0.35, 0.18, 600);
+        this._tone({ type: 'sawtooth', f0: 180, f1: 35, dur: 0.55, vol: 0.35, filter: 1000 });
+        this._noise(0.4, 0.25, 700);
     }
 }

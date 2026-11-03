@@ -525,7 +525,11 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.sideT > 0) this.sideT--;
         if (this.upT > 0) this.upT--;
-        if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) this.glide = false;
+        if (this.glideT > 0) {
+            this.glideT--;
+            if (this.glideT <= 0) this.glide = false;          // boost window over → normal drift / friction
+        }
+        if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) { this.glide = false; this.glideT = 0; }
         if (this.burnT > 0) {                                  // burning: a tick of damage every half second
             this.burnT--;
             if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
@@ -1005,7 +1009,10 @@ class Fighter {
             }
             if (x.t >= sp.windup + sp.rideFrames + 12) {
                 this.sx = null; this.activeMove = null;
-                this.glide = !this.grounded && !this.isHanging;
+                if (!this.grounded && !this.isHanging) {
+                    this.glide = true;
+                    this.glideT = 42;                          // 0.7 s of boost drift, then normal air control
+                }
             }
         } else if (x.k === 'dash') {
             const sp = spec(this.char, 'S');
