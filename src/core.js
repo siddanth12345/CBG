@@ -905,8 +905,8 @@ class Fighter {
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
                 if (sp.zone) {
-                    // lasting whirlpool on the ground (Tide): initial hit, then zone pulls + stuns for sp.life frames
-                    const R = STAGE.width * (sp.R || sp.w * 0.5);
+                    // fixed pixel radius (rPx) so big maps don't scale the pool up
+                    const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
                     this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
                         damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
                     whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
