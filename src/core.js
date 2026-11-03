@@ -1641,9 +1641,9 @@ class Fighter {
         const rightLedgeX = STAGE.x + STAGE.width;
         const ledgeY = STAGE.y;
 
-        // previous small magnet × 1.3
-        const magnetRangeX = 225 * 0.65 * 0.5 * 1.3;
-        const magnetRangeY = 165 * 0.65 * 0.5 * 1.3;
+        // magnet × 1.4 vs previous size
+        const magnetRangeX = 225 * 0.65 * 0.5 * 1.3 * 1.4;
+        const magnetRangeY = 165 * 0.65 * 0.5 * 1.3 * 1.4;
 
         const trySide = (side) => {
             const lx = side < 0 ? leftLedgeX : rightLedgeX;
@@ -1654,16 +1654,19 @@ class Fighter {
                 : (this.x >= lx - 40 && this.x <= lx + magnetRangeX);
             const inY = this.y >= ledgeY - 30 && this.y <= ledgeY + magnetRangeY && this.vy >= -4;
             if (!inX || !inY) return false;
-            // whirlpool-style forcible pull toward the ledge lip, then snap hang
+            // soft stick to the lip (no fling): damp velocity, ease position, hang when close
             const dx = attachX - this.x, dy = attachY - this.y;
             const dist = Math.hypot(dx, dy) || 0.001;
-            const k = 0.6;
-            this.x += dx * k;
-            this.y += dy * k;
-            this.vx = (attachX - this.x) * 3;
-            this.vy = (attachY - this.y) * 3;
+            this.vx *= 0.55; this.vy *= 0.4;
+            this.x += dx * 0.22;
+            this.y += dy * 0.22;
+            this.vx += dx * 0.06;
+            this.vy += dy * 0.05;
+            // clamp residual so you never get yeeted past the stage
+            this.vx = Math.max(-6, Math.min(6, this.vx));
+            this.vy = Math.max(-5, Math.min(5, this.vy));
             this.grounded = false;
-            if (dist < 55 || Math.hypot(attachX - this.x, attachY - this.y) < 28) this.hangLedge(side);
+            if (dist < 36 || Math.hypot(attachX - this.x, attachY - this.y) < 22) this.hangLedge(side);
             return true;
         };
         if (!trySide(-1)) trySide(1);
@@ -2134,11 +2137,28 @@ class AIBot extends Fighter {
     /** a recovery decision for when the bot is off the stage */
     recover() {
         const cx = STAGE.x + STAGE.width / 2;
-        const ledgeX = this.x < cx ? STAGE.x : STAGE.x + STAGE.width;
-        let tx = ledgeX, ty = STAGE.y;
-        // aim slightly past the lip so magnet can finish the grab; if banned, land on stage
-        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 200 : -200); ty = STAGE.y - 110; }
-        else { tx = ledgeX + (ledgeX === STAGE.x ? -8 : 8); ty = STAGE.y + 8; }
+        const belowMap = this.y > STAGE.y + 8;
+        const offL = this.x < STAGE.x - 20, offR = this.x > STAGE.x + STAGE.width + 20;
+        // Prefer landing ON the stage top (not only the ledge). Below map → full priority stage.
+        let tx, ty;
+        if (belowMap) {
+            if (offL) tx = STAGE.x + 140;
+            else if (offR) tx = STAGE.x + STAGE.width - 140;
+            else tx = Math.max(STAGE.x + 100, Math.min(STAGE.x + STAGE.width - 100, this.x));
+            ty = STAGE.y - 90;
+        } else if (offL || offR) {
+            // above stage height but off side: drift to center / stage top
+            tx = cx;
+            ty = STAGE.y - 110;
+        } else {
+            tx = cx; ty = STAGE.y - 90;
+        }
+        // if ledge ban is down and we're near a lip, magnet can finish — still prefer interior
+        if (this.ledgeBan <= 0 && belowMap && (offL || offR) && Math.random() < 0.35) {
+            const ledgeX = offL ? STAGE.x : STAGE.x + STAGE.width;
+            tx = ledgeX + (offL ? 40 : -40);
+            ty = STAGE.y - 40;
+        }
         const dir = tx > this.x ? 1 : -1;
         const dxAbs = Math.abs(tx - this.x);
         const below = this.y - STAGE.y;
@@ -2147,27 +2167,30 @@ class AIBot extends Fighter {
 
         this.cancelF();
         this.facing = dir;
-        this.vx += dir * (hard ? 2.35 : med ? 1.85 : 1.45);
+        this.vx += dir * (hard ? 2.1 : med ? 1.7 : 1.35);
+        // climb bias when under the stage
+        if (belowMap && this.vy > -2) this.vy -= hard ? 0.9 : 0.55;
+
+        // light dodge vs incoming projectiles while recovering (stage return still primary)
+        const threat = orbs.find(o => o.owner && foesOf(this).includes(o.owner) && Math.hypot(o.x - this.x, o.y - this.y) < 160);
+        if (threat && this.actionTimer % 3 === 0) {
+            this.vx += (this.x < threat.x ? -1.2 : 1.2);
+            if (this.jumpsLeft > 0 && this.vy > 0 && Math.random() < 0.4) this.jump();
+        }
 
         let acted = false;
-        // Up-F recovery often
-        if (this.actionTimer % 2 === 0 && (below > 15 || this.jumpsLeft === 0) && dxAbs < 480) {
-            acted = this.useSpecial('SPIRAL', tx, ty - 50);
+        // Up-F toward stage surface (not only ledge)
+        if (this.actionTimer % 2 === 0 && (belowMap || this.jumpsLeft === 0 || offL || offR) && dxAbs < 520) {
+            acted = this.useSpecial('SPIRAL', tx, ty);
         }
-        // Ember hard: Side-F toward stage
-        if (!acted && hard && this.char === 'ember' && this.actionTimer % 4 === 0 && dxAbs > 40 && this.cd.BLINK <= 0) {
+        if (!acted && hard && this.char === 'ember' && this.actionTimer % 5 === 0 && dxAbs > 50 && this.cd.BLINK <= 0) {
+            acted = this.useSpecial('BLINK', tx, ty, 0.35);
+        }
+        if (!acted && this.actionTimer % 5 === 0 && dxAbs > 100 && below < 340) {
             acted = this.useSpecial('BLINK', tx, ty);
         }
-        // side / dash recovery for all bots
-        if (!acted && this.actionTimer % 4 === 0 && dxAbs > 80 && below < 320) {
-            acted = this.useSpecial('BLINK', tx, ty);
-        }
-        if (!acted && this.actionTimer % 5 === 0) acted = this.executeGrabDash(tx, ty);
-        if (!acted && this.attackTimer === 0 && this.actionTimer % 6 === 0 && dxAbs < 260) {
-            acted = this.attack(dir === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-        }
-        // jump toward ledge every few frames
-        if (this.jumpsLeft > 0 && this.vy > -4 && this.actionTimer % 4 === 0) this.jump();
+        if (!acted && this.actionTimer % 6 === 0) acted = this.executeGrabDash(tx, ty);
+        if (this.jumpsLeft > 0 && this.vy > -3 && this.actionTimer % 3 === 0) this.jump();
     }
 
     /** Soft-platform know-how for the big arenas: drop through a platform to reach a foe below, climb up to one to reach a foe above. Returns true when it took the frame. */
@@ -2334,9 +2357,17 @@ class AIBot extends Fighter {
         const nearRightEdge = this.x > STAGE.x + STAGE.width - 180;
         const isOffStage = nearLeftEdge || nearRightEdge || this.y > STAGE.y + 20;
 
-        if (isOffStage && (!this.grounded || this.y > STAGE.y + 10)) {   // off ledge / under stage: all non-static AIs recover
+        // below the stage or far off the sides → recovery first; near-edge on stage stays neutral
+        const belowMap = this.y > STAGE.y + 12;
+        const farOffSide = this.x < STAGE.x - 50 || this.x > STAGE.x + STAGE.width + 50;
+        if (belowMap || (farOffSide && !this.grounded)) {
             this.recover();
             return;
+        }
+        // soft near-edge: drift toward center, keep fighting (don't soft-lock on ledge tech)
+        if (isOffStage && this.grounded) {
+            const cx = STAGE.x + STAGE.width / 2;
+            this.vx += (cx > this.x ? 0.6 : -0.6);
         }
 
         const speedMultiplier = (isOffStage ? 1.4 : 1.365) * (med ? 0.78 : 1);
@@ -2370,12 +2401,15 @@ class AIBot extends Fighter {
             if (Math.abs(distToTargetX) > 70) {
                 this.vx += this.facing * 1.05 * speedMultiplier;
             }
-            // hard: Side-F as combo extender / gap closer
-            if (!med && this.cd.BLINK <= 0 && !this.grabHolding && this.actionTimer % 8 === 0) {
-                const combo = target.hitstun > 0 || target.clashStunTimer > 0 || (target.lastHitBy === this && target.lastHitT < 45);
-                const midGap = Math.abs(distToTargetX) > 110 && Math.abs(distToTargetX) < 620 && Math.abs(distToTargetY) < 150;
-                if ((combo || midGap) && Math.random() < (combo ? 0.7 : 0.4)) {
-                    const c = this.char === 'ember' ? (combo ? 0.25 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
+            // hard Side-F: ONLY when far (close the gap) OR when a combo is open
+            if (!med && this.cd.BLINK <= 0 && !this.grabHolding && this.actionTimer % 7 === 0) {
+                const combo = target.hitstun > 8 || target.clashStunTimer > 4 || (target.lastHitBy === this && target.lastHitT < 40);
+                const far = Math.abs(distToTargetX) > 260 && Math.abs(distToTargetX) < 780 && Math.abs(distToTargetY) < 160;
+                if (combo && Math.abs(distToTargetX) < 480 && Math.abs(distToTargetY) < 140 && Math.random() < 0.75) {
+                    const c = this.char === 'ember' ? (0.2 + Math.random() * 0.35) : 0;
+                    if (this.useSpecial('BLINK', target.x, target.y, c)) return;
+                } else if (far && !combo && Math.random() < 0.5) {
+                    const c = this.char === 'ember' ? (0.55 + Math.random() * 0.4) : 0;
                     if (this.useSpecial('BLINK', target.x, target.y, c)) return;
                 }
             }
@@ -2466,16 +2500,16 @@ class AIBot extends Fighter {
             if (lv === 'hard') {
                 // Side-F is a primary pressure / combo tool
                 if (S1.kind === 'roll') {
-                    const rollOk = adx > 70 && adx < 800 && Math.abs(dy) < 160;
-                    if (rollOk) {
-                        // combo: after recent hit / high percent → light-mid charge for follow-ups
-                        // edge / far → high charge for send
-                        let c = 0.5;
-                        if (t.damage > 60 || t.isHanging || t.x < STAGE.x + 140 || t.x > STAGE.x + STAGE.width - 140) c = 0.92 + Math.random() * 0.08;
-                        else if (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 40)) c = 0.35 + Math.random() * 0.35;
-                        else if (adx > 300) c = 0.55 + Math.random() * 0.4;
-                        else c = 0.2 + Math.random() * 0.4;
-                        add(g ? 7.5 : 4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+                    const combo = t.hitstun > 8 || t.clashStunTimer > 4 || (t.lastHitBy === this && t.lastHitT < 40);
+                    const far = adx > 260 && adx < 800 && Math.abs(dy) < 160;
+                    if (combo && adx < 500 && Math.abs(dy) < 150) {
+                        // combo string: light charge so you can keep hitting
+                        add(9.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, 0.2 + Math.random() * 0.35));
+                    } else if (far) {
+                        // far: higher charge to cover distance / send
+                        let c = 0.55 + Math.random() * 0.4;
+                        if (t.damage > 70 || t.isHanging) c = 0.9 + Math.random() * 0.1;
+                        add(g ? 7.0 : 4.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
                     }
                 } else if (S1.kind === 'dash' && adx > 50 && adx < dd + 240 && Math.abs(dy) < 150) {
                     add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
