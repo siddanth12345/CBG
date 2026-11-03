@@ -278,17 +278,21 @@ $('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.a
 function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!window.__luminaryPaused) {
-        acc += dt;
-        let n = 0;
-        while (acc >= STEP && n < 3) { step(); acc -= STEP; n++; }
-        if (n === 3) acc = 0;
+    try {
+        if (!window.__luminaryPaused) {
+            acc += dt;
+            let n = 0;
+            while (acc >= STEP && n < 3) { step(); acc -= STEP; n++; }
+            if (n === 3) acc = 0;
+        }
+        ui.guide.tick();
+        touch.tick();
+        onlineGameOver();
+        renderHUD();
+        view.update(dt, window.__luminaryPaused ? 0 : acc / STEP);
+    } catch (err) {
+        console.error('frame', err);
     }
-    ui.guide.tick();
-    touch.tick();
-    onlineGameOver();
-    renderHUD();
-    view.update(dt, window.__luminaryPaused ? 0 : acc / STEP);
     requestAnimationFrame(frame);
 }
 

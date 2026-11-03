@@ -455,11 +455,11 @@ export class FighterModel {
         const p = newPose();
         const t = this.t;
         const speedX = Math.abs(f.vx);
-        const playing = S.gameState === 'playing';
+        const playing = S.gameState === 'playing' || S.gameState === 'countdown' || !!S.demo;
         this.visFacing = f.facing;
         this.pose_special = null;
 
-        // ---- non-playing screens: hover idle (matches the original, where fighters just sit there)
+        // ---- non-playing screens: hover idle (menu only, not the live showcase)
         if (!playing && S.gameState !== 'gameover') {
             const b = Math.sin(t * 2.4);
             p.dy = b * 1.2; p.rSx = 22 + b * 4; p.lSx = 22 - b * 4; p.rSz = 18; p.lSz = 18; p.rE = 35; p.lE = 35;

@@ -462,9 +462,17 @@ class Fighter {
 
     reset(fullReset = false) {
         this.x = this.startX;
-        this.y = STAGE.y - 300;
         this.vx = 0;
         this.vy = 0;
+        // full reset (match start, demo, rematch): stand on the stage immediately.
+        // mid-match respawn (fullReset false while playing) keeps the 1s light pillar above the stage.
+        if (fullReset || S.gameState !== 'playing') {
+            this.y = STAGE.y - this.height / 2;
+            this.grounded = true;
+        } else {
+            this.y = STAGE.y - 300;
+            this.grounded = false;
+        }
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
         this.dropHeld();
         this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.burnDmg = 3; this.burnBy = null;
@@ -485,6 +493,7 @@ class Fighter {
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
         this.spawnT = (!fullReset && S.gameState === 'playing') ? 60 : 0;
+        if (this.spawnT <= 0 && this.grounded) this.vy = 0;
         this.attackTimer = 0;
         this.activeHitbox = null;
         this.incomingHitCount = 0;
@@ -2280,7 +2289,7 @@ class AIBot extends Fighter {
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         // HARD: force Side-F often (combo or gap) — cache-bust build so this is visible
-        if (this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && (this.haltT|0) <= 0 && this.actionTimer % 6 === 0) {
+        if (!S.demo && this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && (this.haltT|0) <= 0 && this.actionTimer % 6 === 0) {
             const adx = Math.abs(target.x - this.x), ady = Math.abs(target.y - this.y);
             const combo = target.hitstun > 4 || target.clashStunTimer > 2 || (target.lastHitBy === this && target.lastHitT < 50);
             const gap = adx > 100 && adx < 800 && ady < 200;
