@@ -2381,14 +2381,48 @@ class AIBot extends Fighter {
             if (this.beginCore(target, 35 + Math.random() * 28)) return;
         }
 
-        if (targetIsOffStage && this.grounded && !isOffStage) {
-            const guardLedgeX = target.x < STAGE.x ? STAGE.x + 60 : STAGE.x + STAGE.width - 60;
-            const guardDir = guardLedgeX > this.x ? 1 : -1;
-            this.facing = guardDir;
-            this.vx += guardDir * 1.5;
+        if (targetIsOffStage) {
+            // Can we still recover if we chase off-stage?
+            const hasUp = this.cd.SPIRAL <= 0;
+            const hasSide = this.cd.BLINK <= 0;
+            const canReturn = this.jumpsLeft >= 1 || hasUp || hasSide;
+            const deep = target.y > STAGE.y + 80 || target.x < STAGE.x - 120 || target.x > STAGE.x + STAGE.width + 120;
+            // easy: always safe on-stage guard
+            // medium: sometimes risks a chase
+            // hard: often leaves stage to secure the stock when recovery tools remain
+            let risk = 0;
+            if (this.level === 'easy') risk = 0;
+            else if (this.level === 'medium') risk = canReturn ? 0.45 : 0.1;
+            else risk = canReturn ? (deep ? 0.85 : 0.7) : 0.25;
 
-            if (Math.abs(this.x - guardLedgeX) < 100 && this.actionTimer % 15 === 0) {
-                this.attack('DOWN');
+            const chase = this.level !== 'easy' && Math.random() < risk;
+            if (!chase) {
+                if (this.grounded || this.y < STAGE.y + 40) {
+                    const guardLedgeX = target.x < STAGE.x + STAGE.width / 2 ? STAGE.x + 70 : STAGE.x + STAGE.width - 70;
+                    const guardDir = guardLedgeX > this.x ? 1 : -1;
+                    this.facing = guardDir;
+                    this.vx += guardDir * 1.4;
+                    if (Math.abs(this.x - guardLedgeX) < 120 && this.actionTimer % 12 === 0) {
+                        if (this.cd.CORE <= 0 && Math.random() < 0.4) this.beginCore(target, 28 + Math.random() * 20);
+                        else this.attack('DOWN');
+                    }
+                }
+                return;
+            }
+            // risk: leave stage to secure the stock (recover() pulls us back when deep)
+            this.facing = target.x >= this.x ? 1 : -1;
+            this.vx += this.facing * (this.level === 'hard' ? 2.0 : 1.5);
+            if (this.y > target.y - 40 && this.jumpsLeft > 0 && this.actionTimer % 5 === 0) this.jump();
+            if (this.actionTimer % 6 === 0) {
+                const adx = Math.abs(target.x - this.x);
+                if (adx < 220 && this.attack(target.y < this.y - 30 ? 'UP' : 'DOWN')) return;
+                if (hasSide && adx > 80 && adx < 520 && this.useSpecial('BLINK', target.x, target.y, this.char === 'ember' ? 0.45 : 0)) return;
+                if (hasUp && (target.y < this.y - 40 || deep) && this.useSpecial('SPIRAL', target.x, target.y)) return;
+                if (this.cd.CORE <= 0 && adx > 180) this.beginCore(target, 30 + Math.random() * 25);
+            }
+            if (this.y > STAGE.y + 160 || (this.jumpsLeft === 0 && this.cd.SPIRAL > 0 && this.cd.BLINK > 0)) {
+                this.recover();
+                return;
             }
             return;
         }
@@ -2528,20 +2562,25 @@ class AIBot extends Fighter {
             }
         }
         if (cdOk('SPIRAL')) {
-            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            const uw = lv === 'hard' ? 7.0 : 3.0;   // hard: Up-F weight matches Side-F combo pressure
+            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (lv === 'hard' && dist < 400) add(uw * 0.55, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
         }
         if (cdOk('SUPLEX') && g) {
             const reach = DG.atTarget ? 620 : Math.max(170, STAGE.width * (DG.w || 0.1) * 0.5 + 40);
             if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
         }
         if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
-        // hard: extra Side-F combo pressure when foe is in hitstun / recently hit
+        // hard: Side-F combo pressure ≈ Up-F (same weight class)
         if (this.level === 'hard' && cdOk('BLINK') && (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 50))) {
-            const c = this.char === 'ember' ? (0.3 + Math.random() * 0.45) : 0;
-            add(8.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+            const c = this.char === 'ember' ? (0.25 + Math.random() * 0.4) : 0;
+            add(7.5, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+        }
+        if (this.level === 'hard' && cdOk('SPIRAL') && (t.hitstun > 0 || (t.lastHitBy === this && t.lastHitT < 40))) {
+            add(7.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
         }
         if (!opts.length) return false;
         let tot = 0; for (const o of opts) tot += o[0];
