@@ -1232,6 +1232,7 @@ class Fighter {
     }
 
     useSpecial(kind, tx, ty, charge = 0) {
+        if (this.isHanging) return false;    // ledge: jump only
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
@@ -1635,9 +1636,9 @@ class Fighter {
         const rightLedgeX = STAGE.x + STAGE.width;
         const ledgeY = STAGE.y;
 
-        // 2× smaller than the previous 0.65× box
-        const magnetRangeX = 225 * 0.65 * 0.5;
-        const magnetRangeY = 165 * 0.65 * 0.5;
+        // previous small magnet × 1.3
+        const magnetRangeX = 225 * 0.65 * 0.5 * 1.3;
+        const magnetRangeY = 165 * 0.65 * 0.5 * 1.3;
 
         const trySide = (side) => {
             const lx = side < 0 ? leftLedgeX : rightLedgeX;
@@ -1674,8 +1675,12 @@ class Fighter {
     }
 
     hangLedge(side) {
-        // one fighter per ledge: whoever arrives second kicks the first one off (3 s without a ledge)
-        for (const other of fighters) if (other !== this && other.active && other.isHanging && other.hangSide === side) other.kickFromLedge(KICK_BAN);
+        // one fighter per ledge: second arrival kicks the first off — unless the occupant still has ledge invinc (priority)
+        for (const other of fighters) {
+            if (other === this || !other.active || !other.isHanging || other.hangSide !== side) continue;
+            if (other.invincibleTimer > 0) return;   // they keep the ledge during invinc
+            other.kickFromLedge(KICK_BAN);
+        }
 
         this.isHanging = true;
         this.hangSide = side;
@@ -1685,13 +1690,12 @@ class Fighter {
         this.grounded = false;
         this.fActive = false; this.chargeFrames = 0;
         this.actionLock = 0;
+        this.sx = null; this.activeMove = null; this.activeHitbox = null;
 
         this.jumpsLeft = this.maxJumps;
         this.canGrab = true;
-        // (air F moves are NOT refilled here: only the ground does that)
-
+        // 1.5 s ledge invinc (90 frames) — priority vs challengers while it lasts
         this.invincibleTimer = 90;
-        // no particles / fx / sfx on ledge grab (was tanking FPS when bots thrashed the lip)
     }
 
     kickFromLedge(ban) {
@@ -1912,6 +1916,8 @@ class Fighter {
         if (this.actionLock > JUMP_OK) return false;
 
         if (this.isHanging) {
+            // only jump gets you off; blocked for the first 0.6 s on the ledge
+            if (this.hangTimer < 36) return false;
             const side = this.hangSide;
             this.leaveLedge();
             this.vy = -14.5;
@@ -1965,6 +1971,7 @@ class Fighter {
 
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
+        if (this.isHanging) return false;    // ledge: jump only
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
@@ -2215,15 +2222,14 @@ class AIBot extends Fighter {
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         if (this.isHanging) {
-            // climb toward stage centre; force a get-up if jump is locked
+            // climb toward stage centre — jump only after 0.6 s (same rule as players)
             const onto = this.x < stageCenterX ? 10 : -10;
-            if (!this.jump()) {
-                this.leaveLedge();
-                this.vy = -15;
-                this.jumpsLeft = this.maxJumps;
-                this.canGrab = true;
+            if (this.hangTimer >= 36) {
+                if (!this.jump()) {
+                    // jump failed (lock etc.): still leave only via jump path — wait
+                }
             }
-            this.vx = onto;
+            this.vx = 0;   // stay locked on ledge until jump
             // all non-static bots: after climb, hard commits recovery specials near the edge
             if (this.level !== 'static' && this.level === 'hard' && this.actionTimer % 8 === 0) {
                 const lx = this.x < stageCenterX ? STAGE.x + 40 : STAGE.x + STAGE.width - 40;
@@ -3702,8 +3708,11 @@ function drive(f, h) {
                 if (h.drop || jy > 0.5) f.vy = Math.min(f.vy + 0.45, 7);
                 else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
             } else {
-            if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
-            if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
+            // on ledge: only jump gets you off (no walk-off)
+            if (!f.isHanging) {
+                if (h.left) { f.vx = -spd; if (!swinging) f.facing = -1; }
+                if (h.right) { f.vx = spd; if (!swinging) f.facing = 1; }
+            }
             }
         }
         f.isShielding = !!h.shield && f.canShield();
