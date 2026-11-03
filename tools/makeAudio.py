@@ -128,6 +128,10 @@ CELLS = [
     [0, 0, 0, None, 0, 0, 0, None, 7, 7, None, 0, 0, None, 6, None],
     [0, 0, None, 0, 0, 0, None, 0, 0, 0, None, 3, 3, None, 5, 5],
     [0, None, None, 0, None, 0, None, None, 0, None, 0, 0, None, 0, None, 7],
+    [0, None, 0, None, 3, None, 0, None, 5, None, 0, None, 7, None, 5, 3],            # 5: syncopated stabs
+    [0, 0, 12, 0, 0, 10, 0, 0, 7, 0, 0, 5, 0, 3, 0, 1],                               # 6: octave-jump industrial grind
+    [0, None, None, 7, None, None, 5, None, 3, None, None, 5, None, 7, None, None],   # 7: wide, slow-burn heroic
+    [0, 7, 0, 7, 12, 7, 0, 7, 3, 10, 3, 10, 15, 10, 3, 10],                           # 8: bright fifths run
 ]
 
 
@@ -144,7 +148,8 @@ def compose(cfg, seed):
     def kk(i, g=1.0): add(tr['kick'], i, K, g); kicks.append(i)
 
     # ---- section map (24 bars): intro 0-3, riff A 4-11, breakdown 12-15, section B 16-23 (leads + max energy)
-    secs = ['intro'] * 4 + ['A'] * 8 + ['brk'] * 4 + ['B'] * 8
+    secs = cfg.get('secs') or (['intro'] * 4 + ['A'] * 8 + ['brk'] * 4 + ['B'] * 8)
+    secidx = [len([j for j in range(i) if secs[j] == secs[i]]) for i in range(bars)]      # how many bars of this section came before
     prog = cfg.get('prog', [0, 0, 3, 1])                          # root shift (semitones) per bar of a 4-bar phrase
     cellA = [CELLS[i] for i in cfg['cells']]
     for bar in range(bars):
@@ -164,14 +169,37 @@ def compose(cfg, seed):
             if bar == 15:
                 for j, s in enumerate(range(8, 16)): add(tr['drums'], S(bar, s), SN, 0.5 + 0.07 * j)
         else:
+            feel = cfg.get('feel', 'metal')
             fast = cfg.get('double', True) and (sec == 'B' or bar % 4 >= 2)
-            kp = list(range(0, 16, 2)) if fast else [0, 3, 6, 8, 10, 12 + (bar % 2) * 2]
-            if cfg.get('gallop') and not fast: kp = [0, 2, 3, 6, 8, 10, 11, 14]
-            for s in kp: kk(S(bar, s), 1.0 if s % 4 == 0 else 0.8)
-            for s in (4, 12): add(tr['drums'], S(bar, s), SN, 1.15)
-            for s in range(0, 16, 2): add(tr['drums'], S(bar, s), HH, 0.5 if s % 4 else 0.7)
-            if bar % 8 == 0: add(tr['drums'], S(bar, 0), CR, 0.9)
-            if bar % 4 == 3:
+            if feel == 'break':        # breakbeat: syncopated kicks, ghost snares, rolling 16th hats
+                for s in ([0, 6, 10, 11] if bar % 2 == 0 else [0, 3, 6, 10, 14]): kk(S(bar, s), 1.0 if s in (0, 10) else 0.75)
+                for s in (4, 12): add(tr['drums'], S(bar, s), SN, 1.15)
+                for s in (7, 9, 15) if bar % 2 else (7, 15): add(tr['drums'], S(bar, s), SN, 0.35)
+                for s in range(16): add(tr['drums'], S(bar, s), HH, 0.55 if s % 2 else 0.35)
+                if sec == 'B' and bar % 2: add(tr['drums'], S(bar, 14), HO, 0.6)
+            elif feel == 'four':       # driving four-on-the-floor with off-beat open hats and claps: heroic and pumping
+                for s in (0, 4, 8, 12): kk(S(bar, s), 1.0)
+                if sec == 'B':
+                    for s in (14,): kk(S(bar, s), 0.7)
+                for s in (4, 12): add(tr['drums'], S(bar, s), SN, 1.0)
+                for s in (2, 6, 10, 14): add(tr['drums'], S(bar, s), HO, 0.45)
+                for s in range(1, 16, 2): add(tr['drums'], S(bar, s), HH, 0.3)
+                if bar % 4 == 0: add(tr['drums'], S(bar, 0), CR, 0.6)
+            elif feel == 'halftime':   # massive half-time stomp: kick 1 and the 'and' of 3, one huge snare on 3
+                for s in (0, 10) + ((6,) if sec == 'B' else ()): kk(S(bar, s), 1.1)
+                add(tr['drums'], S(bar, 8), SN, 1.3); add(tr['drums'], S(bar, 8), CL, 0.5)
+                for s in range(0, 16, 2): add(tr['drums'], S(bar, s), HH, 0.45 if s % 4 else 0.65)
+                if sec == 'B':
+                    for s in (3, 7, 11, 15): add(tr['drums'], S(bar, s), TM, 0.4)
+            else:
+                kp = list(range(0, 16, 2)) if fast else [0, 3, 6, 8, 10, 12 + (bar % 2) * 2]
+                if feel == 'gallop' and not fast: kp = [0, 2, 3, 6, 8, 10, 11, 14]
+                if cfg.get('gallop') and not fast: kp = [0, 2, 3, 6, 8, 10, 11, 14]
+                for s in kp: kk(S(bar, s), 1.0 if s % 4 == 0 else 0.8)
+                for s in (4, 12): add(tr['drums'], S(bar, s), SN, 1.15)
+                for s in range(0, 16, 2): add(tr['drums'], S(bar, s), HH, 0.5 if s % 4 else 0.7)
+            if bar % 8 == 0 and feel in ('metal', 'gallop'): add(tr['drums'], S(bar, 0), CR, 0.9)
+            if bar % 4 == 3 and feel != 'halftime':
                 for j, s in enumerate(range(12, 16)): add(tr['drums'], S(bar, s), SN if j % 2 else TM, 0.7)
         if bar in (0, 4, 12, 16): add(tr['drums'], S(bar, 0), CR, 0.8 if bar else 0.5)
         # --- guitars + bass
@@ -206,19 +234,23 @@ def compose(cfg, seed):
             p = lp(p / (3 * len(chord)), 1800 if sec != 'B' else 3200, sr) * np.minimum(1, t / 0.4) * np.minimum(1, (ln / sr - t) / 0.3)
             add(tr['pad'], b0 * int(step * sr), p, 0.9)
         # --- lead (section B always; A for 'lead_in_A' tracks)
-        if sec == 'B' or (cfg.get('lead_a') and sec == 'A' and bar >= 8):
-            if bar % 2 == 0:
-                mot = cfg['motifs'][((bar - 16) // 2 if sec == 'B' else (bar - 8) // 2) % len(cfg['motifs'])]
+        if sec == 'B' or (cfg.get('lead_a') and sec == 'A' and secidx[bar] >= 4):
+            if secidx[bar] % 2 == 0:
+                mot = cfg['motifs'][(secidx[bar] // 2) % len(cfg['motifs'])]
                 pos = 0
                 for deg, ln_ in mot:
                     oct_ = 12 * (deg // 7); m = cfg['gtr'] + 24 + shift + oct_ + sc[deg % 7]
                     L = int(ln_ * step * sr * 1.02) + int(step * sr * 0.4)
                     t = np.arange(L) / sr; vib = 1 + 0.006 * np.sin(2 * np.pi * 5.5 * t) * np.minimum(1, t / 0.25)
-                    ld = osc('saw', hz(m) * vib, L, sr) * 0.7 + osc('sq', hz(m) * vib * 1.003, L, sr) * 0.4
-                    add(tr['lead'], S(bar, pos), ld * adsr(L, sr, 0.004, 0.05, 0.85, 0.08), 1.0)
+                    lk = cfg.get('leadk', 'saw')
+                    if lk == 'sq': ldn = osc('sq', hz(m) * vib, L, sr) * 0.55 + osc('pulse', hz(m) * vib * 2.004, L, sr) * 0.3
+                    elif lk == 'fm': ldn = np.sin(2 * np.pi * np.cumsum(hz(m) * vib) / sr + 2.4 * np.sin(2 * np.pi * np.cumsum(hz(m) * vib * 2) / sr) * np.exp(-t / 0.35)) * 0.9
+                    elif lk == 'tri': ldn = osc('tri', hz(m) * vib, L, sr) * 0.9 + osc('saw', hz(m) * vib * 1.002, L, sr) * 0.3
+                    else: ldn = osc('saw', hz(m) * vib, L, sr) * 0.7 + osc('sq', hz(m) * vib * 1.003, L, sr) * 0.4
+                    add(tr['lead'], S(bar, pos), ldn * adsr(L, sr, 0.004, 0.05, 0.85, 0.08), 1.0)
                     pos += ln_
         # --- fx: risers into sections, impacts
-        if bar in (3, 11, 15):
+        if bar + 1 < bars and secs[bar + 1] != sec and sec != 'brk' or bar in (3, 11, 15) and False:
             n = int(sr * step * spb); t = np.arange(n) / sr
             r = hp(noise(n, rng), 300 + 5000 * (t / t[-1]) ** 2, sr) if False else noise(n, rng) * (t / t[-1]) ** 2
             r = bp(r, 800, 9000, sr) * 1.2
@@ -254,18 +286,20 @@ TRACKS = {
     '02_duel_1v1': dict(bpm=186, scale='phrygian', root=38, gtr=38, cells=[1, 0, 3, 2], arp='pulse', pad=False, gallop=True, motifs=[
         [(7, 2), (7, 2), (8, 4), (7, 2), (6, 2), (4, 4), (3, 4), (4, 12)], [(4, 2), (6, 2), (7, 4), (8, 4), (7, 2), (6, 2), (4, 4), (3, 8)],
         [(8, 4), (9, 4), (8, 2), (7, 2), (6, 4), (7, 12)], [(4, 4), (3, 2), (4, 2), (6, 4), (4, 4), (3, 4), (1, 4), (3, 6)]], prog=[0, 0, 1, 3]),
-    '03_stage_frontier': dict(bpm=176, scale='minor', root=42, gtr=42, cells=[2, 1, 0, 3], arp='sq', pad=True, motifs=[
-        [(7, 2), (8, 2), (7, 4), (4, 4), (5, 4), (4, 6), (2, 6)], [(4, 4), (4, 2), (5, 2), (7, 4), (8, 4), (7, 4), (4, 12)],
-        [(9, 4), (8, 4), (7, 4), (4, 4), (5, 4), (6, 4), (4, 8)], [(7, 4), (6, 2), (7, 2), (9, 4), (8, 4), (7, 8), (4, 8)]], prog=[0, -2, 3, 1]),
-    '04_stage_frontier_big': dict(bpm=164, scale='phrygian', root=36, gtr=36, cells=[3, 0, 2, 4], arp='sq', pad=True, double=True, motifs=[
-        [(7, 8), (8, 4), (7, 4), (6, 8), (4, 8)], [(4, 4), (6, 4), (7, 8), (9, 4), (8, 4), (7, 8)],
-        [(9, 8), (8, 4), (7, 4), (8, 8), (11, 8)], [(7, 4), (7, 4), (6, 4), (4, 4), (3, 8), (4, 8)]], prog=[0, 1, 0, 3]),
-    '05_stage_horizon': dict(bpm=172, scale='lydian', root=45, gtr=45, cells=[0, 1, 3, 2], arp='tri', pad=True, motifs=[
-        [(7, 4), (9, 2), (11, 2), (9, 4), (7, 4), (8, 4), (4, 8)], [(11, 4), (9, 2), (7, 2), (9, 4), (7, 4), (4, 4), (6, 4), (7, 4)],
-        [(4, 2), (7, 2), (9, 4), (11, 4), (9, 4), (7, 8), (4, 4)], [(9, 4), (11, 4), (14, 8), (11, 4), (9, 4), (11, 4), (9, 4)]], lead_a=True, prog=[0, 5, 7, 2]),
-    '06_stage_horizon_big': dict(bpm=168, scale='major', root=40, gtr=40, cells=[3, 2, 0, 1], arp='sq', pad=True, motifs=[
-        [(7, 8), (9, 4), (11, 4), (12, 8), (11, 4), (9, 4)], [(4, 4), (7, 4), (9, 8), (11, 4), (9, 4), (7, 8)],
-        [(14, 8), (12, 4), (11, 4), (9, 8), (11, 8)], [(7, 4), (9, 4), (11, 4), (12, 4), (14, 8), (12, 8)]], lead_a=True, prog=[0, 7, 5, 9]),
+    '03_stage_frontier': dict(bpm=176, scale='minor', root=42, gtr=42, cells=[5, 6, 7, 2], arp='pulse', pad=True, feel='break', leadk='sq',
+        secs=['intro'] * 2 + ['A'] * 6 + ['brk'] * 2 + ['B'] * 6 + ['A'] * 4 + ['brk'] * 2 + ['B'] * 2,
+        motifs=[[(4, 3), (4, 3), (7, 2), (6, 3), (4, 2), (2, 3)], [(7, 3), (7, 1), (6, 2), (4, 3), (4, 3), (2, 2), (4, 2)],
+                [(9, 2), (7, 3), (6, 3), (4, 3), (6, 2), (7, 3)], [(2, 3), (4, 3), (7, 3), (6, 1), (4, 2), (2, 2), (0, 2)]], prog=[0, 5, -2, 3]),
+    '04_stage_frontier_big': dict(bpm=160, scale='phrygian', root=36, gtr=36, cells=[3, 6, 0, 4], arp='sq', pad=True, feel='halftime', leadk='saw',
+        secs=['intro'] * 4 + ['brk'] * 4 + ['A'] * 8 + ['B'] * 8,
+        motifs=[[(11, 12), (10, 4)], [(7, 6), (8, 2), (7, 4), (6, 4)], [(9, 8), (11, 8)], [(4, 4), (6, 4), (7, 4), (6, 4)]], prog=[0, 0, 1, 0]),
+    '05_stage_horizon': dict(bpm=172, scale='lydian', root=45, gtr=45, cells=[8, 7, 3, 1], arp='tri', pad=True, feel='gallop', leadk='tri',
+        secs=['intro'] * 2 + ['A'] * 4 + ['B'] * 6 + ['brk'] * 2 + ['B'] * 6 + ['A'] * 4,
+        motifs=[[(7, 2), (9, 2), (11, 4), (9, 2), (7, 2), (4, 4)], [(11, 3), (11, 1), (12, 4), (14, 4), (12, 2), (11, 2)],
+                [(14, 2), (12, 2), (11, 2), (9, 2), (7, 4), (9, 4)], [(4, 2), (7, 2), (9, 2), (11, 2), (14, 8)]], lead_a=False, prog=[0, 7, 9, 5]),
+    '06_stage_horizon_big': dict(bpm=168, scale='major', root=40, gtr=40, cells=[7, 8, 2, 5], arp='sq', pad=True, feel='four', leadk='fm',
+        secs=['intro'] * 4 + ['A'] * 4 + ['B'] * 8 + ['brk'] * 4 + ['B'] * 4,
+        motifs=[[(7, 6), (9, 2), (11, 8)], [(14, 4), (12, 2), (11, 2), (9, 8)], [(11, 4), (12, 4), (14, 8)], [(9, 2), (11, 2), (12, 4), (11, 4), (9, 4)]], prog=[0, 5, 9, 7]),
 }
 
 

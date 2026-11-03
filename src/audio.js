@@ -12,12 +12,12 @@ const loadVol = () => {
 const saveVol = (v) => { try { localStorage.setItem(VOL_KEY, JSON.stringify(v)); } catch (e) { /* blocked */ } };
 
 const BGM = {
-    title: 'audio/bgm/01_title_start_screen.wav?v=3',
-    duel: 'audio/bgm/02_duel_1v1.wav?v=3',
-    frontier: 'audio/bgm/03_stage_frontier.wav?v=3',
-    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=3',
-    horizon: 'audio/bgm/05_stage_horizon.wav?v=3',
-    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=3',
+    title: 'audio/bgm/01_title_start_screen.wav?v=4',
+    duel: 'audio/bgm/02_duel_1v1.wav?v=4',
+    frontier: 'audio/bgm/03_stage_frontier.wav?v=4',
+    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=4',
+    horizon: 'audio/bgm/05_stage_horizon.wav?v=4',
+    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=4',
 };
 
 export class SoundEngine {
@@ -114,7 +114,7 @@ export class SoundEngine {
         if (now - (this._sfxLast[key] || 0) < 35) return true;
         this._sfxLast[key] = now;
         let a = this._sfxEls[key];
-        if (!a) { a = new Audio('audio/' + key + '.wav?v=3'); a.preload = 'auto'; this._sfxEls[key] = a; }
+        if (!a) { a = new Audio('audio/' + key + '.wav?v=4'); a.preload = 'auto'; this._sfxEls[key] = a; }
         try { const c = a.cloneNode(true); c.volume = Math.max(0, Math.min(1, this._vol.sfx * gain)); c.play().catch(() => {}); } catch (e) { /* */ }
         return true;
     }
