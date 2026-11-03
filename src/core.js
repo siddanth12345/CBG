@@ -1028,7 +1028,7 @@ class Fighter {
                 // white travels 1.4× as far as red (same speed, longer life); blue uses full charged life
                 // red base; white 1.2×; blue faster version of white (1.45×)
                 const spdMul = full ? 1.45 : (mid ? 1.2 : 1.1);
-                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk * spdMul;
+                const speed = lerpR(sp.speed, mid || full ? 0.5 : 0) * walk * spdMul * (x.slow || 1);   // blue: a hit it ploughs through slows it to 0.6x for the rest of this roll
                 if (x.v === undefined) x.v = x.d * speed;
                 const acc = speed / 22;
                 x.v += Math.max(-acc, Math.min(acc, x.d * speed - x.v));
@@ -2795,6 +2795,15 @@ function emberCounter(em, foe) {
 
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash: their attacks do nothing
+    if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll' && (defender.sx.c || 0) >= 0.9) {
+        // BLUE fireball: nothing stops it. It still takes the damage, but ploughs straight through with no flinch, knockback or stun;
+        // the hit costs it speed (0.6x) for the rest of this roll, and it keeps damaging whatever it touches.
+        defender.damage += hb.damage; defender.lastHitBy = attacker; defender.lastHitT = 0;
+        defender.sx.slow = 0.6;
+        S.screenShake = Math.max(S.screenShake, 5); audio.playHit(false);
+        createParticles(defender.x, defender.y, '#38bdf8', 10); fx('block', defender.x, defender.y);
+        return;
+    }
     if (hb.phoenix && attacker !== defender) { defender.invincibleTimer = Math.max(defender.invincibleTimer, 60); defender.ghostT = 60; }   // hit by the rockets / the last 5 frames of the dash: 1 s of invincibility
     if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit++; }
     if (hb.radial || hb.mirror) {                           // area hits push away from their centre / mirror to the victim's side
