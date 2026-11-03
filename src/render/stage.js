@@ -2,7 +2,7 @@
 // drifting rocks and the dashed blast-zone frame. Collision is still the original
 // rectangle, so what you see is exactly what you stand on.
 import * as THREE from 'three';
-import { S, STAGE, BLAST_ZONES } from '../core.js';
+import { S, STAGE, BLAST_ZONES } from '../gameCore.js';
 import { buildHorizon } from './horizon.js';
 import { wx, wy } from './space.js';
 

@@ -1,3 +1,4 @@
+// BUILD_STAMP 20261103r — recovery, edgeguard, Side-F, Ember halt/melee
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
@@ -451,6 +452,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.hangTimer = 0;
         this.ledgeBan = 0;
+        this.haltT = 0; this.haltElapsed = 0;   // Ember post-roll slowdown (0.7 s)
         this.specialKind = null;             // presentation: 'CORE' | 'SPIRAL' | 'SUPLEX' | 'HEADBUTT'
         this.specialT = 0;
         this.specialDur = 0;
@@ -460,9 +462,17 @@ class Fighter {
 
     reset(fullReset = false) {
         this.x = this.startX;
-        this.y = STAGE.y - 300;
         this.vx = 0;
         this.vy = 0;
+        // full reset (match start, demo, rematch): stand on the stage immediately.
+        // mid-match respawn (fullReset false while playing) keeps the 1s light pillar above the stage.
+        if (fullReset || S.gameState !== 'playing') {
+            this.y = STAGE.y - this.height / 2;
+            this.grounded = true;
+        } else {
+            this.y = STAGE.y - 300;
+            this.grounded = false;
+        }
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
         this.dropHeld();
         this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.burnDmg = 3; this.burnBy = null;
@@ -483,6 +493,7 @@ class Fighter {
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
         this.spawnT = (!fullReset && S.gameState === 'playing') ? 60 : 0;
+        if (this.spawnT <= 0 && this.grounded) this.vy = 0;
         this.attackTimer = 0;
         this.activeHitbox = null;
         this.incomingHitCount = 0;
@@ -503,11 +514,12 @@ class Fighter {
     actionBlocked() {
         return this.actionLock > 0 || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 ||
             this.freezeTimer > 0 || this.isRolling || this.isHanging || !!this.grabbedBy || !!this.grabHolding ||
-            this.isShielding || this.fActive || this.spiralT > 0 || this.suplexT > 0 || this.diving || !!this.sx;
+            this.isShielding || this.fActive || this.spiralT > 0 || this.suplexT > 0 || this.diving || !!this.sx ||
+            this.haltT > 0;   // Ember post-roll halt: no attacks/specials/shield
     }
     canShield() {
         return this.actionLock <= 0 && !this.attackHeld && !this.fActive && this.spiralT === 0 && this.suplexT === 0 && !this.diving && !this.sx &&
-            !this.isRolling && this.freezeTimer === 0;
+            !this.isRolling && this.freezeTimer === 0 && this.haltT <= 0;
     }
     setMove(type, frames) { this.activeMove = { type, t: frames }; }
 
@@ -517,6 +529,7 @@ class Fighter {
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
         this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null;
+        this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
         this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0;
         this.isGrabDashing = false;
@@ -537,9 +550,20 @@ class Fighter {
             if (this.glideT <= 0) this.glide = false;          // boost window over → normal drift / friction
         }
         if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) { this.glide = false; this.glideT = 0; }
-        if (this.burnT > 0) {                                  // burning: a tick of damage every half second
+        if (this.burnT > 0) {                                  // burning: 1 tick every 0.2 s (12 frames)
             this.burnT--;
-            if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
+            if (this.burnT % 12 === 0 && this.stocks > 0) {
+                this.damage += this.burnDmg || 1;
+                if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; }
+                fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 5);
+            }
+        }
+        // Ember Side-F end lag: slide to a stop over 0.7 s (legs-forward halt)
+        if (this.haltT > 0) {
+            this.haltT--;
+            this.haltElapsed++;
+            this.vx *= 0.88;
+            if (Math.abs(this.vx) < 0.35) this.vx = 0;
         }
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
         const bj = trainJumps(this);       // training menu can override jump count
@@ -794,10 +818,20 @@ class Fighter {
         const cm = 1 + MELEE_CHARGE_BONUS * (this.meleeCharge / MELEE_CHARGE_MAX);          // charged swing: up to +30%
         const fl = this.heldItem && this.heldItem.type === 'FIRESTICK' ? this.heldItem.len : 1;   // firestick: longer reach
         const reach = 1 + (fl - 1) * 0.6;
+        let dmg = sw.damage * cm;
+        let burn = null;
+        if (this.char === 'ember') {
+            // Ember melee: base 2 (uncharged) / 3 (full); main damage is burn ticks
+            const ch = this.meleeCharge / MELEE_CHARGE_MAX;
+            dmg = 2 + Math.round(ch);                         // 2 → 3
+            // 1.6 s uncharged → 3 s full; tick every 0.2 s deals 1
+            const burnFrames = Math.round(96 + ch * (180 - 96)); // 96..180
+            burn = { t: burnFrames, dmg: 1 };
+        }
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl, h: sw.h * (1 + (fl - 1) * 0.35),
-            damage: sw.damage * cm, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
-            multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0,
+            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
+            multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0, burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : null,
         };
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
@@ -914,12 +948,16 @@ class Fighter {
                 if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
                     const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
-                    this.activeHitbox = { x: cx, y: feet - 20, w: R * 2, h: Math.max(sp.h, 80), type: 'SPIRAL', ttl: 6, multi: true, mirror: true, radial: true,
-                        damage: sp.dmg, bkb: 0, kbg: 0, angle: sp.ang, stun: 18 };
-                    whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
-                    fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
-                    S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
-                    createParticles(cx, feet - 10, '#38bdf8', 22);
+                    // only one whirlpool — if one is live, animation only (no second pool)
+                    if (whirlpools.length === 0) {
+                        // no activeHitbox: zero damage, zero stun — pure pull zone
+                        whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                        fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
+                        S.screenShake = Math.max(S.screenShake, 8);
+                        createParticles(cx, feet - 10, '#38bdf8', 16);
+                    } else {
+                        fx('gust', cx, feet, R * 0.35, 0, 'water');
+                    }
                 } else {
                     this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
                         pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
@@ -1000,7 +1038,7 @@ class Fighter {
             // aim boost: 1.5× the old 3× walk speed, eased in over several frames (gravity still applies after)
             if (x.t === sp.windup + sp.rideFrames) {
                 const aim = aimOf(this), ang = Math.atan2(aim.y - this.y, aim.x - this.x);
-                const spd = 4.5 * 8.5 * charOf(this.char).walk;  // was 3×, now 1.5× faster → 4.5× walk
+                const spd = 4.5 * 0.7 * 8.5 * charOf(this.char).walk;  // 0.7× previous launch strength
                 x.bvx = Math.cos(ang) * spd;
                 x.bvy = Math.sin(ang) * spd - 1.2;
                 x.boostLeft = 10;
@@ -1228,6 +1266,7 @@ class Fighter {
     }
 
     useSpecial(kind, tx, ty, charge = 0) {
+        if (this.isHanging) return false;    // ledge: jump only
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
@@ -1290,6 +1329,8 @@ class Fighter {
             vx: dx * speed, vy: dy * speed, r, charge, owner: this, life: sp.life, color, id: ++orbSerial,
             d: lerpR(sp.dmg, charge), R: lerpR(sp.R, charge), bkb: lerpR(sp.bkb, charge), kbg: sp.kbg,
             grav: sp.grav || 0, curve: sp.curve || 0, wobble: sp.wobble || 0, pull: sp.pull || 0, age: 0, kind: sp.look || 0,
+            // Terra Boulder (and any look:'boulder'): pierces / breaks shields on contact + AOE
+            pierce: sp.look === 'boulder' || sp.pierce === true,
         });                                                   // flies straight along the aim (Umbra's curves a little, Terra's arcs)
         this.setMove('CORE', 24);
         this.specialKind = 'CORE'; this.specialT = 0; this.specialDur = 24;
@@ -1339,17 +1380,23 @@ class Fighter {
         const x = this.sx;
         if (x && x.k === 'roll' && x.ph === 'roll') {
             const sp = spec(this.char, 'S'), c = x.c || 0;
-            const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+            let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
             const full = c >= 0.9, mid = c >= 0.4 && !full;
+            if (full) { rb *= 0.7; rk *= 0.7; }   // blue end knockback 0.7×
             // white end 8; blue end 12 (1.5× white) — both drag then launch
             const endDmg = full ? 12 : (mid ? 8 : 0);
+            // white/blue end KB aims where the user is pointing (mouse PC / joystick+matrix mobile)
+            const aim = aimOf(this);
+            let adx = aim.x - this.x, ady = aim.y - this.y;
+            let alen = Math.hypot(adx, ady);
+            if (alen < 8) { adx = this.facing || 1; ady = -0.25; alen = Math.hypot(adx, ady); }
+            const aimAng = Math.atan2(ady, adx);
             for (const f of foesOf(this)) {
                 if (f._rollCarry !== this) continue;
                 f._rollCarry = null;
                 if (endDmg) {
                     f.grounded = false;
-                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
@@ -1365,13 +1412,15 @@ class Fighter {
                     if (Math.abs(f.x - this.x) > sz2 / 2 + f.width / 2 + 10 || Math.abs(f.y - this.y) > sz2 / 2 + f.height / 2 + 10) continue;
                     if (f.lastHitBy === this && f.lastHitT < 3) continue;
                     f.grounded = false;
-                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
                 }
             }
         }
         if (this.sx && this.sx.k === 'roll') for (const f of fighters) if (f._rollCarry === this) f._rollCarry = null;
-        this.sx = null; this.activeHitbox = null; this.activeMove = null; this.vx *= 0.4;
+        this.sx = null; this.activeHitbox = null; this.activeMove = null;
+        // 0.7 s halt: keep horizontal speed, decelerate (not an instant stop)
+        this.haltT = 42;
+        this.haltElapsed = 0;
     }
 
     startSx(k, charge = 0, extra = {}) {
@@ -1629,17 +1678,35 @@ class Fighter {
         const rightLedgeX = STAGE.x + STAGE.width;
         const ledgeY = STAGE.y;
 
-        const magnetRangeX = 225;
-        const magnetRangeY = 165;
+        // magnet × 1.4 vs previous size
+        const magnetRangeX = 225 * 0.65 * 0.5 * 1.3 * 1.4;
+        const magnetRangeY = 165 * 0.65 * 0.5 * 1.3 * 1.4;
 
-        if (this.x >= leftLedgeX - magnetRangeX && this.x <= leftLedgeX + 50 &&
-            this.y >= ledgeY - 40 && this.y <= ledgeY + magnetRangeY && this.vy >= -3) {
-            this.hangLedge(-1);
-        }
-        else if (this.x >= rightLedgeX - 50 && this.x <= rightLedgeX + magnetRangeX &&
-            this.y >= ledgeY - 40 && this.y <= ledgeY + magnetRangeY && this.vy >= -3) {
-            this.hangLedge(1);
-        }
+        const trySide = (side) => {
+            const lx = side < 0 ? leftLedgeX : rightLedgeX;
+            const attachX = lx + side * 12;
+            const attachY = ledgeY + 12;
+            const inX = side < 0
+                ? (this.x >= lx - magnetRangeX && this.x <= lx + 40)
+                : (this.x >= lx - 40 && this.x <= lx + magnetRangeX);
+            const inY = this.y >= ledgeY - 30 && this.y <= ledgeY + magnetRangeY && this.vy >= -4;
+            if (!inX || !inY) return false;
+            // soft stick to the lip (no fling): damp velocity, ease position, hang when close
+            const dx = attachX - this.x, dy = attachY - this.y;
+            const dist = Math.hypot(dx, dy) || 0.001;
+            this.vx *= 0.55; this.vy *= 0.4;
+            this.x += dx * 0.22;
+            this.y += dy * 0.22;
+            this.vx += dx * 0.06;
+            this.vy += dy * 0.05;
+            // clamp residual so you never get yeeted past the stage
+            this.vx = Math.max(-6, Math.min(6, this.vx));
+            this.vy = Math.max(-5, Math.min(5, this.vy));
+            this.grounded = false;
+            if (dist < 36 || Math.hypot(attachX - this.x, attachY - this.y) < 22) this.hangLedge(side);
+            return true;
+        };
+        if (!trySide(-1)) trySide(1);
     }
 
     /** leave the ledge: any remaining ledge invincibility is stripped immediately */
@@ -1648,11 +1715,17 @@ class Fighter {
         this.isHanging = false;
         this.hangTimer = 0;
         this.invincibleTimer = 0;
+        // after dropping off a ledge you can't re-grab for 1 s (stops AI ledge thrash / frame spikes)
+        this.ledgeBan = Math.max(this.ledgeBan, 60);
     }
 
     hangLedge(side) {
-        // one fighter per ledge: whoever arrives second kicks the first one off (3 s without a ledge)
-        for (const other of fighters) if (other !== this && other.active && other.isHanging && other.hangSide === side) other.kickFromLedge(KICK_BAN);
+        // one fighter per ledge: second arrival kicks the first off — unless the occupant still has ledge invinc (priority)
+        for (const other of fighters) {
+            if (other === this || !other.active || !other.isHanging || other.hangSide !== side) continue;
+            if (other.invincibleTimer > 0) return;   // they keep the ledge during invinc
+            other.kickFromLedge(KICK_BAN);
+        }
 
         this.isHanging = true;
         this.hangSide = side;
@@ -1662,26 +1735,22 @@ class Fighter {
         this.grounded = false;
         this.fActive = false; this.chargeFrames = 0;
         this.actionLock = 0;
+        this.sx = null; this.activeMove = null; this.activeHitbox = null;
 
         this.jumpsLeft = this.maxJumps;
         this.canGrab = true;
-        // (air F moves are NOT refilled here: only the ground does that)
-
+        // 1.5 s ledge invinc (90 frames) — priority vs challengers while it lasts
         this.invincibleTimer = 90;
-        audio.playShield();
-        createParticles(this.hangSide === -1 ? STAGE.x : STAGE.x + STAGE.width, STAGE.y, '#38bdf8', 10);
     }
 
     kickFromLedge(ban) {
         const side = this.hangSide;
         this.leaveLedge();
         this.ledgeBan = ban;
-        this.vx = side * 5;                                   // away from the stage
+        this.vx = side * 5;
         this.vy = 3;
         this.grounded = false;
-        fx('kick', this.x, this.y, side);
-        createParticles(this.x, this.y, '#f59e0b', 14);
-        audio.playHit(false);
+        // no fx / particles / sfx — laggy when AIs cycle ledges
     }
 
     checkStageCollision(bounce = false) {
@@ -1889,9 +1958,13 @@ class Fighter {
             return true;
         }
         if (this.sx) return false;                              // other specials still lock jump
+        // post-roll halt: can jump only after 0.4 s into the 0.7 s slowdown
+        if (this.haltT > 0 && this.haltElapsed < 24) return false;
         if (this.actionLock > JUMP_OK) return false;
 
         if (this.isHanging) {
+            // only jump gets you off; blocked for the first 0.6 s on the ledge
+            if (this.hangTimer < 36) return false;
             const side = this.hangSide;
             this.leaveLedge();
             this.vy = -14.5;
@@ -1945,6 +2018,7 @@ class Fighter {
 
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
+        if (this.isHanging) return false;    // ledge: jump only
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
@@ -2102,26 +2176,60 @@ class AIBot extends Fighter {
     /** a recovery decision for when the bot is off the stage */
     recover() {
         const cx = STAGE.x + STAGE.width / 2;
-        const ledgeX = this.x < cx ? STAGE.x : STAGE.x + STAGE.width;
-        let tx = ledgeX, ty = STAGE.y;
-        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 150 : -150); ty = STAGE.y - 80; }   // can't hang: land on the stage
+        const belowMap = this.y > STAGE.y + 8;
+        const offL = this.x < STAGE.x - 20, offR = this.x > STAGE.x + STAGE.width + 20;
+        // Prefer landing ON the stage top (not only the ledge). Below map → full priority stage.
+        let tx, ty;
+        if (belowMap) {
+            if (offL) tx = STAGE.x + 140;
+            else if (offR) tx = STAGE.x + STAGE.width - 140;
+            else tx = Math.max(STAGE.x + 100, Math.min(STAGE.x + STAGE.width - 100, this.x));
+            ty = STAGE.y - 90;
+        } else if (offL || offR) {
+            // above stage height but off side: drift to center / stage top
+            tx = cx;
+            ty = STAGE.y - 110;
+        } else {
+            tx = cx; ty = STAGE.y - 90;
+        }
+        // if ledge ban is down and we're near a lip, magnet can finish — still prefer interior
+        if (this.ledgeBan <= 0 && belowMap && (offL || offR) && Math.random() < 0.35) {
+            const ledgeX = offL ? STAGE.x : STAGE.x + STAGE.width;
+            tx = ledgeX + (offL ? 40 : -40);
+            ty = STAGE.y - 40;
+        }
         const dir = tx > this.x ? 1 : -1;
         const dxAbs = Math.abs(tx - this.x);
         const below = this.y - STAGE.y;
+        const hard = this.level === 'hard';
+        const med = this.level === 'medium';
 
         this.cancelF();
         this.facing = dir;
-        this.vx += dir * 1.2;
+        this.vx += dir * (hard ? 2.1 : med ? 1.7 : 1.35);
+        // climb bias when under the stage
+        if (belowMap && this.vy > -2) this.vy -= hard ? 0.9 : 0.55;
+
+        // light dodge vs incoming projectiles while recovering (stage return still primary)
+        const threat = orbs.find(o => o.owner && foesOf(this).includes(o.owner) && Math.hypot(o.x - this.x, o.y - this.y) < 160);
+        if (threat && this.actionTimer % 3 === 0) {
+            this.vx += (this.x < threat.x ? -1.2 : 1.2);
+            if (this.jumpsLeft > 0 && this.vy > 0 && Math.random() < 0.4) this.jump();
+        }
 
         let acted = false;
-        if (this.actionTimer % 4 === 0 && below > 40 && dxAbs < 380 && (this.jumpsLeft === 0 || below > 140)) {
+        // Up-F toward stage surface (not only ledge)
+        if (this.actionTimer % 2 === 0 && (belowMap || this.jumpsLeft === 0 || offL || offR) && dxAbs < 520) {
             acted = this.useSpecial('SPIRAL', tx, ty);
         }
-        if (!acted && this.actionTimer % 6 === 0 && dxAbs > 200 && below < 220) acted = this.useSpecial('BLINK', tx, ty);
+        if (!acted && hard && this.char === 'ember' && this.actionTimer % 5 === 0 && dxAbs > 50 && this.cd.BLINK <= 0) {
+            acted = this.useSpecial('BLINK', tx, ty, 0.35);
+        }
+        if (!acted && this.actionTimer % 5 === 0 && dxAbs > 100 && below < 340) {
+            acted = this.useSpecial('BLINK', tx, ty);
+        }
         if (!acted && this.actionTimer % 6 === 0) acted = this.executeGrabDash(tx, ty);
-        if (!acted && this.attackTimer === 0 && this.actionTimer % 8 === 0 && dxAbs < 220) acted = this.attack(dir === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-
-        if (this.jumpsLeft > 0 && this.vy > -2 && this.actionTimer % 6 === 0) this.jump();
+        if (this.jumpsLeft > 0 && this.vy > -3 && this.actionTimer % 3 === 0) this.jump();
     }
 
     /** Soft-platform know-how for the big arenas: drop through a platform to reach a foe below, climb up to one to reach a foe above. Returns true when it took the frame. */
@@ -2180,18 +2288,28 @@ class AIBot extends Fighter {
         this.actionTimer++;
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
-        if (this.isHanging) {
-            // always climb toward stage centre; force a get-up if jump is locked
-            const onto = this.x < stageCenterX ? 10 : -10;
-            if (!this.jump()) {
-                this.leaveLedge();
-                this.vy = -15;
-                this.jumpsLeft = this.maxJumps;
-                this.canGrab = true;
+        // HARD: force Side-F often (combo or gap) — cache-bust build so this is visible
+        if (!S.demo && this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && (this.haltT|0) <= 0 && this.actionTimer % 6 === 0) {
+            const adx = Math.abs(target.x - this.x), ady = Math.abs(target.y - this.y);
+            const combo = target.hitstun > 4 || target.clashStunTimer > 2 || (target.lastHitBy === this && target.lastHitT < 50);
+            const gap = adx > 100 && adx < 800 && ady < 200;
+            if (combo || gap) {
+                const c = this.char === 'ember' ? (combo ? 0.2 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
+                if (this.useSpecial('BLINK', target.x, target.y, c)) return;
             }
-            this.vx = onto;
-            // hard bots: if still near the void edge, burn a recovery special next frame
-            if (this.level === 'hard' && this.actionTimer % 8 === 0) {
+        }
+
+        if (this.isHanging) {
+            // climb toward stage centre — jump only after 0.6 s (same rule as players)
+            const onto = this.x < stageCenterX ? 10 : -10;
+            if (this.hangTimer >= 36) {
+                if (!this.jump()) {
+                    // jump failed (lock etc.): still leave only via jump path — wait
+                }
+            }
+            this.vx = 0;   // stay locked on ledge until jump
+            // all non-static bots: after climb, hard commits recovery specials near the edge
+            if (this.level !== 'static' && this.level === 'hard' && this.actionTimer % 8 === 0) {
                 const lx = this.x < stageCenterX ? STAGE.x + 40 : STAGE.x + STAGE.width - 40;
                 this.useSpecial('SPIRAL', lx, STAGE.y - 40);
             }
@@ -2289,9 +2407,17 @@ class AIBot extends Fighter {
         const nearRightEdge = this.x > STAGE.x + STAGE.width - 180;
         const isOffStage = nearLeftEdge || nearRightEdge || this.y > STAGE.y + 20;
 
-        if (this.y > STAGE.y + 20) {          // under the stage: climb back
+        // below the stage or far off the sides → recovery first; near-edge on stage stays neutral
+        const belowMap = this.y > STAGE.y + 12;
+        const farOffSide = this.x < STAGE.x - 50 || this.x > STAGE.x + STAGE.width + 50;
+        if (belowMap || (farOffSide && !this.grounded)) {
             this.recover();
             return;
+        }
+        // soft near-edge: drift toward center, keep fighting (don't soft-lock on ledge tech)
+        if (isOffStage && this.grounded) {
+            const cx = STAGE.x + STAGE.width / 2;
+            this.vx += (cx > this.x ? 0.6 : -0.6);
         }
 
         const speedMultiplier = (isOffStage ? 1.4 : 1.365) * (med ? 0.78 : 1);
@@ -2305,14 +2431,48 @@ class AIBot extends Fighter {
             if (this.beginCore(target, 35 + Math.random() * 28)) return;
         }
 
-        if (targetIsOffStage && this.grounded && !isOffStage) {
-            const guardLedgeX = target.x < STAGE.x ? STAGE.x + 60 : STAGE.x + STAGE.width - 60;
-            const guardDir = guardLedgeX > this.x ? 1 : -1;
-            this.facing = guardDir;
-            this.vx += guardDir * 1.5;
+        if (targetIsOffStage) {
+            // Can we still recover if we chase off-stage?
+            const hasUp = this.cd.SPIRAL <= 0;
+            const hasSide = this.cd.BLINK <= 0;
+            const canReturn = this.jumpsLeft >= 1 || hasUp || hasSide;
+            const deep = target.y > STAGE.y + 80 || target.x < STAGE.x - 120 || target.x > STAGE.x + STAGE.width + 120;
+            // easy: always safe on-stage guard
+            // medium: sometimes risks a chase
+            // hard: often leaves stage to secure the stock when recovery tools remain
+            let risk = 0;
+            if (this.level === 'easy') risk = 0;
+            else if (this.level === 'medium') risk = canReturn ? 0.45 : 0.1;
+            else risk = canReturn ? (deep ? 0.85 : 0.7) : 0.25;
 
-            if (Math.abs(this.x - guardLedgeX) < 100 && this.actionTimer % 15 === 0) {
-                this.attack('DOWN');
+            const chase = this.level !== 'easy' && Math.random() < risk;
+            if (!chase) {
+                if (this.grounded || this.y < STAGE.y + 40) {
+                    const guardLedgeX = target.x < STAGE.x + STAGE.width / 2 ? STAGE.x + 70 : STAGE.x + STAGE.width - 70;
+                    const guardDir = guardLedgeX > this.x ? 1 : -1;
+                    this.facing = guardDir;
+                    this.vx += guardDir * 1.4;
+                    if (Math.abs(this.x - guardLedgeX) < 120 && this.actionTimer % 12 === 0) {
+                        if (this.cd.CORE <= 0 && Math.random() < 0.4) this.beginCore(target, 28 + Math.random() * 20);
+                        else this.attack('DOWN');
+                    }
+                }
+                return;
+            }
+            // risk: leave stage to secure the stock (recover() pulls us back when deep)
+            this.facing = target.x >= this.x ? 1 : -1;
+            this.vx += this.facing * (this.level === 'hard' ? 2.0 : 1.5);
+            if (this.y > target.y - 40 && this.jumpsLeft > 0 && this.actionTimer % 5 === 0) this.jump();
+            if (this.actionTimer % 6 === 0) {
+                const adx = Math.abs(target.x - this.x);
+                if (adx < 220 && this.attack(target.y < this.y - 30 ? 'UP' : 'DOWN')) return;
+                if (hasSide && adx > 80 && adx < 520 && this.useSpecial('BLINK', target.x, target.y, this.char === 'ember' ? 0.45 : 0)) return;
+                if (hasUp && (target.y < this.y - 40 || deep) && this.useSpecial('SPIRAL', target.x, target.y)) return;
+                if (this.cd.CORE <= 0 && adx > 180) this.beginCore(target, 30 + Math.random() * 25);
+            }
+            if (this.y > STAGE.y + 160 || (this.jumpsLeft === 0 && this.cd.SPIRAL > 0 && this.cd.BLINK > 0)) {
+                this.recover();
+                return;
             }
             return;
         }
@@ -2324,6 +2484,18 @@ class AIBot extends Fighter {
 
             if (Math.abs(distToTargetX) > 70) {
                 this.vx += this.facing * 1.05 * speedMultiplier;
+            }
+            // hard Side-F: ONLY when far (close the gap) OR when a combo is open
+            if (!med && this.cd.BLINK <= 0 && !this.grabHolding && this.actionTimer % 7 === 0) {
+                const combo = target.hitstun > 8 || target.clashStunTimer > 4 || (target.lastHitBy === this && target.lastHitT < 40);
+                const far = Math.abs(distToTargetX) > 260 && Math.abs(distToTargetX) < 780 && Math.abs(distToTargetY) < 160;
+                if (combo && Math.abs(distToTargetX) < 480 && Math.abs(distToTargetY) < 140 && Math.random() < 0.75) {
+                    const c = this.char === 'ember' ? (0.2 + Math.random() * 0.35) : 0;
+                    if (this.useSpecial('BLINK', target.x, target.y, c)) return;
+                } else if (far && !combo && Math.random() < 0.5) {
+                    const c = this.char === 'ember' ? (0.55 + Math.random() * 0.4) : 0;
+                    if (this.useSpecial('BLINK', target.x, target.y, c)) return;
+                }
             }
 
             // 1) a core is coming: raise the shield (counters everything but grab)
@@ -2367,7 +2539,7 @@ class AIBot extends Fighter {
             if (this.char === 'terra' && this.rockT <= 0 && dist > 140 && dist < 800 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.35 : 0.6)) { if (this.attack('NEUTRAL')) return; }
 
             // 5b) the character's own special moves
-            if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.65) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
+            if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.85) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
 
             // 6) neutral game at close / mid range
             if (dist < 130 && !this.grabHolding) {
@@ -2409,22 +2581,57 @@ class AIBot extends Fighter {
         }
         if (cdOk('BLINK')) {
             const dd = S1.dist || 300;
-            if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
-            else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-            else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-            else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            if (lv === 'hard') {
+                // Side-F is a primary pressure / combo tool
+                if (S1.kind === 'roll') {
+                    const combo = t.hitstun > 8 || t.clashStunTimer > 4 || (t.lastHitBy === this && t.lastHitT < 40);
+                    const far = adx > 260 && adx < 800 && Math.abs(dy) < 160;
+                    if (combo && adx < 500 && Math.abs(dy) < 150) {
+                        // combo string: light charge so you can keep hitting
+                        add(9.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, 0.2 + Math.random() * 0.35));
+                    } else if (far) {
+                        // far: higher charge to cover distance / send
+                        let c = 0.55 + Math.random() * 0.4;
+                        if (t.damage > 70 || t.isHanging) c = 0.9 + Math.random() * 0.1;
+                        add(g ? 7.0 : 4.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+                    }
+                } else if (S1.kind === 'dash' && adx > 50 && adx < dd + 240 && Math.abs(dy) < 150) {
+                    add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (S1.kind === 'bubble' && adx > 90 && adx < 740 && Math.abs(dy) < 190) {
+                    add(5.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (S1.kind === 'tp' && adx < dd + 180 && Math.abs(dy) < 160) {
+                    add(5.8, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (adx > 70 && adx < 560 && Math.abs(dy) < 170) {
+                    add(4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                }
+            } else {
+                if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
+                else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            }
         }
         if (cdOk('SPIRAL')) {
-            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(2.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            const uw = lv === 'hard' ? 7.0 : 3.0;   // hard: Up-F weight matches Side-F combo pressure
+            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (lv === 'hard' && dist < 400) add(uw * 0.55, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
         }
         if (cdOk('SUPLEX') && g) {
             const reach = DG.atTarget ? 620 : Math.max(170, STAGE.width * (DG.w || 0.1) * 0.5 + 40);
             if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
         }
         if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
+        // hard: Side-F combo pressure ≈ Up-F (same weight class)
+        if (this.level === 'hard' && cdOk('BLINK') && (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 50))) {
+            const c = this.char === 'ember' ? (0.25 + Math.random() * 0.4) : 0;
+            add(7.5, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+        }
+        if (this.level === 'hard' && cdOk('SPIRAL') && (t.hitstun > 0 || (t.lastHitBy === this && t.lastHitT < 40))) {
+            add(7.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+        }
         if (!opts.length) return false;
         let tot = 0; for (const o of opts) tot += o[0];
         let r = Math.random() * tot, pick = opts[0];
@@ -2449,6 +2656,9 @@ class AIBot extends Fighter {
 const particles = [];
 function createParticles(x, y, color, count = 10) {
     if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
+    // hard cap so ledge thrash / KO spam can't melt the frame rate
+    const room = Math.max(0, 220 - particles.length);
+    count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
@@ -2951,16 +3161,32 @@ function explodeOrb(o) {
     createParticles(o.x, o.y, o.color, 18 + Math.floor(24 * o.charge));
     createParticles(o.x, o.y, '#ffffff', 10);
 
+    const pierce = !!(o.pierce || o.kind === 'boulder');   // Terra Boulder: breaks shield, full knockback
     for (const t of foesOf(o.owner)) {
         if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
         const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > R) continue;
 
+        if (pierce) {
+            // hard-break shield: no block VFX, normal launch
+            if (t.isShielding) {
+                t.isShielding = false;
+                t.shieldHold = 0;
+                t.shieldHealth = 0;
+                fx('counter', t.x, t.y);
+            }
+            launch(o.owner, t, {
+                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
+                angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
+            });
+            continue;
+        }
+
         const res = interaction('CORE', t);
         if (res === 'hit') {
             launch(o.owner, t, {
-                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,      // half the knockback
+                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
                 angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
             });
         } else if (res === 'shield') {
@@ -3024,41 +3250,33 @@ function updateWhirlpools() {
         w.life--;
         if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
         if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
-        const reach = w.r + 20;                                  // horizontal catch radius
-        const aboveH = w.r;                                      // 0.5 × diameter = radius, vertical near-zone above
+        // pull zone = pool itself (diameter wide, radius tall) — grab-style forced center lock
         for (const f of foesOf(w.owner || p1)) {
             if (!isAlive(f) || f.invincibleTimer > 0) continue;
-            // hit out: a real launch frees them
-            if (f.hitstun > 14) { f._inWhirl = false; continue; }
+            // real launches can still knock you free
+            if (f.hitstun > 18) { f._inWhirl = false; continue; }
             const dx = w.x - f.x;
-            const targetY = w.y - f.height * 0.35;
-            const dy = targetY - f.y;
-            const dist = Math.hypot(dx, dy);
             const horiz = Math.abs(dx);
-            // in the pool OR hovering above it within 0.5 diameter
-            const above = f.y < w.y + 10 && (w.y - f.y) <= aboveH && horiz <= reach;
-            const inside = dist <= w.r + f.width * 0.5;
-            if (!inside && !above) { f._inWhirl = false; continue; }
-            // first contact: hard interrupt + instant stun, snap toward centre
-            if (!f._inWhirl) {
-                f.interrupt();
-                f._inWhirl = true;
-                f.clashStunTimer = Math.max(f.clashStunTimer, 24);
-                f.hitstun = Math.max(f.hitstun, 8);
-                f.vx = dx * 0.35; f.vy = dy * 0.25;
-                audio.playHit(false);
-            }
-            // continuous stun + strong pull to centre
-            f.clashStunTimer = Math.max(f.clashStunTimer, 14);
-            const pull = w.pull || 2;
-            if (dist > 8) {
-                const pv = Math.min(pull, dist * 0.5);                   // never overshoot the centre, however hard the pull
-                f.vx = dx / dist * pv;
-                f.vy = dy / dist * pv * 0.65;
-            } else {
-                f.vx *= 0.5; f.vy *= 0.5;
-            }
+            if (horiz > w.r + f.width * 0.35) { f._inWhirl = false; continue; }
+            const above = w.y - f.y;
+            if (above > w.r + f.height * 0.5 || f.y > w.y + f.height) { f._inWhirl = false; continue; }
+
+            // centre of the pool (same idea as grab: force position toward the holder)
+            const tx = w.x;
+            const ty = w.y - f.height * 0.35;
+            // grab-style: zero out velocity, then snap/lerp body toward centre every frame
+            f.clashStunTimer = 0;            // never grey-stun from the pool
+            f.vx = 0;
+            f.vy = 0;
+            // strong lerp into centre (forcible, like being held)
+            const k = 0.55;
+            f.x += (tx - f.x) * k;
+            f.y += (ty - f.y) * k;
+            // residual velocity so physics/other systems still see motion toward centre
+            f.vx = (tx - f.x) * 2.5;
+            f.vy = (ty - f.y) * 2.5;
             f.grounded = false;
+            f._inWhirl = true;
         }
     }
 }
@@ -3126,12 +3344,24 @@ function updateOrbs() {
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r) {
-                const res = interaction('CORE', t);
-                if (o.trap && res === 'hit') {                    // Bubble Trap: swallow them
-                    t.interrupt(); t.trapId = o.id; t.lastHitBy = o.owner; t.lastHitT = 0; o.cap = t; o.capT = 0; o.life = 200; o.r = 50;
-                    fx('explosion', o.x, o.y, 50, 0, 'water'); audio.playGrab();
-                    hitOrb = true; break;
+                const pierce = !!(o.pierce || o.kind === 'boulder');
+                if (o.trap && !pierce) {
+                    const res0 = interaction('CORE', t);
+                    if (res0 === 'hit') {
+                        t.interrupt(); t.trapId = o.id; t.lastHitBy = o.owner; t.lastHitT = 0; o.cap = t; o.capT = 0; o.life = 200; o.r = 50;
+                        fx('explosion', o.x, o.y, 50, 0, 'water'); audio.playGrab();
+                        hitOrb = true; break;
+                    }
                 }
+                // boulder: always explode (AOE + launch), never stop on shield
+                if (pierce) {
+                    if (t.isShielding) { t.isShielding = false; t.shieldHold = 0; t.shieldHealth = 0; }
+                    dropOrb(o);
+                    explodeOrb(o);
+                    hitOrb = true;
+                    break;
+                }
+                const res = interaction('CORE', t);
                 dropOrb(o);
                 if (res === 'hit') explodeOrb(o);
                 else if (res === 'shield') {
@@ -3637,8 +3867,11 @@ function drive(f, h) {
                 if (h.drop || jy > 0.5) f.vy = Math.min(f.vy + 0.45, 7);
                 else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
             } else {
-            if (h.left) { if (f.isHanging) f.leaveLedge(); f.vx = -spd; if (!swinging) f.facing = -1; }
-            if (h.right) { if (f.isHanging) f.leaveLedge(); f.vx = spd; if (!swinging) f.facing = 1; }
+            // on ledge: only jump gets you off; during Ember post-roll halt: no walk input
+            if (!f.isHanging && f.haltT <= 0) {
+                if (h.left) { f.vx = -spd; if (!swinging) f.facing = -1; }
+                if (h.right) { f.vx = spd; if (!swinging) f.facing = 1; }
+            }
             }
         }
         f.isShielding = !!h.shield && f.canShield();

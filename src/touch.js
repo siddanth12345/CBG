@@ -6,7 +6,7 @@
 //   black buttons tap = melee up / left / right / down, hold = charge
 //   grab         drag to aim, release to fire the grab (or throw / use an item); springs back
 //   shield       hold = shield | joystick left/right while shielding = roll
-import { S, mouse, fighters, p1 } from './core.js';
+import { S, mouse, fighters, p1 } from './gameCore.js';
 import { virtual } from './controls.js';
 import { spec } from './specials.js';
 import { getLayout, touchMode, onLayout } from './layout.js';
@@ -192,10 +192,13 @@ export class TouchControls {
         main.addEventListener('pointerdown', (e) => {
             if (g) return;
             e.preventDefault(); e.stopPropagation(); main.setPointerCapture(e.pointerId);
-            g = { id: e.pointerId, sx: e.clientX, sy: e.clientY, sel: null, charging: false, timer: 0, aim: null };
+            // clear any stuck prior gesture (spam / lost pointer softlock)
+            if (g) { try { clearTimeout(g.timer); } catch (err) {} this.api.cancelF(); mouse.touchAim = null; g = null; }
+            g = { id: e.pointerId, sx: e.clientX, sy: e.clientY, sel: null, charging: false, rolling: false, spent: false, timer: 0, aim: null, down: true };
             main.classList.add('down');
+            try { main.setPointerCapture(e.pointerId); } catch (err) {}
             g.timer = setTimeout(() => {
-                if (!g || g.sel) return;
+                if (!g || !g.down || g.sel || g.spent) return;
                 g.charging = true; main.classList.add('charging');
                 this.act('special', 'NEUTRAL');                       // start charging the neutral F (Core)
                 clearSel(); showAim(g.aim);
@@ -237,30 +240,44 @@ export class TouchControls {
             mouse.touchAim = g.aim;                                   // the dotted guide shows what the grid is aiming
         });
         const mainEnd = (e) => {
-            if (!g || e.pointerId !== g.id) return;
+            if (!g) return;
+            if (e && e.pointerId != null && e.pointerId !== g.id) return;
             clearTimeout(g.timer);
-            const s = g; g = null;
+            const s = g; s.down = false; g = null;
             main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null);
-            if (e.type === 'pointercancel') { mouse.touchAim = null; if (s.charging || s.rolling) this.api.cancelF(); return; }
-            if (s.rolling) { mouse.touchAim = null; this.api.releaseAction('special'); }
-            else if (s.spent) { mouse.touchAim = null; }
-            else if (s.sel) {
-                mouse.touchAim = null;
-                this.act('special', s.sel); this.api.releaseAction('special');          // directional F move
-            } else if (s.charging) {                                                                  // release Core / Ember breath where the matrix aimed
-                // Matrix drag vector first; if none, setAim falls back to move/facing (same as Luminent)
-                this.pressedAim = true;
-                mouse.touchAim = s.aim || null;
-                this.setAim('NEUTRAL', s.aim || null);
-                this.api.releaseAction('special');
-                this.pressedAim = false;
-                mouse.touchAim = null;
-            } else {
-                mouse.touchAim = null;
-                this.act('attack', 'NEUTRAL');                                                  // quick tap: sword spin
+            try { if (e && e.pointerId != null) main.releasePointerCapture(e.pointerId); } catch (err) {}
+            const finish = () => { mouse.touchAim = null; };
+            if (e && e.type === 'pointercancel') {
+                if (s.charging || s.rolling || s.spent) this.api.cancelF();
+                else this.api.cancelF();
+                finish(); return;
+            }
+            try {
+                if (s.rolling) { this.api.releaseAction('special'); }
+                else if (s.spent) { this.api.cancelF(); }
+                else if (s.sel) {
+                    this.act('special', s.sel); this.api.releaseAction('special');
+                } else if (s.charging) {
+                    this.pressedAim = true;
+                    mouse.touchAim = s.aim || null;
+                    this.setAim('NEUTRAL', s.aim || null);
+                    this.api.releaseAction('special');
+                    this.pressedAim = false;
+                } else {
+                    this.act('attack', 'NEUTRAL');
+                    this.api.cancelF();   // ensure F never stays latched after a tap/spam
+                }
+            } finally {
+                finish();
             }
         };
-        main.addEventListener('pointerup', mainEnd); main.addEventListener('pointercancel', mainEnd);
+        main.addEventListener('pointerup', mainEnd);
+        main.addEventListener('pointercancel', mainEnd);
+        main.addEventListener('lostpointercapture', mainEnd);
+        // window-level safety: if the finger lifts anywhere, never leave F stuck
+        const safetyUp = (e) => { if (g && e.pointerId === g.id) mainEnd(e); };
+        window.addEventListener('pointerup', safetyUp, true);
+        window.addEventListener('pointercancel', safetyUp, true);
 
         // ---------------------------------------------------------- jump
         this.refs.jump.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.refs.jump.classList.add('down'); this.act('jump'); });

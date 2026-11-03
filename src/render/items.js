@@ -1,7 +1,7 @@
 // 3D look of the match items (Ball, Strawberry, Balloon, Firestick, Clock), the balloons that carrying
 // fighters tow above their heads, and the clock's time bubble. Read-only: everything comes from core.js.
 import * as THREE from 'three';
-import { S, items, fighters } from '../core.js';
+import { S, items, fighters } from '../gameCore.js';
 import { wx, wy, clamp01, lerp } from './space.js';
 
 const CLOCK_RADIUS = 760;

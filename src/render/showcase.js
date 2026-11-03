@@ -2,7 +2,7 @@
 // circles the camera around the stage, changes shots, and every so often CUTS to another map with a procedural
 // transition (iris, slash, shutters, glitch, warp). Silent, no HUD, no input.
 import * as THREE from 'three';
-import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS, audio } from '../core.js';
+import { S, STAGE, WORLD, fighters, startDemo, MAP_IDS, audio } from '../gameCore.js';
 import { wx, wy } from './space.js';
 import { CHARS } from '../characters.js';
 
@@ -19,11 +19,11 @@ const COLORS = { horizon: { fill: '#f8ecd2', edge: '#ffffff', glow: '#ffd98a' },
 
 // ---- shots: distances are in "small arena" units and scale with the stage width
 const SHOTS = [
-    { name: 'orbit', R: [1900, 2300], el: [8, 14], az: [-58, 58], spin: [5, 8] },
-    { name: 'hero', R: [950, 1250], el: [2, 6], az: [-32, 32], spin: [3, 5] },
-    { name: 'high', R: [2100, 2500], el: [28, 38], az: [-45, 45], spin: [4, 6] },
-    { name: 'dolly', R: [1000, 2300], el: [5, 12], az: [-40, 40], spin: [3, 5], dolly: true },
-    { name: 'low', R: [1500, 1800], el: [-1, 2], az: [-70, 70], spin: [5, 8] },
+    { name: 'orbit', R: [780, 980], el: [10, 16], az: [-50, 50], spin: [6, 10] },
+    { name: 'hero', R: [520, 700], el: [6, 12], az: [-28, 28], spin: [4, 7] },
+    { name: 'high', R: [900, 1100], el: [22, 32], az: [-40, 40], spin: [5, 8] },
+    { name: 'dolly', R: [560, 980], el: [8, 14], az: [-36, 36], spin: [4, 7], dolly: true },
+    { name: 'low', R: [640, 820], el: [4, 10], az: [-55, 55], spin: [6, 9] },
 ];
 
 export class Showcase {
