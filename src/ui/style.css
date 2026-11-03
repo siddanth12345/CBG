@@ -456,3 +456,7 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 
 #cbgMusicHint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:90;padding:7px 14px;border-radius:999px;background:rgba(6,12,24,.78);border:1px solid rgba(56,189,248,.55);color:#bae6fd;font:600 12px Inter,system-ui,sans-serif;letter-spacing:.04em;pointer-events:none;animation:cbgHint 1.6s ease-in-out infinite}
 @keyframes cbgHint{50%{box-shadow:0 0 14px rgba(56,189,248,.55)}}
+
+/* loader: build sits between CBG and Enter — high contrast so it's always readable */
+.cbg-build-loader{display:block;margin:.55rem 0 1rem;text-align:center;font:700 14px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.12em;color:#e0f2fe;opacity:1;text-shadow:0 0 14px rgba(103,232,249,.55),0 2px 8px rgba(0,0,0,.8);pointer-events:none;z-index:1}
+.cbg-lstage{display:flex;flex-direction:column;align-items:center}
