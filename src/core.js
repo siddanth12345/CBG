@@ -2955,16 +2955,18 @@ function explodeOrb(o) {
     createParticles(o.x, o.y, o.color, 18 + Math.floor(24 * o.charge));
     createParticles(o.x, o.y, '#ffffff', 10);
 
+    const pierce = o.kind === 'boulder';   // Terra Boulder: goes through shield / counters it
     for (const t of foesOf(o.owner)) {
         if (t.invincibleTimer > 0 || t.stocks <= 0) continue;
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
         const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > R) continue;
 
-        const res = interaction('CORE', t);
+        const res = pierce ? 'hit' : interaction('CORE', t);
         if (res === 'hit') {
+            if (pierce && t.isShielding) { t.isShielding = false; fx('counter', t.x, t.y); }
             launch(o.owner, t, {
-                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,      // half the knockback
+                damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
                 angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
             });
         } else if (res === 'shield') {
@@ -3122,7 +3124,8 @@ function updateOrbs() {
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r) {
-                const res = interaction('CORE', t);
+                const pierce = o.kind === 'boulder';
+                const res = pierce ? 'hit' : interaction('CORE', t);
                 if (o.trap && res === 'hit') {                    // Bubble Trap: swallow them
                     t.interrupt(); t.trapId = o.id; t.lastHitBy = o.owner; t.lastHitT = 0; o.cap = t; o.capT = 0; o.life = 200; o.r = 50;
                     fx('explosion', o.x, o.y, 50, 0, 'water'); audio.playGrab();
