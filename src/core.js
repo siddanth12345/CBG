@@ -1346,17 +1346,23 @@ class Fighter {
         const x = this.sx;
         if (x && x.k === 'roll' && x.ph === 'roll') {
             const sp = spec(this.char, 'S'), c = x.c || 0;
-            const rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+            let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
             const full = c >= 0.9, mid = c >= 0.4 && !full;
+            if (full) { rb *= 0.7; rk *= 0.7; }   // blue end knockback 0.7×
             // white end 8; blue end 12 (1.5× white) — both drag then launch
             const endDmg = full ? 12 : (mid ? 8 : 0);
+            // white/blue end KB aims where the user is pointing (mouse PC / joystick+matrix mobile)
+            const aim = aimOf(this);
+            let adx = aim.x - this.x, ady = aim.y - this.y;
+            let alen = Math.hypot(adx, ady);
+            if (alen < 8) { adx = this.facing || 1; ady = -0.25; alen = Math.hypot(adx, ady); }
+            const aimAng = Math.atan2(ady, adx);
             for (const f of foesOf(this)) {
                 if (f._rollCarry !== this) continue;
                 f._rollCarry = null;
                 if (endDmg) {
                     f.grounded = false;
-                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
                 } else {
                     // red: grey stun 0.5 s, no knockback
                     f.clashStunTimer = Math.max(f.clashStunTimer, 30);
@@ -1372,8 +1378,7 @@ class Fighter {
                     if (Math.abs(f.x - this.x) > sz2 / 2 + f.width / 2 + 10 || Math.abs(f.y - this.y) > sz2 / 2 + f.height / 2 + 10) continue;
                     if (f.lastHitBy === this && f.lastHitT < 3) continue;
                     f.grounded = false;
-                    const ang = Math.atan2(f.y - this.y - 25, (f.x - this.x) || this.facing || 1);
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
                 }
             }
         }
@@ -2365,6 +2370,15 @@ class AIBot extends Fighter {
             if (Math.abs(distToTargetX) > 70) {
                 this.vx += this.facing * 1.05 * speedMultiplier;
             }
+            // hard: Side-F as combo extender / gap closer
+            if (!med && this.cd.BLINK <= 0 && !this.grabHolding && this.actionTimer % 8 === 0) {
+                const combo = target.hitstun > 0 || target.clashStunTimer > 0 || (target.lastHitBy === this && target.lastHitT < 45);
+                const midGap = Math.abs(distToTargetX) > 110 && Math.abs(distToTargetX) < 620 && Math.abs(distToTargetY) < 150;
+                if ((combo || midGap) && Math.random() < (combo ? 0.7 : 0.4)) {
+                    const c = this.char === 'ember' ? (combo ? 0.25 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
+                    if (this.useSpecial('BLINK', target.x, target.y, c)) return;
+                }
+            }
 
             // 1) a core is coming: raise the shield (counters everything but grab)
             const incoming = orbs.find(o => o.owner === target && Math.hypot(o.x - this.x, o.y - this.y) < 300);
@@ -2407,7 +2421,7 @@ class AIBot extends Fighter {
             if (this.char === 'terra' && this.rockT <= 0 && dist > 140 && dist < 800 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.35 : 0.6)) { if (this.attack('NEUTRAL')) return; }
 
             // 5b) the character's own special moves
-            if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.65) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
+            if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.85) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
 
             // 6) neutral game at close / mid range
             if (dist < 130 && !this.grabHolding) {
@@ -2449,10 +2463,35 @@ class AIBot extends Fighter {
         }
         if (cdOk('BLINK')) {
             const dd = S1.dist || 300;
-            if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
-            else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-            else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-            else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            if (lv === 'hard') {
+                // Side-F is a primary pressure / combo tool
+                if (S1.kind === 'roll') {
+                    const rollOk = adx > 70 && adx < 800 && Math.abs(dy) < 160;
+                    if (rollOk) {
+                        // combo: after recent hit / high percent → light-mid charge for follow-ups
+                        // edge / far → high charge for send
+                        let c = 0.5;
+                        if (t.damage > 60 || t.isHanging || t.x < STAGE.x + 140 || t.x > STAGE.x + STAGE.width - 140) c = 0.92 + Math.random() * 0.08;
+                        else if (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 40)) c = 0.35 + Math.random() * 0.35;
+                        else if (adx > 300) c = 0.55 + Math.random() * 0.4;
+                        else c = 0.2 + Math.random() * 0.4;
+                        add(g ? 7.5 : 4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+                    }
+                } else if (S1.kind === 'dash' && adx > 50 && adx < dd + 240 && Math.abs(dy) < 150) {
+                    add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (S1.kind === 'bubble' && adx > 90 && adx < 740 && Math.abs(dy) < 190) {
+                    add(5.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (S1.kind === 'tp' && adx < dd + 180 && Math.abs(dy) < 160) {
+                    add(5.8, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                } else if (adx > 70 && adx < 560 && Math.abs(dy) < 170) {
+                    add(4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                }
+            } else {
+                if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
+                else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+                else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+            }
         }
         if (cdOk('SPIRAL')) {
             if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(3, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
@@ -2465,13 +2504,10 @@ class AIBot extends Fighter {
             if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
         }
         if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
-        // hard Ember: practice Side-F (Fireball Roll) in neutral / approach against any character
-        if (this.level === 'hard' && this.char === 'ember' && cdOk('BLINK') && this.grounded) {
-            add(4.2, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-        }
-        // hard bots: more special pressure vs every character (not only mirror matchups)
-        if (this.level === 'hard' && cdOk('BLINK') && dist > 100 && dist < 420 && Math.random() < 0.35) {
-            add(2.8, 'S', () => this.useSpecial('BLINK', t.x, t.y));
+        // hard: extra Side-F combo pressure when foe is in hitstun / recently hit
+        if (this.level === 'hard' && cdOk('BLINK') && (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 50))) {
+            const c = this.char === 'ember' ? (0.3 + Math.random() * 0.45) : 0;
+            add(8.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
         }
         if (!opts.length) return false;
         let tot = 0; for (const o of opts) tot += o[0];
