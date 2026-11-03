@@ -451,6 +451,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.hangTimer = 0;
         this.ledgeBan = 0;
+        this.haltT = 0; this.haltElapsed = 0;   // Ember post-roll slowdown (0.7 s)
         this.specialKind = null;             // presentation: 'CORE' | 'SPIRAL' | 'SUPLEX' | 'HEADBUTT'
         this.specialT = 0;
         this.specialDur = 0;
@@ -503,11 +504,12 @@ class Fighter {
     actionBlocked() {
         return this.actionLock > 0 || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 ||
             this.freezeTimer > 0 || this.isRolling || this.isHanging || !!this.grabbedBy || !!this.grabHolding ||
-            this.isShielding || this.fActive || this.spiralT > 0 || this.suplexT > 0 || this.diving || !!this.sx;
+            this.isShielding || this.fActive || this.spiralT > 0 || this.suplexT > 0 || this.diving || !!this.sx ||
+            this.haltT > 0;   // Ember post-roll halt: no attacks/specials/shield
     }
     canShield() {
         return this.actionLock <= 0 && !this.attackHeld && !this.fActive && this.spiralT === 0 && this.suplexT === 0 && !this.diving && !this.sx &&
-            !this.isRolling && this.freezeTimer === 0;
+            !this.isRolling && this.freezeTimer === 0 && this.haltT <= 0;
     }
     setMove(type, frames) { this.activeMove = { type, t: frames }; }
 
@@ -517,6 +519,7 @@ class Fighter {
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
         this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null;
+        this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
         this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0;
         this.isGrabDashing = false;
@@ -537,9 +540,20 @@ class Fighter {
             if (this.glideT <= 0) this.glide = false;          // boost window over → normal drift / friction
         }
         if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) { this.glide = false; this.glideT = 0; }
-        if (this.burnT > 0) {                                  // burning: a tick of damage every half second
+        if (this.burnT > 0) {                                  // burning: 1 tick every 0.2 s (12 frames)
             this.burnT--;
-            if (this.burnT % 30 === 0 && this.stocks > 0) { this.damage += this.burnDmg || 3; if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; } fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); }
+            if (this.burnT % 12 === 0 && this.stocks > 0) {
+                this.damage += this.burnDmg || 1;
+                if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; }
+                fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 5);
+            }
+        }
+        // Ember Side-F end lag: slide to a stop over 0.7 s (legs-forward halt)
+        if (this.haltT > 0) {
+            this.haltT--;
+            this.haltElapsed++;
+            this.vx *= 0.88;
+            if (Math.abs(this.vx) < 0.35) this.vx = 0;
         }
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
         const bj = trainJumps(this);       // training menu can override jump count
@@ -794,10 +808,20 @@ class Fighter {
         const cm = 1 + MELEE_CHARGE_BONUS * (this.meleeCharge / MELEE_CHARGE_MAX);          // charged swing: up to +30%
         const fl = this.heldItem && this.heldItem.type === 'FIRESTICK' ? this.heldItem.len : 1;   // firestick: longer reach
         const reach = 1 + (fl - 1) * 0.6;
+        let dmg = sw.damage * cm;
+        let burn = null;
+        if (this.char === 'ember') {
+            // Ember melee: base 2 (uncharged) / 3 (full); main damage is burn ticks
+            const ch = this.meleeCharge / MELEE_CHARGE_MAX;
+            dmg = 2 + Math.round(ch);                         // 2 → 3
+            // 1.6 s uncharged → 3 s full; tick every 0.2 s deals 1
+            const burnFrames = Math.round(96 + ch * (180 - 96)); // 96..180
+            burn = { t: burnFrames, dmg: 1 };
+        }
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl, h: sw.h * (1 + (fl - 1) * 0.35),
-            damage: sw.damage * cm, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
-            multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0,
+            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
+            multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0, burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : null,
         };
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
@@ -1383,7 +1407,10 @@ class Fighter {
             }
         }
         if (this.sx && this.sx.k === 'roll') for (const f of fighters) if (f._rollCarry === this) f._rollCarry = null;
-        this.sx = null; this.activeHitbox = null; this.activeMove = null; this.vx *= 0.4;
+        this.sx = null; this.activeHitbox = null; this.activeMove = null;
+        // 0.7 s halt: keep horizontal speed, decelerate (not an instant stop)
+        this.haltT = 42;
+        this.haltElapsed = 0;
     }
 
     startSx(k, charge = 0, extra = {}) {
@@ -1921,6 +1948,8 @@ class Fighter {
             return true;
         }
         if (this.sx) return false;                              // other specials still lock jump
+        // post-roll halt: can jump only after 0.4 s into the 0.7 s slowdown
+        if (this.haltT > 0 && this.haltElapsed < 24) return false;
         if (this.actionLock > JUMP_OK) return false;
 
         if (this.isHanging) {
@@ -2248,6 +2277,17 @@ class AIBot extends Fighter {
 
         this.actionTimer++;
         const stageCenterX = STAGE.x + STAGE.width / 2;
+
+        // HARD: force Side-F regularly (combo or mid/far gap) so it actually shows up in fights
+        if (this.level === 'hard' && this.cd.BLINK <= 0 && !this.actionBlocked() && this.haltT <= 0 && this.actionTimer % 12 === 0) {
+            const adx = Math.abs(target.x - this.x), ady = Math.abs(target.y - this.y);
+            const combo = target.hitstun > 6 || target.clashStunTimer > 4 || (target.lastHitBy === this && target.lastHitT < 45);
+            const gap = adx > 140 && adx < 720 && ady < 170;
+            if ((combo && adx < 500 && ady < 160) || gap) {
+                const c = this.char === 'ember' ? (combo ? 0.25 + Math.random() * 0.35 : 0.55 + Math.random() * 0.4) : 0;
+                if (this.useSpecial('BLINK', target.x, target.y, c)) return;
+            }
+        }
 
         if (this.isHanging) {
             // climb toward stage centre — jump only after 0.6 s (same rule as players)
@@ -3817,8 +3857,8 @@ function drive(f, h) {
                 if (h.drop || jy > 0.5) f.vy = Math.min(f.vy + 0.45, 7);
                 else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
             } else {
-            // on ledge: only jump gets you off (no walk-off)
-            if (!f.isHanging) {
+            // on ledge: only jump gets you off; during Ember post-roll halt: no walk input
+            if (!f.isHanging && f.haltT <= 0) {
                 if (h.left) { f.vx = -spd; if (!swinging) f.facing = -1; }
                 if (h.right) { f.vx = spd; if (!swinging) f.facing = 1; }
             }
