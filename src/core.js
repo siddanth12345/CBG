@@ -1635,18 +1635,32 @@ class Fighter {
         const rightLedgeX = STAGE.x + STAGE.width;
         const ledgeY = STAGE.y;
 
-        // 0.65× previous magnet box
-        const magnetRangeX = 225 * 0.65;
-        const magnetRangeY = 165 * 0.65;
+        // 2× smaller than the previous 0.65× box
+        const magnetRangeX = 225 * 0.65 * 0.5;
+        const magnetRangeY = 165 * 0.65 * 0.5;
 
-        if (this.x >= leftLedgeX - magnetRangeX && this.x <= leftLedgeX + 50 &&
-            this.y >= ledgeY - 40 && this.y <= ledgeY + magnetRangeY && this.vy >= -3) {
-            this.hangLedge(-1);
-        }
-        else if (this.x >= rightLedgeX - 50 && this.x <= rightLedgeX + magnetRangeX &&
-            this.y >= ledgeY - 40 && this.y <= ledgeY + magnetRangeY && this.vy >= -3) {
-            this.hangLedge(1);
-        }
+        const trySide = (side) => {
+            const lx = side < 0 ? leftLedgeX : rightLedgeX;
+            const attachX = lx + side * 12;
+            const attachY = ledgeY + 12;
+            const inX = side < 0
+                ? (this.x >= lx - magnetRangeX && this.x <= lx + 40)
+                : (this.x >= lx - 40 && this.x <= lx + magnetRangeX);
+            const inY = this.y >= ledgeY - 30 && this.y <= ledgeY + magnetRangeY && this.vy >= -4;
+            if (!inX || !inY) return false;
+            // whirlpool-style forcible pull toward the ledge lip, then snap hang
+            const dx = attachX - this.x, dy = attachY - this.y;
+            const dist = Math.hypot(dx, dy) || 0.001;
+            const k = 0.6;
+            this.x += dx * k;
+            this.y += dy * k;
+            this.vx = (attachX - this.x) * 3;
+            this.vy = (attachY - this.y) * 3;
+            this.grounded = false;
+            if (dist < 55 || Math.hypot(attachX - this.x, attachY - this.y) < 28) this.hangLedge(side);
+            return true;
+        };
+        if (!trySide(-1)) trySide(1);
     }
 
     /** leave the ledge: any remaining ledge invincibility is stripped immediately */
@@ -1677,22 +1691,17 @@ class Fighter {
         // (air F moves are NOT refilled here: only the ground does that)
 
         this.invincibleTimer = 90;
-        // white spark only (no extra SFX / heavy particles — keeps FPS stable on rapid ledge cycles)
-        const lx = this.hangSide === -1 ? STAGE.x : STAGE.x + STAGE.width;
-        createParticles(lx, STAGE.y, '#ffffff', 5);
-        fx('hit', lx, STAGE.y, 4, 0);
+        // no particles / fx / sfx on ledge grab (was tanking FPS when bots thrashed the lip)
     }
 
     kickFromLedge(ban) {
         const side = this.hangSide;
         this.leaveLedge();
         this.ledgeBan = ban;
-        this.vx = side * 5;                                   // away from the stage
+        this.vx = side * 5;
         this.vy = 3;
         this.grounded = false;
-        fx('kick', this.x, this.y, side);
-        createParticles(this.x, this.y, '#f59e0b', 14);
-        audio.playHit(false);
+        // no fx / particles / sfx — laggy when AIs cycle ledges
     }
 
     checkStageCollision(bounce = false) {
@@ -2115,7 +2124,9 @@ class AIBot extends Fighter {
         const cx = STAGE.x + STAGE.width / 2;
         const ledgeX = this.x < cx ? STAGE.x : STAGE.x + STAGE.width;
         let tx = ledgeX, ty = STAGE.y;
-        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 180 : -180); ty = STAGE.y - 100; }
+        // aim slightly past the lip so magnet can finish the grab; if banned, land on stage
+        if (this.ledgeBan > 0) { tx = ledgeX + (ledgeX === STAGE.x ? 200 : -200); ty = STAGE.y - 110; }
+        else { tx = ledgeX + (ledgeX === STAGE.x ? -8 : 8); ty = STAGE.y + 8; }
         const dir = tx > this.x ? 1 : -1;
         const dxAbs = Math.abs(tx - this.x);
         const below = this.y - STAGE.y;
@@ -2124,27 +2135,27 @@ class AIBot extends Fighter {
 
         this.cancelF();
         this.facing = dir;
-        // drift hard toward stage (easy still tries, hard commits)
-        this.vx += dir * (hard ? 2.0 : med ? 1.55 : 1.15);
+        this.vx += dir * (hard ? 2.35 : med ? 1.85 : 1.45);
 
         let acted = false;
-        // Up-F recovery first when below / out of jumps
-        if (this.actionTimer % 3 === 0 && (below > 25 || this.jumpsLeft === 0) && dxAbs < 420) {
-            acted = this.useSpecial('SPIRAL', tx, ty - 40);
+        // Up-F recovery often
+        if (this.actionTimer % 2 === 0 && (below > 15 || this.jumpsLeft === 0) && dxAbs < 480) {
+            acted = this.useSpecial('SPIRAL', tx, ty - 50);
         }
-        // Ember hard: Side-F (Fireball Roll) toward stage for practice + recovery mix
-        if (!acted && hard && this.char === 'ember' && this.actionTimer % 5 === 0 && dxAbs > 60 && this.cd.BLINK <= 0) {
+        // Ember hard: Side-F toward stage
+        if (!acted && hard && this.char === 'ember' && this.actionTimer % 4 === 0 && dxAbs > 40 && this.cd.BLINK <= 0) {
             acted = this.useSpecial('BLINK', tx, ty);
         }
-        // Side special / dash toward stage for everyone else
-        if (!acted && this.actionTimer % 5 === 0 && dxAbs > 120 && below < 280) {
+        // side / dash recovery for all bots
+        if (!acted && this.actionTimer % 4 === 0 && dxAbs > 80 && below < 320) {
             acted = this.useSpecial('BLINK', tx, ty);
         }
-        if (!acted && this.actionTimer % 6 === 0) acted = this.executeGrabDash(tx, ty);
-        if (!acted && this.attackTimer === 0 && this.actionTimer % 8 === 0 && dxAbs < 240) {
+        if (!acted && this.actionTimer % 5 === 0) acted = this.executeGrabDash(tx, ty);
+        if (!acted && this.attackTimer === 0 && this.actionTimer % 6 === 0 && dxAbs < 260) {
             acted = this.attack(dir === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
         }
-        if (this.jumpsLeft > 0 && this.vy > -3 && this.actionTimer % 5 === 0) this.jump();
+        // jump toward ledge every few frames
+        if (this.jumpsLeft > 0 && this.vy > -4 && this.actionTimer % 4 === 0) this.jump();
     }
 
     /** Soft-platform know-how for the big arenas: drop through a platform to reach a foe below, climb up to one to reach a foe above. Returns true when it took the frame. */
