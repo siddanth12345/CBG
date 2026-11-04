@@ -1089,7 +1089,7 @@ class Fighter {
                     const nearFoe = nearestOf({ x: this.x, y: this.y }, foesOf(this).filter(isAlive));
                     for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one homes on the nearest foe, one 20 degrees either side flies straight
                         const a = x.ang + da * Math.PI / 180;
-                        orbs.push({ homing: da === 0 && nearFoe ? nearFoe : undefined, homingDelay: da === 0 && nearFoe ? 30 : 0, homingTurn: 0.02, spd: m.speed, x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
+                        orbs.push({ homing: da === 0 && nearFoe ? nearFoe : undefined, homingDelay: da === 0 && nearFoe ? 30 : 0, homingTurn: 0.02, shieldCounter: da === 0 && !!nearFoe, spd: m.speed, x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
                             life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
@@ -3473,19 +3473,16 @@ function updateOrbs() {
         }
         let hitOrb = false;
         for (const t of foesOf(o.owner)) {
-            if ((t.invincibleTimer > 0 && !o.homing) || t.stocks <= 0) continue;
+            if ((t.invincibleTimer > 0 && !o.homing && o.kind !== 'bubble') || t.stocks <= 0) continue;
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r + (o.homing ? 6 : 0)) {
-                if (o.shieldPass) {
-                    dropOrb(o);
-                    if (t.isShielding) {
-                        audio.playShield();
-                        t.shieldHealth = Math.max(0, t.shieldHealth - 10);
-                        fx('block', t.x, t.y);
-                    } else explodeOrb(o);
-                    hitOrb = true; break;
+                if (o.shieldCounter && t.isShielding) {
+                    dropOrb(o); audio.playShield();
+                    t.shieldHealth = Math.max(0, t.shieldHealth - 10);
+                    fx('block', t.x, t.y); hitOrb = true; break;
                 }
+                if (o.shieldPass) { dropOrb(o); explodeOrb(o); hitOrb = true; break; }
                 const pierce = !!(o.pierce || o.kind === 'boulder');
                 if (o.trap && !pierce) {
                     const res0 = interaction('CORE', t);
