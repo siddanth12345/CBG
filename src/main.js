@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103z
+// BUILD_STAMP 20261103aa
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
 import {
