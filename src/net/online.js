@@ -163,10 +163,10 @@ export function setMemberTeam(slot, team) {
 export function addBot(level) {
     if (Online.role !== 'host' || Online.mode !== 'lobby' || Online.lobby.started) return false;
     const L = Online.lobby;
-    if (L.members.length >= MAX_PLAYERS || !['easy', 'medium', 'hard'].includes(level)) return false;
+    if (L.members.length >= MAX_PLAYERS || !['static', 'easy', 'medium', 'hard'].includes(level)) return false;
     let slot = 1; while (L.members.some(x => x.slot === slot)) slot++;
     const counts = TEAMS.map(tm => L.members.filter(x => x.team === tm).length);
-    const label = level === 'easy' ? 'Easy Bot' : level === 'medium' ? 'Medium Bot' : 'Hard Bot';
+    const label = level === 'static' ? 'Static Bot' : level === 'easy' ? 'Easy Bot' : level === 'medium' ? 'Medium Bot' : 'Hard Bot';
     const same = L.members.filter(x => x.bot === level).length;
     const name = same === 0 ? label : `${label} ${same + 1}`;
     if (same === 1) {

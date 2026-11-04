@@ -388,7 +388,7 @@ class Fighter {
         this.grabDashTimer = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0;
 
         this.hitstun = 0;
         this.invincibleTimer = 0;
@@ -485,7 +485,7 @@ class Fighter {
         this.dropT = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
         this.dizzyTimer = 0;
@@ -658,8 +658,12 @@ class Fighter {
             this.vx = 0;
             this.vy = 0;
             const g = this.grabbedBy;
-            if (g.gripT > 0) {                    // held by the leg and swung over Ember's head
-                const u = 1 - g.gripT / 30, th = Math.PI - u * (Math.PI + 0.25);
+            if (g.throwU > 0) {                   // the thrower's wind-up: the foe is carried round with the flip / spin
+                const u = g.throwU, th = g.throwKind === 'up' ? -2 * Math.PI * u : g.throwKind === 'down' ? -Math.PI * 0.6 * u : 0;
+                this.x = g.x + g.facing * 46 * Math.cos(th);
+                this.y = g.y - 46 * Math.sin(th) - (g.throwKind === 'side' ? 0 : 0);
+            } else if (g.gripT > 0) {             // held by the leg and swung over Ember's head
+                const u = 1 - (g.gripT - 18) / 12, uu = Math.max(0, Math.min(1, u)), th = Math.PI - uu * (Math.PI + 0.25);
                 this.x = g.x + g.facing * 58 * Math.cos(th);
                 this.y = g.y - 58 * Math.sin(th);
             } else if (g.suplexT > 0) {                  // carried round the backflip: overhead -> behind -> underneath
@@ -682,6 +686,19 @@ class Fighter {
             this.grabTimer--;
             this.vx = 0;
             this.vy = 0;
+            {   // the throw's wind-up animation depends on where it is aimed: up = front flip, side = a spin, down = a half front flip (the throw itself stays omnidirectional)
+                let ax, ay;
+                if (this.isAI) { ax = (this.x < STAGE.x + STAGE.width / 2 ? -1 : 1); ay = -0.4; }
+                else { ax = (this.remoteAim ? this.remoteAim.x : mouse.worldX) - this.x; ay = (this.remoteAim ? this.remoteAim.y : mouse.worldY) - this.y; }
+                this.throwKind = ay < -Math.abs(ax) * 0.8 ? 'up' : ay > Math.abs(ax) * 0.8 ? 'down' : 'side';
+                if (this.throwKind === 'side') this.facing = ax >= 0 ? 1 : -1;
+                const win = 18;
+                this.throwU = this.grabTimer <= win ? 1 - Math.max(0, this.grabTimer) / win : 0;
+                if (this.gripMode && this.throwU > 0 && this.grabTimer % 4 === 0) {      // Ember's version: explosions (visual only) fling him round
+                    const fy = this.throwKind === 'up' ? this.y + 34 : this.throwKind === 'down' ? this.y - 34 : this.y + 6;
+                    fx('explosion', this.x - (this.throwKind === 'side' ? this.facing * 24 : 0), fy, 34, 0.2, STYLE_OF[this.char]); createParticles(this.x, fy, '#fb923c', 5);
+                }
+            }
             if (this.gripMode && this.gripT > 0) {              // the grip burns: 5 ticks of 0.4 (2 damage over 0.5 s)
                 this.gripT--;
                 if (this.gripT % 6 === 0 && this.grabHolding) {
@@ -714,7 +731,7 @@ class Fighter {
                 target.grounded = false;
                 target.lastHitBy = this; target.lastHitT = 0;
 
-                audio.playThrow();
+                audio.playThrow(); this.throwU = 0;
                 this.throwFxT = 14;
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
@@ -1016,13 +1033,25 @@ class Fighter {
                 this.activeHitbox = { x: this.x + Math.cos(x.ang) * 34, y: this.y + Math.sin(x.ang) * 34, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true,
                     damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: x.ang - 0.15 * Math.sign(Math.cos(x.ang) || 1), fixed: null };
             }
-            if (sp.drill && x.t >= sp.frames - 14) {                           // who is still caught in the drill near its end
+            if (sp.drill) {                                                    // STICKY drag: anyone the drill has hit is pinned to the flame and carried along, so they cannot fall out of the move
                 if (!x.caught) x.caught = new Set();
-                for (const f of foesOf(this)) if (isAlive(f) && Math.abs(f.x - (this.x + Math.cos(x.ang) * 40)) < sp.w / 2 + f.width / 2 + 24 && Math.abs(f.y - (this.y + Math.sin(x.ang) * 40)) < sp.h / 2 + f.height / 2 + 24) x.caught.add(f);
+                const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
+                for (const f of foesOf(this)) {
+                    if (!isAlive(f)) continue;
+                    const near = Math.abs(f.x - hx) < sp.w / 2 + f.width / 2 + 60 && Math.abs(f.y - hy) < sp.h / 2 + f.height / 2 + 60;
+                    if (!x.caught.has(f) && near && f.lastHitBy === this && f.lastHitT <= 8) x.caught.add(f);
+                    if (x.caught.has(f)) {
+                        if (f.isShielding || f.stocks <= 0) { x.caught.delete(f); continue; }
+                        const k = 0.55;                                       // strong pull toward the drill's tip
+                        f.x += (hx - f.x) * k; f.y += (hy - f.y) * k; f.px = f.x; f.py = f.y;
+                        f.vx = Math.cos(x.ang) * sp.speed * 0.95; f.vy = Math.sin(x.ang) * sp.speed * 0.95;
+                        f.hitstun = Math.max(f.hitstun, 8); f.grounded = false; f.lastHitBy = this; if (f.lastHitT > 6) f.lastHitT = 6;
+                    }
+                }
             }
             fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
             if (x.t >= sp.frames) {
-                const caught = x.caught ? [...x.caught].filter(isAlive) : [];
+                const caught = x.caught ? [...x.caught].filter(f => isAlive(f) && Math.hypot(f.x - this.x, f.y - this.y) < 200) : [];
                 if (caught.length === 1 && sp.drill) {                      // one foe caught: grab them by the leg and fling them away (an explosion at the end of the throw)
                     const v = caught[0];
                     v.interrupt(); v.isShielding = false; v.hitstun = 40; v.vx = v.vy = 0;
@@ -1034,9 +1063,10 @@ class Fighter {
                 }
                 if (sp.missile && caught.length === 0) {                                           // the fire rocket detaches and keeps flying the way Ember was heading until it explodes
                     const m = sp.missile;
-                    for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one straight on, one 20 degrees either side
+                    const nearFoe = nearestOf({ x: this.x, y: this.y }, foesOf(this).filter(isAlive));
+                    for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one homes on the nearest foe, one 20 degrees either side flies straight
                         const a = x.ang + da * Math.PI / 180;
-                        orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
+                        orbs.push({ homing: da === 0 && nearFoe ? nearFoe : undefined, spd: m.speed, x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
                             life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);

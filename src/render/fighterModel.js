@@ -502,12 +502,19 @@ export class FighterModel {
             p.rHx = 100; p.lHx = 100; p.rK = 125; p.lK = 125; p.headX = 38; p.torsoX = 40; p.aura = 0.5;
             return p;
         }
-        if (f.grabbedBy && f.grabbedBy.gripT > 0) {     // Ember's leg-grip: dangled by the ankle and swung over his head
-            const g = f.grabbedBy, u = 1 - g.gripT / 30, th = Math.PI - u * (Math.PI + 0.25), sw = Math.sin(t * 22);
+        if (f.grabbedBy && f.grabbedBy.gripT > 0 && !(f.grabbedBy.throwU > 0)) {     // Ember's leg-grip: dangled by the ankle and swung over his head
+            const g = f.grabbedBy, u = Math.max(0, Math.min(1, 1 - (g.gripT - 18) / 12)), th = Math.PI - u * (Math.PI + 0.25), sw = Math.sin(t * 22);
             const rx = g.facing * Math.cos(th), ry = Math.sin(th);
             this.visFacing = f.facing;
             p.pitch = Math.atan2(-rx, ry) / D2R;
             p.rSx = 150 + sw * 14; p.lSx = 150 - sw * 14; p.rSz = 30; p.lSz = 30; p.rE = 20; p.lE = 20; p.rHx = 4; p.lHx = 18; p.rK = 10; p.lK = 40; p.headX = 14;
+            return p;
+        }
+        if (f.grabHolding && f.throwU > 0) {              // throw wind-up: up = front flip, side = spin round, down = half front flip
+            const u = smooth(f.throwU), k = f.throwKind;
+            p.rSx = 150; p.lSx = 150; p.rE = 20; p.lE = 20; p.rSz = 8; p.lSz = 8; p.rK = 40; p.lK = 40; p.rHx = 20; p.lHx = 20; p.aura = f.gripMode ? 0.7 : 0.3;
+            if (k === 'up') p.spin = 360 * u; else if (k === 'down') p.spin = 180 * u; else p.twist = 360 * u;
+            if (k !== 'side') p.dy = -4 * Math.sin(Math.PI * u) - 3;
             return p;
         }
         if (f.gripT > 0 && f.grabHolding) {              // the thrower: one hand on the ankle, the arm sweeping the foe up and over
