@@ -502,6 +502,21 @@ export class FighterModel {
             p.rHx = 100; p.lHx = 100; p.rK = 125; p.lK = 125; p.headX = 38; p.torsoX = 40; p.aura = 0.5;
             return p;
         }
+        if (f.grabbedBy && f.grabbedBy.gripT > 0) {     // Ember's leg-grip: dangled by the ankle and swung over his head
+            const g = f.grabbedBy, u = 1 - g.gripT / 30, th = Math.PI - u * (Math.PI + 0.25), sw = Math.sin(t * 22);
+            const rx = g.facing * Math.cos(th), ry = Math.sin(th);
+            this.visFacing = f.facing;
+            p.pitch = Math.atan2(-rx, ry) / D2R;
+            p.rSx = 150 + sw * 14; p.lSx = 150 - sw * 14; p.rSz = 30; p.lSz = 30; p.rE = 20; p.lE = 20; p.rHx = 4; p.lHx = 18; p.rK = 10; p.lK = 40; p.headX = 14;
+            return p;
+        }
+        if (f.gripT > 0 && f.grabHolding) {              // the thrower: one hand on the ankle, the arm sweeping the foe up and over
+            const u = 1 - f.gripT / 30, a = Math.sin(Math.PI * u);
+            p.rSx = lerp(40, 175, smooth(seg(u, 0, 0.5))) - 40 * smooth(seg(u, 0.7, 1)); p.lSx = lerp(40, 160, smooth(seg(u, 0, 0.5))) - 30 * smooth(seg(u, 0.7, 1));
+            p.rE = 8; p.lE = 14; p.rSz = 6; p.lSz = 12;
+            p.lean = lerp(-14, 14, u) ; p.fwd = 3 * a; p.dy = -3 - 2 * a; p.rK = 30; p.lK = 30; p.rHx = 16; p.lHx = -14; p.torsoY = lerp(-20, 25, u); p.aura = 0.5;
+            return p;
+        }
         if (f.grabbedBy) {
             const sw = Math.sin(t * 9);
             p.dy = -2; p.roll = sw * 8; p.headX = 20; p.headZ = sw * 12;

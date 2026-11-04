@@ -15,6 +15,8 @@ def save(path, x, sr, peak=0.92):
     x = np.nan_to_num(x)
     m = np.abs(x).max()
     if m > 0: x = x / m * peak
+    if os.sep + 'bgm' + os.sep in os.path.abspath(path) or '/bgm/' in path:        # loops: 12 ms edge fades so the loop point never clicks / pops
+        k = int(sr * 0.012); x = x.copy(); x[:k] *= np.linspace(0, 1, k); x[-k:] *= np.linspace(1, 0, k)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with wave.open(path, 'wb') as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr); w.writeframes((x * 32767).astype('<i2').tobytes())

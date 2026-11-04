@@ -388,7 +388,7 @@ class Fighter {
         this.grabDashTimer = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false;
 
         this.hitstun = 0;
         this.invincibleTimer = 0;
@@ -485,7 +485,7 @@ class Fighter {
         this.dropT = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
         this.dizzyTimer = 0;
@@ -658,7 +658,11 @@ class Fighter {
             this.vx = 0;
             this.vy = 0;
             const g = this.grabbedBy;
-            if (g.suplexT > 0) {                  // carried round the backflip: overhead -> behind -> underneath
+            if (g.gripT > 0) {                    // held by the leg and swung over Ember's head
+                const u = 1 - g.gripT / 30, th = Math.PI - u * (Math.PI + 0.25);
+                this.x = g.x + g.facing * 58 * Math.cos(th);
+                this.y = g.y - 58 * Math.sin(th);
+            } else if (g.suplexT > 0) {                  // carried round the backflip: overhead -> behind -> underneath
                 const a = g.suplexAng || 0;
                 this.x = g.x - g.facing * 46 * Math.sin(a);
                 this.y = g.y - 46 * Math.cos(a);
@@ -678,6 +682,12 @@ class Fighter {
             this.grabTimer--;
             this.vx = 0;
             this.vy = 0;
+            if (this.gripMode && this.gripT > 0) {              // the grip burns: 5 ticks of 0.4 (2 damage over 0.5 s)
+                this.gripT--;
+                if (this.gripT % 6 === 0 && this.grabHolding) {
+                    const v = this.grabHolding; v.damage += 0.4; v.lastHitBy = this; v.lastHitT = 0; fx('burn', v.x, v.y - 20); createParticles(v.x, v.y, '#fb923c', 4);
+                }
+            }
 
             if (this.grabTimer <= 0) {
                 const target = this.grabHolding;
@@ -708,6 +718,10 @@ class Fighter {
                 this.throwFxT = 14;
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
+                if (this.gripMode) {                                // the fling ends in an explosion
+                    this.gripMode = false; this.gripT = 0;
+                    fx('explosion', target.x, target.y, 90, 0.5, STYLE_OF[this.char]); createParticles(target.x, target.y, '#fb923c', 22); audio.playHit(true); S.screenShake = 20;
+                }
             }
             return;
         }
@@ -1002,18 +1016,35 @@ class Fighter {
                 this.activeHitbox = { x: this.x + Math.cos(x.ang) * 34, y: this.y + Math.sin(x.ang) * 34, w: sp.w, h: sp.h, type: 'SPIRAL', ttl: 3, multi: true,
                     damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: x.ang - 0.15 * Math.sign(Math.cos(x.ang) || 1), fixed: null };
             }
+            if (sp.drill && x.t >= sp.frames - 14) {                           // who is still caught in the drill near its end
+                if (!x.caught) x.caught = new Set();
+                for (const f of foesOf(this)) if (isAlive(f) && Math.abs(f.x - (this.x + Math.cos(x.ang) * 40)) < sp.w / 2 + f.width / 2 + 24 && Math.abs(f.y - (this.y + Math.sin(x.ang) * 40)) < sp.h / 2 + f.height / 2 + 24) x.caught.add(f);
+            }
             fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
             if (x.t >= sp.frames) {
-                if (sp.missile) {                                           // the fire rocket detaches and keeps flying the way Ember was heading until it explodes
+                const caught = x.caught ? [...x.caught].filter(isAlive) : [];
+                if (caught.length === 1 && sp.drill) {                      // one foe caught: grab them by the leg and fling them away (an explosion at the end of the throw)
+                    const v = caught[0];
+                    v.interrupt(); v.isShielding = false; v.hitstun = 40; v.vx = v.vy = 0;
+                    this.grabHolding = v; v.grabbedBy = this; this.grabTimer = 30; this.gripT = 30; this.gripMode = true; this.gripTickT = 0;
+                    this.facing = v.x >= this.x ? 1 : -1;
+                    audio.playGrab(); fx('grab', v.x, v.y); createParticles(v.x, v.y, '#fb923c', 16);
+                    this.sx = null; this.activeMove = null; this.armorT = 0; this.vx = this.vy = 0;
+                    return;
+                }
+                if (sp.missile && caught.length === 0) {                                           // the fire rocket detaches and keeps flying the way Ember was heading until it explodes
                     const m = sp.missile;
                     for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one straight on, one 20 degrees either side
                         const a = x.ang + da * Math.PI / 180;
                         orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
                             life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
-                    // a foe caught by the last frames of the drill (the 'phoenix' hits): a 2x fast, perfectly homing rocket goes after them (8 dmg, 0.8x rocket knockback, ignores shields)
-                    for (const f of foesOf(this)) {
-                        if (!isAlive(f) || f.lastHitBy !== this || !(f.ghostT >= 50)) continue;
+                    fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
+                }
+                if (sp.missile && caught.length >= 2) {
+                    const m = sp.missile;
+                // two or more foes caught in the drill: one 2x fast, perfectly homing rocket goes after them (8 dmg, 0.8x rocket knockback, ignores shields)
+                    for (const f of caught) {
                         orbs.push({ x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: 0, vy: 0, r: m.r, charge: 0.3, owner: this,
                             life: 150, color: '#fde047', id: ++orbSerial, d: 8, R: m.R, bkb: m.bkb * 0.8, kbg: m.kbg * 0.8, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0,
                             kind: 'firerocket', phoenix: false, flat: true, homing: f, spd: m.speed * 2, shieldPass: true });
