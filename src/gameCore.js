@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103aa — Tide fast pop bubble + Phoenix and combat batch
+// BUILD_STAMP 20261103ab — Ember throw knockback normalized + 1.3s air freeze
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
@@ -745,7 +745,7 @@ class Fighter {
                 }
 
                 const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const throwSpeed = grabThrowSpeed(target) * (this.gripMode ? 1.5 : 1); // Phoenix Dash throw gets 1.5x range
+                const throwSpeed = grabThrowSpeed(target); // Ember's Phoenix Dash throw uses normal grab knockback
                 target.vx = (dx / dist) * throwSpeed;
                 target.vy = (dy / dist) * throwSpeed;
                 target.bounceReflectT = 60;
@@ -758,7 +758,7 @@ class Fighter {
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
                 if (this.gripMode) {                                // the fling ends in an explosion
-                    this.freezeAirTimer = 30; this.grounded = false; this.vx = this.vy = 0;
+                    this.freezeAirTimer = 78; this.grounded = false; this.vx = this.vy = 0;
                     this.gripMode = false; this.gripT = 0;
                     fx('explosion', target.x, target.y, 90, 0.5, STYLE_OF[this.char]); createParticles(target.x, target.y, '#fb923c', 22); audio.playHit(true); S.screenShake = 20;
                 }
