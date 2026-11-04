@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103r — recovery, edgeguard, Side-F, Ember halt/melee
+// BUILD_STAMP 20261103y — Tide bubble protection + loader letter animation
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
@@ -567,7 +567,18 @@ class Fighter {
             if (this.haltT === 0) this.haltV = 0;
             if (this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust
         }
-        if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
+        if (this.trapId) {
+            if (orbs.some(o => o.id === this.trapId)) {
+                this.hitstun = Math.max(this.hitstun, 2);
+                // Tide's Bubble Trap: protect the captive throughout the grey stun.
+                this.invincibleTimer = Math.max(this.invincibleTimer, 2);
+                this.ghostT = Math.max(this.ghostT, 2);
+            } else {
+                this.trapId = 0;
+                this.invincibleTimer = Math.max(this.invincibleTimer, 60);
+                this.ghostT = Math.max(this.ghostT, 60);
+            }
+        }
         const bj = trainJumps(this);       // training menu can override jump count
         if (this.maxJumps !== bj) { this.jumpsLeft = Math.min(bj, this.jumpsLeft + Math.max(0, bj - this.maxJumps)); this.maxJumps = bj; }
         if (this.gravT > 0) this.gravT--;
@@ -3136,7 +3147,8 @@ function emberCounter(em, foe) {
 }
 
 function launch(attacker, defender, hb) {
-    if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash: their attacks do nothing
+    if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
+    if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll' && (defender.sx.c || 0) >= 0.9) {
         // BLUE fireball: nothing stops it. It still takes the damage, but ploughs straight through with no flinch, knockback or stun;
         // the hit costs it speed (0.6x) for the rest of this roll, and it keeps damaging whatever it touches.
@@ -3160,7 +3172,7 @@ function launch(attacker, defender, hb) {
         createParticles(defender.x, defender.y, '#e2e8f0', 8); fx('block', defender.x, defender.y);
         return;
     }
-    if (defender.trapId) { const i = orbs.findIndex(o => o.id === defender.trapId); if (i >= 0) { fx('explosion', orbs[i].x, orbs[i].y, 80, 0, 'water'); orbs.splice(i, 1); } defender.trapId = 0; }
+    if (defender.trapId) { const i = orbs.findIndex(o => o.id === defender.trapId); if (i >= 0) { fx('explosion', orbs[i].x, orbs[i].y, 80, 0, 'water'); orbs.splice(i, 1); } defender.trapId = 0; defender.invincibleTimer = Math.max(defender.invincibleTimer, 60); defender.ghostT = Math.max(defender.ghostT, 60); return; }
     if (defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'charge') {   // hit while charging the roll: a 1 s frozen stun (like a broken shield), no knockback
         defender.damage += hb.damage; defender.lastHitBy = attacker; defender.lastHitT = 0;
         defender.sx = null; defender.fActive = false; defender.chargeFrames = 0; defender.clashStunTimer = 60; defender.vx = defender.vy = 0;
@@ -3240,7 +3252,7 @@ function launch(attacker, defender, hb) {
 
 function explodeOrb(o) {
     if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
-    if (o.trap) for (const f of fighters) if (f.trapId === o.id) f.trapId = 0;
+    if (o.trap) for (const f of fighters) if (f.trapId === o.id) { f.trapId = 0; f.invincibleTimer = Math.max(f.invincibleTimer, 60); f.ghostT = Math.max(f.ghostT, 60); }
     const R = o.R !== undefined ? o.R : 80 + 90 * o.charge;
     const dmg = o.d !== undefined ? o.d : 4 + 16 * o.charge;          // Luminent: min 4, max 20; every character has its own numbers
     fx('explosion', o.x, o.y, R, o.charge, o.owner ? STYLE_OF[o.owner.char] : 0);
