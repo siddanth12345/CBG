@@ -3435,7 +3435,7 @@ function updatePillars() {
             const ax = Math.abs(t.x - p.x);
             if (ax < p.w / 2 + t.width / 2) {
                 const res = interaction('SPIRAL', t);
-                if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: 0, kbg: 0, angle: -1.4, stun: 20, lift: 5, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
+                if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: 0, kbg: 0, angle: -1.4, stun: 60, lift: 5, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
                 else if (res === 'shield') { p.hit.add(t); audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             } else if (ax < p.aw / 2 + t.width / 2) {
                 p.hit.add(t); t.burnT = Math.max(t.burnT, p.burn); t.burnDmg = p.tick; t.burnBy = p.owner; fx('burn', t.x, t.y - 30);

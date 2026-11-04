@@ -821,11 +821,19 @@ export class Effects {
                 if (Math.random() < 0.7) this.sparks(g.position.clone(), '#a855f7', 1, 100, 0.35);
             } else if (kind === 'bomb') {                                 // Ember's cluster bomb: an orange outlined, slightly orange see-through bubble full of burning sparks
                 g.scale.setScalar(o.r * (1 + Math.sin(this.chargeT * 9 + i) * 0.03));
-                u.bub.children[0].material.color.set('#fb923c').multiplyScalar(1.5); u.bub.children[0].material.opacity = 0.24;
-                u.bub.children[1].material.color.set('#fdba74').multiplyScalar(2);
-                if (Math.random() < 0.7) this.sparks(g.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * o.r, (Math.random() - 0.5) * o.r, 0)), Math.random() < 0.5 ? '#fb923c' : '#fde047', 1, 50, 0.45, 'up');
+                u.bub.children[0].material.color.set('#fb923c').multiplyScalar(1.2); u.bub.children[0].material.opacity = 0.035;     // the inside is almost completely clear
+                u.bub.children[1].material.color.set('#fb923c').multiplyScalar(4); u.bub.children[1].material.opacity = 1;          // a bright, glowing rim
+                if (!u.bombGlow) {                                                                                                    // an extra wide soft halo around the rim
+                    u.bombGlow = [1.06, 1.14, 1.26].map((k, n) => { const m = new THREE.Mesh(new THREE.RingGeometry(0.88, 1.0, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color('#f97316').multiplyScalar(2.4), transparent: true, opacity: 0.34 / (n + 1), blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide })); m.scale.setScalar(k); m.position.z = -0.02; u.bub.add(m); return m; });
+                }
+                for (const m of u.bombGlow) m.visible = true;
+                if (Math.random() < 0.5) {                                                                                           // clusters of sharp plus-shaped stars (the melee tick sparkle) drifting inside
+                    const ang = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * o.r * 0.78;
+                    this.star(g.position.clone().add(new THREE.Vector3(Math.cos(ang) * rr, Math.sin(ang) * rr, 0)), o.r * (0.16 + Math.random() * 0.3), Math.random() < 0.7 ? '#fb923c' : '#fde047', 0.28, 4);
+                }
+                if (Math.random() < 0.25) this.sparks(g.position.clone(), '#fde047', 1, 40, 0.4, 'up');
             } else if (kind === 'bubble') {
-                u.bub.children[0].material.color.set('#7dd3fc').multiplyScalar(1.4); u.bub.children[0].material.opacity = 0.2; u.bub.children[1].material.color.set('#e0f2fe').multiplyScalar(2);
+                u.bub.children[0].material.color.set('#7dd3fc').multiplyScalar(1.4); u.bub.children[0].material.opacity = 0.2; u.bub.children[1].material.color.set('#e0f2fe').multiplyScalar(2); u.bub.children[1].material.opacity = 0.85; if (u.bombGlow) for (const m of u.bombGlow) m.visible = false;
                 g.scale.setScalar(o.r * (1 + Math.sin(this.chargeT * 7 + i) * (o.cap ? 0.05 : 0.025)));
                 if (Math.random() < 0.15) this.sparks(g.position.clone(), '#e0f2fe', 1, 50, 0.4, 'up');
             } else { this.#paintOrb(g, o.r * pulse, o.color, 1); if (Math.random() < 0.8) this.sparks(g.position.clone(), o.color, 1, 70, 0.28); }
