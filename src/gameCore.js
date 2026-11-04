@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103z — Phoenix tuning, counters, recovery and throw physics
+// BUILD_STAMP 20261103aa — Tide fast pop bubble + Phoenix and combat batch
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
@@ -1361,6 +1361,11 @@ class Fighter {
 
     useSpecial(kind, tx, ty, charge = 0) {
         if (this.isHanging) return false;    // ledge: jump only
+        // Tide can press Side-F again while the water bubble is travelling to detonate it early.
+        if (kind === 'BLINK' && this.char === 'tide') {
+            const bubble = orbs.find(o => o && o.owner === this && o.kind === 'bubble');
+            if (bubble) { dropOrb(bubble); explodeOrb(bubble); audio.playHit(false); return true; }
+        }
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
@@ -1544,12 +1549,12 @@ class Fighter {
         }
     }
 
-    /** Tide's Bubble Trap: a slow bubble that traps the first foe it touches until it pops (3 s, the floor, or another hit) */
+    /** Tide's fast water bubble pops on contact; pressing Side-F again detonates it early. */
     startBubble(d, sp) {
         this.facing = d;
         orbs.push({
             x: this.x + d * 64, y: this.y - 12, vx: d * sp.speed, vy: 0, r: sp.r, charge: 0.3, owner: this, life: sp.life, color: '#7dd3fc', id: ++orbSerial,
-            d: sp.popDmg, R: sp.R, bkb: sp.bkb, kbg: sp.kbg, grav: 0, curve: 0, wobble: 2.2, pull: 0, age: 0, kind: 'bubble', trap: true, cap: null, capT: 0,
+            d: sp.popDmg, R: sp.R, bkb: sp.bkb, kbg: sp.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bubble', trap: false, cap: null, capT: 0,
         });
         this.setMove('CORE', 20);
         this.specialKind = 'CORE'; this.specialT = 0; this.specialDur = 20;
