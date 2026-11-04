@@ -10,7 +10,7 @@ import { FireTrail } from './fireTrail.js';
 
 // colours per character style (main, bright)
 const PAL = { core: ['#a78bfa', '#ede9fe'], iron: ['#94a3b8', '#e2e8f0'], wind: ['#6ee7b7', '#ecfdf5'], fire: ['#fb923c', '#fde047'], water: ['#38bdf8', '#e0f2fe'], volt: ['#facc15', '#fef9c3'], dark: ['#7c3aed', '#c4b5fd'], rock: ['#a8a29e', '#d6d3d1'] };
-const pal = (c) => PAL[String(c || 'core').replace('!', '')] || PAL.core;
+const pal = (c) => PAL[String(c || 'core').replace(/[!@]/g, '')] || PAL.core;
 
 const ADD = THREE.AdditiveBlending;
 
@@ -436,17 +436,17 @@ export class Effects {
                     this.sparks(pos, '#e0f2fe', 36, 520, 0.6);
                     break;
                 case 'stomp': {          // a = width of the shockwave, b = facing (0 = both ways)
-                    const w = e.a || 250, g = new THREE.Vector3(pos.x, this.stageTop + 1, 0), P = pal(e.c);
+                    const w = e.a || 250, gy0 = String(e.c || '').includes('@') ? pos.y : this.stageTop, g = new THREE.Vector3(pos.x, gy0 + 1, 0), P = pal(e.c);
                     this.ring(g, 6, w * 0.55, 0.38, P[0], 'ground');
-                    this.ring(g.clone().setY(this.stageTop + 2), 4, w * 0.3, 0.3, '#ffffff', 'ground');
+                    this.ring(g.clone().setY(gy0 + 2), 4, w * 0.3, 0.3, '#ffffff', 'ground');
                     const dirs = e.b ? [e.b] : [-1, 1];
                     for (const d of dirs) {
                         for (let i = 0; i < 8; i++) {
                             const px = g.x + d * (w * 0.5 * (i + 1) / 8) * (e.b ? 1 : 1);
-                            this.sparks(new THREE.Vector3(px, this.stageTop + 4, 0), P[1], 2, 220, 0.35, 'up');
+                            this.sparks(new THREE.Vector3(px, gy0 + 4, 0), P[1], 2, 220, 0.35, 'up');
                         }
                     }
-                    this.star(g.clone().setY(this.stageTop + 20), 70, '#ffffff', 0.16);
+                    this.star(g.clone().setY(gy0 + 20), 70, '#ffffff', 0.16);
                     break;
                 }
                 case 'blink': {          // a, b = destination
@@ -479,7 +479,8 @@ export class Effects {
                 }
                 case 'pillar': {         // a = width, b = height, c = style (a trailing ! = the eruption itself; without it only the warning swell)
                     const P = pal(e.c), big = String(e.c || '').includes('!'), w = Math.max(40, e.a || 100), h = Math.max(60, e.b || 200);
-                    const g = new THREE.Vector3(pos.x, this.stageTop + 1, 0);
+                    const gy0 = String(e.c || '').includes('@') ? pos.y : this.stageTop;      // '@' = erupts from the event's own height (e.g. under an airborne fighter), not the stage top
+                    const g = new THREE.Vector3(pos.x, gy0 + 1, 0);
                     const mk = (col, rad, op) => new THREE.Mesh(new THREE.CylinderGeometry(rad, rad * 1.25, 1, 20, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(2), transparent: true, opacity: op, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
                     const outer = mk(P[0], w / 2, 0.8), inner = mk(P[1], w / 4, 0.95);
                     outer.renderOrder = inner.renderOrder = 6;
@@ -494,14 +495,14 @@ export class Effects {
                     }, free: () => { this.scene.remove(inner); inner.geometry.dispose(); inner.material.dispose(); outer.geometry.dispose(); outer.material.dispose(); } });
                     this.ring(g, 6, w * 0.9, 0.4, P[0], 'ground');
                     if (big) {
-                        this.ring(g.clone().setY(this.stageTop + 2), 4, w * 1.5, 0.5, P[1], 'ground');
+                        this.ring(g.clone().setY(gy0 + 2), 4, w * 1.5, 0.5, P[1], 'ground');
                         for (let i = 0; i < 4; i++) this.sparks(new THREE.Vector3(g.x + (Math.random() - 0.5) * w, g.y + 6, 0), P[i % 2], 7, 300 + h, 0.7, 'up');
-                        this.star(g.clone().setY(this.stageTop + 30), w * 0.9, '#ffffff', 0.2);
+                        this.star(g.clone().setY(gy0 + 30), w * 0.9, '#ffffff', 0.2);
                     }
                     break;
                 }
                 case 'quake': {          // heavy ground slam: cracks racing outward + dust
-                    const P = pal(e.c), w = e.a || 300, y = this.stageTop + 2;
+                    const P = pal(e.c), w = e.a || 300, y = (String(e.c || '').includes('@') ? pos.y : this.stageTop) + 2;
                     this.ring(new THREE.Vector3(pos.x, y, 0), 10, w * 1.3, 0.6, P[0], 'ground');
                     for (const d of [-1, 1]) for (let k = 0; k < 3; k++) {
                         const pts = []; let x = pos.x, z = 0; const len = w * (0.6 + Math.random() * 0.7), dz = (Math.random() - 0.5) * 1.4;
@@ -799,9 +800,9 @@ export class Effects {
             g.visible = true;
             const pulse = 1 + Math.sin(this.chargeT * 18 + i) * 0.07;
             g.position.set(wx(o.x), wy(o.y), 0);
-            const kind = o.kind || 0, u = g.userData, alt = kind === 'boulder' || kind === 'void' || kind === 'bubble' || kind === 'firerocket' || kind === 'thunder';
+            const kind = o.kind || 0, u = g.userData, alt = kind === 'boulder' || kind === 'void' || kind === 'bubble' || kind === 'bomb' || kind === 'firerocket' || kind === 'thunder';
             u.core.visible = u.mid.visible = u.halo.visible = !alt;
-            u.rock.visible = kind === 'boulder'; u.voidG.visible = kind === 'void'; u.bub.visible = kind === 'bubble'; u.rk.visible = kind === 'firerocket'; u.th.visible = kind === 'thunder'; u.chips.visible = u.fw.visible = false;
+            u.rock.visible = kind === 'boulder'; u.voidG.visible = kind === 'void'; u.bub.visible = kind === 'bubble' || kind === 'bomb'; u.rk.visible = kind === 'firerocket'; u.th.visible = kind === 'thunder'; u.chips.visible = u.fw.visible = false;
             if (kind === 'water') { this.#paintOrb(g, o.r * pulse, '#38bdf8', 1); if (Math.random() < 0.7) this.sparks(g.position.clone(), '#bae6fd', 1, 60, 0.3, 'down'); }
             else if (kind === 'firerocket') {
                 g.scale.setScalar(o.r * 1.9); u.rk.rotation.z = Math.atan2(-o.vy, o.vx);
@@ -818,7 +819,13 @@ export class Effects {
             } else if (kind === 'void') {
                 g.scale.setScalar(o.r * pulse); u.vr.rotation.z += dt * 5; u.vr2.rotation.z -= dt * 7;
                 if (Math.random() < 0.7) this.sparks(g.position.clone(), '#a855f7', 1, 100, 0.35);
+            } else if (kind === 'bomb') {                                 // Ember's cluster bomb: an orange outlined, slightly orange see-through bubble full of burning sparks
+                g.scale.setScalar(o.r * (1 + Math.sin(this.chargeT * 9 + i) * 0.03));
+                u.bub.children[0].material.color.set('#fb923c').multiplyScalar(1.5); u.bub.children[0].material.opacity = 0.24;
+                u.bub.children[1].material.color.set('#fdba74').multiplyScalar(2);
+                if (Math.random() < 0.7) this.sparks(g.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * o.r, (Math.random() - 0.5) * o.r, 0)), Math.random() < 0.5 ? '#fb923c' : '#fde047', 1, 50, 0.45, 'up');
             } else if (kind === 'bubble') {
+                u.bub.children[0].material.color.set('#7dd3fc').multiplyScalar(1.4); u.bub.children[0].material.opacity = 0.2; u.bub.children[1].material.color.set('#e0f2fe').multiplyScalar(2);
                 g.scale.setScalar(o.r * (1 + Math.sin(this.chargeT * 7 + i) * (o.cap ? 0.05 : 0.025)));
                 if (Math.random() < 0.15) this.sparks(g.position.clone(), '#e0f2fe', 1, 50, 0.4, 'up');
             } else { this.#paintOrb(g, o.r * pulse, o.color, 1); if (Math.random() < 0.8) this.sparks(g.position.clone(), o.color, 1, 70, 0.28); }

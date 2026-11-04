@@ -392,7 +392,7 @@ class Fighter {
         this.grabDashTimer = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
 
         this.hitstun = 0;
         this.freezeAirTimer = 0;
@@ -491,7 +491,7 @@ class Fighter {
         this.dropT = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
         this.dizzyTimer = 0;
@@ -608,6 +608,14 @@ class Fighter {
         if (this.activeHitbox && this.activeHitbox.ttl !== undefined && --this.activeHitbox.ttl <= 0) this.activeHitbox = null;
         if (this.specialDur > 0 && ++this.specialT >= this.specialDur) { this.specialKind = null; this.specialDur = 0; }
 
+        if (this.bombN > 0) {                                  // Ember's cluster bomb burn: 5 ticks of 2 over 3 s; each tick freezes the victim 0.2 s but their velocity carries on afterwards
+            if (this.stocks <= 0 || this.out) this.bombN = 0;
+            else if (++this.bombT % 36 === 0) {
+                this.damage += 2; if (this.bombBy) { this.lastHitBy = this.bombBy; this.lastHitT = 0; }
+                this.bombN--; this.tickFreezeT = 12; fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); audio.playHit(false);
+            }
+        }
+        if (this.tickFreezeT > 0) { this.tickFreezeT--; return; }
         if (this.freezeAirTimer > 0) { this.vx = this.vy = 0; return; }
 
         if (this.clashStunTimer > 0) {
@@ -758,7 +766,7 @@ class Fighter {
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
                 if (this.gripMode) {                                // the fling ends in an explosion
-                    this.freezeAirTimer = 78; this.grounded = false; this.vx = this.vy = 0;
+                    this.freezeAirTimer = 30; this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30 + 48); this.grounded = false; this.vx = this.vy = 0;   // 0.5 s hang, then Up is locked for 0.8 s
                     this.gripMode = false; this.gripT = 0;
                     fx('explosion', target.x, target.y, 90, 0.5, STYLE_OF[this.char]); createParticles(target.x, target.y, '#fb923c', 22); audio.playHit(true); S.screenShake = 20;
                 }
@@ -895,7 +903,7 @@ class Fighter {
 
     // ------------------------------------------------------------ F specials: per-frame state
     updateSpecials() {
-        if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + 1);
+        if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + (this.char === 'tide' && this.chargeFrames >= HOLD_TO_CORE ? 2 : 1));   // Tide's Core charges 2x faster
         if (this.fActive && !this.sx && spec(this.char, 'S').kind === 'roll' && this.cd.BLINK <= 0 && this.canRollStart()) {
             const dr = this === p1 && !(S.online === 'guest') ? mouse.direction : this.fDirPress;
             if (dr === 'SIDE_LEFT' || dr === 'SIDE_RIGHT') { if (!this.grounded) this.airSpecials++; this.startRollCharge(dr === 'SIDE_LEFT' ? -1 : 1); }
@@ -1018,8 +1026,8 @@ class Fighter {
                     this.activeHitbox = { x: cx, y: cy, w, h: sp.h, type: 'SPIRAL', ttl: 4, multi: true, mirror: true, radial: !!sp.radial, stun: sp.stun || 0,
                         pull: sp.pull || 0, damage: sp.dmg, bkb: sp.bkb, kbg: sp.kbg, angle: sp.ang };
                     const st = STYLE_OF[this.char];
-                    if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st);
-                    if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st);
+                    if (sp.h >= 150) fx('pillar', cx, cy + sp.h / 2, w, sp.h, st + '!@'); else fx('stomp', cx, cy + sp.h / 2, w, 0, st + '@');
+                    if (sp.armor || sp.dmg >= 24) fx('quake', cx, cy + sp.h / 2, w, 0, st + '@');
                     if (sp.pull) fx('gust', cx, cy, sp.pull * 30, 1, st);
                     S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                     createParticles(cx, cy + sp.h / 2, this.color, 14);
@@ -1118,7 +1126,7 @@ class Fighter {
                 this.swingHitSet = new Set();
                 this.activeHitbox = { x: px, y: feet - sp.h / 2 + 30, w, h: sp.h, type: 'SPIRAL', ttl: sp.rideFrames, multi: true, mirror: true,
                     damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.45, stun: sp.stun || 0, lift: sp.lift || 0 };
-                fx('pillar', px, feet, w, sp.h, STYLE_OF[this.char] + '!'); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
+                fx('pillar', px, feet, w, sp.h, STYLE_OF[this.char] + '!@'); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                 x.px = px;
             }
             // ride: smooth upward push (additive) so gravity still shapes the arc
@@ -1169,7 +1177,7 @@ class Fighter {
                     this.swingHitSet = new Set();
                     this.activeHitbox = { x: this.x + x.d * (e.fwd || 0), y: e.pillar ? feet - e.h / 2 + 30 : this.y, w: e.w, h: e.h, type: 'BLINK', ttl: 6, multi: true,
                         mirror: !e.radial, radial: !!e.radial, damage: e.dmg, bkb: e.bkb || 0, kbg: e.kbg || 0, angle: e.ang !== undefined ? e.ang : -0.5, stun: e.stun || 0 };
-                    if (e.pillar) fx('pillar', this.x + x.d * (e.fwd || 0), feet, e.w, e.h, st + '!'); else { fx('explosion', this.x, this.y, e.w / 2, 0.5, st); fx('gust', this.x, this.y, e.w / 2, 1, st); }
+                    if (e.pillar) fx('pillar', this.x + x.d * (e.fwd || 0), feet, e.w, e.h, st + '!@'); else { fx('explosion', this.x, this.y, e.w / 2, 0.5, st); fx('gust', this.x, this.y, e.w / 2, 1, st); }
                     S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true);
                     if (sp.rebound) { this.vx = -x.d * sp.rebound; this.vy = -5; this.grounded = false; }
                 }
@@ -1282,7 +1290,7 @@ class Fighter {
         const feet = this.y + this.height / 2, st = STYLE_OF[this.char], w = STAGE.width * pl.w;
         for (const sd of [-1, 1]) {
             pillars.push({ x: this.x + sd * pl.off, feet, w, aw: w * 2.6, h: pl.h, dmg: pl.dmg, burn: pl.burn, tick: pl.tick, life: 24, owner: this, hit: new Set() });
-            fx('pillar', this.x + sd * pl.off, feet, w * 1.6, pl.h, st + '!'); fx('quake', this.x + sd * pl.off, feet, w * 2.2, 0, st);
+            fx('pillar', this.x + sd * pl.off, feet, w * 1.6, pl.h, st + '!@'); fx('quake', this.x + sd * pl.off, feet, w * 2.2, 0, st + '@');
         }
         S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
     }
@@ -1317,8 +1325,8 @@ class Fighter {
         this.freezeTimer = lk(this, sp.lock !== undefined ? sp.lock : FREEZE);
         if (sp.vx) { this.vy = -8; this.grounded = false; this.freezeTimer = Math.min(this.freezeTimer, 8); }   // the diagonal kick bounces back up
         if (hit.multi) this.swingHitSet = new Set();
-        fx('stomp', this.x, this.y + this.height / 2, w, 0, STYLE_OF[this.char]);
-        if (sp.impactDmg >= 20) fx('quake', this.x, this.y + this.height / 2, w, 0, STYLE_OF[this.char]);
+        fx('stomp', this.x, this.y + this.height / 2, w, 0, STYLE_OF[this.char] + '@');
+        if (sp.impactDmg >= 20) fx('quake', this.x, this.y + this.height / 2, w, 0, STYLE_OF[this.char] + '@');
         S.screenShake = Math.max(S.screenShake, 14);
         audio.playHit(true);
     }
@@ -1369,6 +1377,10 @@ class Fighter {
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
+        if (kind === 'SUPLEX' && this.char === 'ember' && !this.bombPrimed && !orbs.some(o => o && o.owner === this && o.kind === 'bomb')) {   // Ember's Down-F first PRIMES the cluster bomb (neutral melee throws it); once primed or while bombs live it is the fire pillars
+            this.bombPrimed = true; this.cd.SUPLEX = 24; this.actionLock = Math.max(this.actionLock, lk(this, 16));
+            fx('explosion', this.x, this.y, 46, 0.3, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 14); audio.playGrab(); return true;
+        }
         if (kind === 'HEADBUTT' && this.grounded) return false;
         if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= trainAirF()) return false;
 
@@ -1544,7 +1556,7 @@ class Fighter {
         if (sp.armor) this.armorT = sp.windup + 8;
         if (sp.atTarget) {
             const foe = nearestOf(this, foesOf(this));
-            if (foe && Math.hypot(foe.x - this.x, foe.y - this.y) < 700) { this.sx.tx = foe.x; this.sx.ty = foe.y + 20 - sp.h / 2 + 30; fx('stomp', foe.x, foe.y + 34, STAGE.width * sp.w, 0); }
+            if (foe && Math.hypot(foe.x - this.x, foe.y - this.y) < 700) { this.sx.tx = foe.x; this.sx.ty = foe.y + 20 - sp.h / 2 + 30; fx('stomp', foe.x, foe.y + 34, STAGE.width * sp.w, 0, '@'); }
             else { this.sx.tx = this.x + this.facing * 170; this.sx.ty = this.y + this.height / 2 - sp.h / 2; }
         }
     }
@@ -1554,7 +1566,7 @@ class Fighter {
         this.facing = d;
         orbs.push({
             x: this.x + d * 64, y: this.y - 12, vx: d * sp.speed, vy: 0, r: sp.r, charge: 0.3, owner: this, life: sp.life, color: '#7dd3fc', id: ++orbSerial,
-            d: sp.popDmg, R: sp.R, bkb: sp.bkb, kbg: sp.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bubble', trap: false, cap: null, capT: 0,
+            d: sp.popDmg, R: sp.R, bkb: sp.bkb, kbg: sp.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bubble', noKb: true, trap: false, cap: null, capT: 0,
         });
         this.setMove('CORE', 20);
         this.specialKind = 'CORE'; this.specialT = 0; this.specialDur = 20;
@@ -1603,7 +1615,7 @@ class Fighter {
         this.sx.tx = this.x; this.sx.ty = this.y + this.height / 2;          // always right below Tide, even high in the air
         this.setMove('SPIRAL', sp.windup + sp.rideFrames + 6);
         this.specialKind = 'SPIRAL'; this.specialDur = sp.windup + sp.rideFrames + 6;
-        fx('pillar', this.x, this.y + this.height / 2, STAGE.width * sp.w, sp.h * 0.25, STYLE_OF[this.char]);     // the warning swell under his feet
+        fx('pillar', this.x, this.y + this.height / 2, STAGE.width * sp.w, sp.h * 0.25, STYLE_OF[this.char] + '@');     // the warning swell under his feet
     }
 
     startDash(d, sp) {
@@ -1666,7 +1678,7 @@ class Fighter {
         if (sp.start) {                                       // Rubble Launch: a blast under you throws foes away, then you rise
             const e = sp.start; this.swingHitSet = new Set();
             this.activeHitbox = { x: this.x, y: this.y + 20, w: e.R * 2, h: e.R * 1.6, type: 'SPIRAL', ttl: 6, multi: true, radial: true, damage: e.dmg, bkb: e.bkb, kbg: e.kbg, angle: -0.9 };
-            fx('explosion', this.x, this.y + 30, e.R, 0.6, STYLE_OF[this.char]); fx('quake', this.x, this.y + this.height / 2, e.R * 2, 0, STYLE_OF[this.char]);
+            fx('explosion', this.x, this.y + 30, e.R, 0.6, STYLE_OF[this.char]); fx('quake', this.x, this.y + this.height / 2, e.R * 2, 0, STYLE_OF[this.char] + '@');
             S.screenShake = Math.max(S.screenShake, 12);
         }
         this.setMove('SPIRAL', sp.frames);
@@ -1753,7 +1765,7 @@ class Fighter {
         d.y = this.y;
         this.vx = 0; this.vy = 0;
         this.suplexAng = 0; this.landFlipT = 12;               // the backflip finishes with a quick landing roll
-        fx('stomp', this.x, this.y + this.height / 2, STAGE.width / 8, 0);
+        fx('stomp', this.x, this.y + this.height / 2, STAGE.width / 8, 0, '@');
         S.screenShake = Math.max(S.screenShake, 16);
         launch(this, d, {
             damage: 14, bkb: 7, kbg: 0.7,
@@ -2132,6 +2144,11 @@ class Fighter {
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
+        if (this.char === 'ember' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) {          // neutral melee: throw the primed cluster bomb, or set live bombs off
+            const live = orbs.filter(o => o && o.owner === this && o.kind === 'bomb');
+            if (live.length) { for (const o of live) bombBurst(o); this.actionLock = Math.max(this.actionLock, 14); return true; }
+            if (this.bombPrimed) return this.throwBombs();
+        }
         let kind = 'JAB';
         switch (aimDirection) {
             case 'UP': kind = 'UP'; break;
@@ -2150,6 +2167,18 @@ class Fighter {
         this.activeHitbox = null;
         this.actionLock = lk(this, trainLock()) + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
+        return true;
+    }
+    /** Ember's cluster bomb: three sticky fire bubbles (middle one on the aim, two 22 degrees either side) */
+    throwBombs() {
+        const aim = aimOf(this); const a0 = Math.atan2(aim.y - this.y, aim.x - this.x);
+        if (Math.cos(a0) !== 0) this.facing = Math.cos(a0) >= 0 ? 1 : -1;
+        for (const da of [-22, 0, 22]) {
+            const a = a0 + da * Math.PI / 180;
+            orbs.push({ x: this.x + Math.cos(a) * 44, y: this.y + Math.sin(a) * 44, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
+                d: 0, R: this.height * 1.75, bkb: 0, kbg: 0, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
+        }
+        this.bombPrimed = false; this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
         return true;
     }
     /** Terra's neutral melee: a rock thrown as fast as the ball (and pulled down by gravity the same way), ball-sized, 5 damage and half the ball's knockback */
@@ -2413,6 +2442,14 @@ class AIBot extends Fighter {
                 const c = this.char === 'ember' ? (combo ? 0.2 + Math.random() * 0.4 : 0.5 + Math.random() * 0.45) : 0;
                 if (this.useSpecial('BLINK', target.x, target.y, c)) return;
             }
+        }
+
+        // Ember's cluster bomb: prime it, throw it at the foe, and set it off when the foe is inside the blast
+        if (this.char === 'ember' && (this.level === 'hard' || this.level === 'medium') && !this.actionBlocked() && this.actionLock <= 0 && this.actionTimer % 5 === 0) {
+            const mine = orbs.filter(o => o && o.owner === this && o.kind === 'bomb'), dT = Math.hypot(target.x - this.x, target.y - this.y);
+            if (mine.length) { if ((mine.some(o => Math.hypot(o.x - target.x, o.y - target.y) < o.R * 0.8) || mine.some(o => o.age > 150)) && this.attack('NEUTRAL')) return; }
+            else if (this.bombPrimed) { if (dT < 650 && dT > 110 && this.attack('NEUTRAL')) return; }
+            else if (this.grounded && this.cd.SUPLEX <= 0 && dT > 250 && Math.random() < 0.2 && this.useSpecial('SUPLEX', target.x, target.y)) return;
         }
 
         if (this.isHanging) {
@@ -3307,7 +3344,9 @@ function explodeOrb(o) {
         }
 
         const res = o.shieldPass ? 'hit' : interaction('CORE', t);
-        if (res === 'hit') {
+        if (res === 'hit' && o.noKb) {                       // Tide's bubble: damage only, no knockback, no stun, no hit-reaction
+            t.damage += dmg; t.lastHitBy = o.owner; t.lastHitT = 0; fx('hit', t.x, t.y, 6, 0); createParticles(t.x, t.y, '#7dd3fc', 8);
+        } else if (res === 'hit') {
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
                 angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || o.vx), x: o.x, y: o.y, pull: o.pull || 0, stun: o.stun || 0, phoenix: !!o.phoenix,
@@ -3322,6 +3361,44 @@ function explodeOrb(o) {
     }
 }
 
+/** Ember's cluster bomb ball: flies straight (no gravity), sticks to the first surface it meets, goes off when a foe touches it, on the owner's melee, or after 3 s */
+function updateBomb(o, ok) {
+    o.life -= ok;
+    if (!o.stuck) {
+        o.x += o.vx * ok; o.y += o.vy * ok;
+        if (o.x < -600 || o.x > WORLD.width + 600 || o.y < -600 || o.y > WORLD.height + 600) { dropOrb(o); return; }
+        const r = o.r * 0.45;                                       // the surface only stops the bubble's core, so a big bubble can skim along the floor; it sticks when it flies INTO a face
+        if (o.x + r > STAGE.x && o.x - r < STAGE.x + STAGE.width && o.y + r > STAGE.y && o.y - r < STAGE.y + STAGE.height) {
+            const dl = o.x + r - STAGE.x, dr = STAGE.x + STAGE.width - (o.x - r), dt = o.y + r - STAGE.y, db = STAGE.y + STAGE.height - (o.y - r), m = Math.min(dl, dr, dt, db);
+            const into = (m === dt && o.vy > 0.5) || (m === db && o.vy < -0.5) || (m === dl && o.vx > 0.5) || (m === dr && o.vx < -0.5);
+            if (into) {
+                if (m === dt) o.y = STAGE.y - r; else if (m === db) o.y = STAGE.y + STAGE.height + r; else if (m === dl) o.x = STAGE.x - r; else o.x = STAGE.x + STAGE.width + r;
+                o.stuck = true; o.vx = o.vy = 0;
+            }
+        } else for (const pf of STAGE.platforms) {
+            if (o.vy > 0.5 && o.x > pf.x && o.x < pf.x + pf.w && Math.abs(o.y - pf.y) < r + 6) { o.y = pf.y - r; o.stuck = true; o.vx = o.vy = 0; break; }
+        }
+    }
+    if (o.age % 3 === 0) createParticles(o.x + (Math.random() - 0.5) * o.r, o.y + (Math.random() - 0.5) * o.r, '#fb923c', 1);       // the burn-tick sparks drifting inside the bubble
+    for (const t of foesOf(o.owner)) {
+        if (t.stocks <= 0 || !isAlive(t)) continue;
+        const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2)), cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
+        if (Math.hypot(o.x - cx, o.y - cy) < o.r) { bombBurst(o); return; }
+    }
+    if (o.life <= 0) bombBurst(o);
+}
+function bombBurst(o) {
+    if (!orbs.includes(o)) return;
+    dropOrb(o);
+    fx('explosion', o.x, o.y, o.R, 0.7, STYLE_OF[o.owner.char]); S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(o.x, o.y, '#fb923c', 22);
+    for (const t of foesOf(o.owner)) {
+        if (t.stocks <= 0 || !isAlive(t) || t.invincibleTimer > 0) continue;
+        const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2)), cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
+        if (Math.hypot(o.x - cx, o.y - cy) > o.R) continue;
+        if (t.isShielding) { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 10); fx('block', t.x, t.y); continue; }
+        t.bombN = 5; t.bombT = 0; t.bombBy = o.owner;            // 5 ticks of 2 over 3 s (re-getting hit restarts it, it does not stack)
+    }
+}
 function dropOrb(o) { const k = orbs.indexOf(o); if (k >= 0) orbs.splice(k, 1); }
 function updateDrops() {
     for (let i = drops.length - 1; i >= 0; i--) {
@@ -3419,6 +3496,7 @@ function updateOrbs() {
         // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
         const ok = slowAt(o.x, o.y, o.owner);
         o.age = (o.age || 0) + 1;
+        if (o.kind === 'bomb') { updateBomb(o, ok); continue; }
         if (o.curve) {                                            // Void Orb bends toward the nearest foe
             const foe = nearestOf(o, foesOf(o.owner).filter(isAlive));
             if (foe) {
@@ -4058,7 +4136,7 @@ export function applyRemote(ev, slot = 1) {
 }
 
 const FKEYS = Object.keys(new Fighter(0, 0, '#000', 'k')).filter(k => !['color', 'name', 'isAI', 'startX', 'width', 'height', 'home', 'heldItem', 'lastHitBy', 'burnBy', 'swingHitSet', '_acc', '_since', '_slowK', '_upd'].includes(k));
-const REFS = ['grabHolding', 'grabbedBy', 'grabVictim', 'suplexTarget'];
+const REFS = ['grabHolding', 'grabbedBy', 'grabVictim', 'suplexTarget', 'bombBy'];
 const SWING_NAMES = Object.keys(SWING);
 const r2 = (v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v;
 const idxOf = (f) => fighters.indexOf(f);

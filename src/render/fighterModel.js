@@ -793,6 +793,7 @@ export class FighterModel {
         this.cur.spin = base.spin; this.cur.pitch = base.pitch;
 
         const pose = { ...this.cur };
+        if (f.bombPrimed) { pose.aura = Math.max(pose.aura, 0.6 + 0.2 * Math.sin(this.t * 14)); pose.rSx = Math.max(pose.rSx, 70); pose.rE = Math.min(pose.rE, 70); }   // Ember's cluster bomb is primed: he glows
         pose.hide = base.hide;                               // Ember fireball: hide body inside the ball
         this.spinYaw = 0;
         const atk = this.#attackOverlay(alpha);
