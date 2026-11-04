@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103y — Tide bubble protection + loader letter animation
+// BUILD_STAMP 20261103z — Phoenix tuning, counters, recovery and throw physics
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
@@ -324,6 +324,10 @@ function counters(defType, atkType) {
 }
 /** 'hit' | 'shield' | 'countered' | 'clash' */
 function interaction(atkType, defender) {
+    // Active Phoenix Dash is countered by grabs, melee, directional specials and Cores.
+    // Detached Phoenix rockets are separate projectiles and keep their own shield rules.
+    if (defender.char === 'ember' && defender.sx && defender.sx.k === 'rocket' &&
+        ['GRAB', 'J', 'CORE', 'BLINK', 'SPIRAL', 'SUPLEX', 'HEADBUTT'].includes(atkType)) return 'hit';
     const dType = defender.isShielding ? 'SHIELD' : (defender.activeMove ? defender.activeMove.type : null);
     if (!counters(dType, atkType)) return 'hit';
     if (dType === 'SHIELD') return 'shield';
@@ -391,6 +395,8 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0;
 
         this.hitstun = 0;
+        this.freezeAirTimer = 0;
+        this.bounceReflectT = 0;
         this.invincibleTimer = 0;
         this.spawnT = 0;                     // respawn pre-animation: frozen and untouchable at the spawn point while the light pillar plays (60 frames = 1 s)
         this.ghostT = 0;                     // Phoenix Dash aftermath: invincible, but nothing this fighter does hurts anyone
@@ -589,6 +595,8 @@ class Fighter {
         }
 
         if (this.invincibleTimer > 0) this.invincibleTimer--;
+        if (this.freezeAirTimer > 0) this.freezeAirTimer--;
+        if (this.bounceReflectT > 0) this.bounceReflectT--;
         if (this.ghostT > 0) this.ghostT--;
         if (this.lastHitT < 9999) this.lastHitT++;
         if (this.landFlipT > 0) this.landFlipT--;
@@ -599,6 +607,8 @@ class Fighter {
         if (this.activeMove && --this.activeMove.t <= 0) this.activeMove = null;
         if (this.activeHitbox && this.activeHitbox.ttl !== undefined && --this.activeHitbox.ttl <= 0) this.activeHitbox = null;
         if (this.specialDur > 0 && ++this.specialT >= this.specialDur) { this.specialKind = null; this.specialDur = 0; }
+
+        if (this.freezeAirTimer > 0) { this.vx = this.vy = 0; return; }
 
         if (this.clashStunTimer > 0) {
             this.clashStunTimer--;
@@ -735,9 +745,10 @@ class Fighter {
                 }
 
                 const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const throwSpeed = grabThrowSpeed(target);          // 0.7x a melee hit, grows with the victim's percent
+                const throwSpeed = grabThrowSpeed(target) * (this.gripMode ? 1.5 : 1); // Phoenix Dash throw gets 1.5x range
                 target.vx = (dx / dist) * throwSpeed;
                 target.vy = (dy / dist) * throwSpeed;
+                target.bounceReflectT = 60;
                 target.hitstun = 60;
                 target.grounded = false;
                 target.lastHitBy = this; target.lastHitT = 0;
@@ -747,6 +758,7 @@ class Fighter {
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
                 if (this.gripMode) {                                // the fling ends in an explosion
+                    this.freezeAirTimer = 30; this.grounded = false; this.vx = this.vy = 0;
                     this.gripMode = false; this.gripT = 0;
                     fx('explosion', target.x, target.y, 90, 0.5, STYLE_OF[this.char]); createParticles(target.x, target.y, '#fb923c', 22); audio.playHit(true); S.screenShake = 20;
                 }
@@ -873,7 +885,7 @@ class Fighter {
             burn = { t: burnFrames, dmg: 1 };
         }
         this.activeHitbox = {
-            x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl, h: sw.h * (1 + (fl - 1) * 0.35),
+            x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
             damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
             multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0, burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : null,
@@ -1077,7 +1089,7 @@ class Fighter {
                     const nearFoe = nearestOf({ x: this.x, y: this.y }, foesOf(this).filter(isAlive));
                     for (const da of [-20, 0, 20]) {                         // three rockets from the same point: the middle one homes on the nearest foe, one 20 degrees either side flies straight
                         const a = x.ang + da * Math.PI / 180;
-                        orbs.push({ homing: da === 0 && nearFoe ? nearFoe : undefined, spd: m.speed, x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
+                        orbs.push({ homing: da === 0 && nearFoe ? nearFoe : undefined, homingDelay: da === 0 && nearFoe ? 30 : 0, homingTurn: 0.02, spd: m.speed, x: this.x + Math.cos(x.ang) * 40, y: this.y + Math.sin(x.ang) * 40, vx: Math.cos(a) * m.speed, vy: Math.sin(a) * m.speed, r: m.r, charge: 0.2, owner: this,
                             life: m.life, color: '#fb923c', id: ++orbSerial, d: m.dmg, R: m.R, bkb: m.bkb, kbg: m.kbg, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'firerocket', phoenix: true, flat: false });
                     }
                     fx('rocket', this.x, this.y, 0, 0, 'fire'); fx('explosion', this.x, this.y, 60, 0.3, 'fire'); audio.playHit(false);
@@ -1852,7 +1864,8 @@ class Fighter {
         const my = this.y - (this.py !== undefined ? this.py : this.y);
         const vx0 = Math.abs(this.vx) > 0.01 ? this.vx : mx;
         const vy0 = Math.abs(this.vy) > 0.01 ? this.vy : my;
-        const BOUNCE = 0.62, MIN_BOUNCE = 3.2;
+        const BOUNCE = this.bounceReflectT > 0 ? 0.82 : 0.62;
+        const TANGENT = this.bounceReflectT > 0 ? 0.98 : 0.9, MIN_BOUNCE = 3.2;
         const platLeft = STAGE.x;
         const platRight = STAGE.x + STAGE.width;
         const platTop = STAGE.y;
@@ -1890,14 +1903,14 @@ class Fighter {
                     this.y = platTop - this.height / 2;
                     if (bounce && vy0 > MIN_BOUNCE) {
                         this.vy = -vy0 * BOUNCE;
-                        this.vx = vx0 * 0.9;
+                        this.vx = vx0 * TANGENT;
                         this.grounded = false;
                         fx('hit', this.x, platTop, Math.min(16, vy0 * 0.6), -Math.PI / 2);
                         S.screenShake = Math.max(S.screenShake, Math.min(10, vy0 * 0.4));
                         return;
                     }
                     this.vy = 0;
-                    if (bounce) this.vx *= 0.35;
+                    if (bounce) this.vx *= this.bounceReflectT > 0 ? 0.98 : 0.35;
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
@@ -1942,12 +1955,12 @@ class Fighter {
                 if (crossed || resting) {
                     this.y = pl.y - this.height / 2;
                     if (bounce && vy0 > MIN_BOUNCE) {
-                        this.vy = -vy0 * BOUNCE; this.vx = vx0 * 0.9;
+                        this.vy = -vy0 * BOUNCE; this.vx = vx0 * TANGENT;
                         fx('hit', this.x, pl.y, Math.min(16, vy0 * 0.6), -Math.PI / 2);
                         break;
                     }
                     this.vy = 0;
-                    if (bounce) this.vx *= 0.35;
+                    if (bounce) this.vx *= this.bounceReflectT > 0 ? 0.98 : 0.35;
                     this.grounded = true;
                     this.jumpsLeft = this.maxJumps;
                     this.canGrab = true;
@@ -2289,12 +2302,8 @@ class AIBot extends Fighter {
         } else {
             tx = cx; ty = STAGE.y - 90;
         }
-        // if ledge ban is down and we're near a lip, magnet can finish — still prefer interior
-        if (this.ledgeBan <= 0 && belowMap && (offL || offR) && Math.random() < 0.35) {
-            const ledgeX = offL ? STAGE.x : STAGE.x + STAGE.width;
-            tx = ledgeX + (offL ? 40 : -40);
-            ty = STAGE.y - 40;
-        }
+        // Keep the stage interior as the first recovery target. Underneath the stage,
+        // the earlier branch chooses the nearer lip using the bot's X and Y route.
         const dir = tx > this.x ? 1 : -1;
         const dxAbs = Math.abs(tx - this.x);
         const below = this.y - STAGE.y;
@@ -3133,6 +3142,12 @@ function emberCounter(em, foe) {
         fx('block', foe.x, foe.y); S.screenShake = Math.max(S.screenShake, 10);
         return true;
     }
+    // Fireball Roll also beats a foe who is still charging any neutral Core.
+    if (foe.fActive && foe.fNeutral && Math.hypot(em.x - foe.x, em.y - foe.y) < 92) {
+        foe.interrupt(); foe.clashStunTimer = Math.max(foe.clashStunTimer, 36);
+        fx('block', foe.x, foe.y); S.screenShake = Math.max(S.screenShake, 8);
+        return true;
+    }
     if (!em.activeHitbox || (foe.sideT <= 0 && foe.upT <= 0)) return false;
     const h = em.activeHitbox;
     const near = (b) => Math.abs(b.x - foe.x) < (b.w + foe.width) / 2 && Math.abs(b.y - foe.y) < (b.h + foe.height) / 2;
@@ -3416,10 +3431,15 @@ function updateOrbs() {
             o.vx = Math.cos(o.ang) * o.spd; o.vy = Math.sin(o.ang) * o.spd;
             if (Math.random() < 0.6) createParticles(o.x, o.y, '#fde047', 1);
         }
-        if (o.homing) {                                           // Phoenix homing rocket: instant, exact turning toward its victim
+        if (o.homing && o.age >= (o.homingDelay || 0)) {       // fallback middle rocket flies straight for 0.5 s, then turns smoothly
             const h = o.homing;
-            if (isAlive(h)) { const a = Math.atan2(h.y - o.y, h.x - o.x); o.vx = Math.cos(a) * o.spd; o.vy = Math.sin(a) * o.spd; }
-            else if (!o.vx && !o.vy) o.vx = o.spd;
+            if (isAlive(h)) {
+                const cur = Math.atan2(o.vy, o.vx), want = Math.atan2(h.y - o.y, h.x - o.x);
+                let da = want - cur; da = Math.atan2(Math.sin(da), Math.cos(da));
+                const turn = o.homingTurn || 0.02;
+                const a = cur + Math.max(-turn, Math.min(turn, da)) * ok;
+                o.vx = Math.cos(a) * o.spd; o.vy = Math.sin(a) * o.spd;
+            } else if (!o.vx && !o.vy) o.vx = o.spd;
         }
         if (o.cap) { o.capT++; o.vx *= 0.97; o.vy = -0.8; if (o.capT >= 180) { dropOrb(o); explodeOrb(o); continue; } }
         if (o.grav) o.vy += o.grav * ok;
