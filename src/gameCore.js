@@ -2175,8 +2175,8 @@ class Fighter {
         if (Math.cos(a0) !== 0) this.facing = Math.cos(a0) >= 0 ? 1 : -1;
         for (const da of [-22, 0, 22]) {
             const a = a0 + da * Math.PI / 180;
-            orbs.push({ x: this.x + Math.cos(a) * 44, y: this.y + Math.sin(a) * 44, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
-                d: 0, R: this.height * 1.75, bkb: 0, kbg: 0, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
+            orbs.push({ x: this.x + Math.cos(a) * 60, y: this.y + Math.sin(a) * 60, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65 * 2.5, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
+                d: 7, R: this.height * 1.75 * 2.5, bkb: 9.6, kbg: 0.72, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
         }
         this.bombPrimed = false; this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
         return true;
@@ -3396,6 +3396,7 @@ function bombBurst(o) {
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2)), cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > o.R) continue;
         if (t.isShielding) { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 10); fx('block', t.x, t.y); continue; }
+        launch(o.owner, t, { damage: o.d, bkb: o.bkb, kbg: o.kbg, angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || 1), x: o.x, y: o.y });          // 7 damage and rocket knockback up front, then the burn
         t.bombN = 5; t.bombT = 0; t.bombBy = o.owner;            // 5 ticks of 2 over 3 s (re-getting hit restarts it, it does not stack)
     }
 }
