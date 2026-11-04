@@ -3474,7 +3474,15 @@ function updateOrbs() {
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r + (o.homing ? 6 : 0)) {
-                if (o.shieldPass) { dropOrb(o); explodeOrb(o); hitOrb = true; break; }
+                if (o.shieldPass) {
+                    dropOrb(o);
+                    if (t.isShielding) {
+                        audio.playShield();
+                        t.shieldHealth = Math.max(0, t.shieldHealth - 10);
+                        fx('block', t.x, t.y);
+                    } else explodeOrb(o);
+                    hitOrb = true; break;
+                }
                 const pierce = !!(o.pierce || o.kind === 'boulder');
                 if (o.trap && !pierce) {
                     const res0 = interaction('CORE', t);
