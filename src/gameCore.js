@@ -537,7 +537,7 @@ class Fighter {
         this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null;
         this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
-        this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0;
+        this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0; this.freezeAirTimer = 0;
         this.isGrabDashing = false;
     }
 
