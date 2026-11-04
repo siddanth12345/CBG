@@ -305,6 +305,7 @@ TRACKS = {
 
 def music():
     for i, (name, cfg) in enumerate(TRACKS.items()):
+        if name in ('01_title_start_screen', '03_stage_frontier', '04_stage_frontier_big', '05_stage_horizon', '06_stage_horizon_big'): continue   # now made by tools/makeMusic2.py
         x = compose(cfg, 100 + i)
         save(os.path.join(ROOT, 'bgm', name.replace('01_title_start_screen', '01_title_start_screen') + '.wav'), x, MSR, 0.93)
         print('music', name, round(len(x) / MSR, 1), 's rms', round(float(np.sqrt((x ** 2).mean())) / np.abs(x).max() * 0.93, 3))
@@ -453,4 +454,5 @@ def sfx():
 if __name__ == '__main__':
     what = sys.argv[1] if len(sys.argv) > 1 else 'all'
     if what in ('sfx', 'all'): sfx()
-    if what in ('music', 'all'): music()
+    if what in ('music', 'all'):
+        music(); import makeMusic2; [makeMusic2.save(os.path.join(ROOT, 'bgm', k + '.wav'), f(), SR_ := MSR, 0.9) for k, f in makeMusic2.TR.items()]

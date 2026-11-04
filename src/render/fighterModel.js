@@ -574,6 +574,13 @@ export class FighterModel {
             else { p.spin = 0; p.rSx = 100; p.lSx = 100; p.rE = 100; p.lE = 100; p.rK = 110; p.lK = 110; p.rHx = 40; p.lHx = 40; p.aura = 0; p.hide = 1; }
             return p;
         }
+        if (f.haltT > 0 && f.grounded && !f.hitstun) {   // Ember's Side-F slide: skids along the ground, legs out in front, leaning back with the arms thrown back for balance
+            const e = smooth(seg(f.haltElapsed, 0, 5)) * (1 - 0.6 * smooth(seg(f.haltT, 8, 0)));
+            p.dy = -15 * e; p.lean = -26 * e; p.torsoX = -8 * e; p.rHx = 84 * e; p.lHx = 74 * e; p.rHz = 3 + 5 * e; p.lHz = 3 + 7 * e; p.rK = 14 * e; p.lK = 24 * e;
+            p.rSx = 8 - 30 * e; p.lSx = 8 - 40 * e; p.rSz = 10 + 40 * e; p.lSz = 10 + 46 * e; p.rE = 18 + 10 * e; p.lE = 18 + 10 * e; p.headX = -6 * e;
+            p.aura = 0.15 * e;
+            return p;
+        }
         if (f.specialKind === 'CORE') {                // thrust the orb away
             const u = f.specialT / 24;
             const th = smooth(seg(u, 0, 0.22)) * (1 - smooth(seg(u, 0.5, 1)));

@@ -565,6 +565,7 @@ class Fighter {
             this.haltV = (this.haltV || 0) * (this.haltK || 0.88);
             this.vx = this.haltV / (this.grounded ? WORLD.friction : WORLD.airFriction);   // friction is applied later: compensate so the slide distance is exact
             if (this.haltT === 0) this.haltV = 0;
+            if (this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust
         }
         if (this.trapId) { if (orbs.some(o => o.id === this.trapId)) this.hitstun = Math.max(this.hitstun, 2); else this.trapId = 0; }
         const bj = trainJumps(this);       // training menu can override jump count
