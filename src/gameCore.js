@@ -2293,10 +2293,13 @@ class AIBot extends Fighter {
         if (belowMap) {
             if (offL) tx = STAGE.x + 140;
             else if (offR) tx = STAGE.x + STAGE.width - 140;
-            else {                                                  // UNDER the stage: aiming straight up just pins the bot against the underside (it wobbles there, frozen). Swim out past the nearest lip first, then climb.
-                const side = this.x < cx ? -1 : 1;
-                tx = (side < 0 ? STAGE.x : STAGE.x + STAGE.width) + side * 150;
-                ty = STAGE.y + 60;
+            else {                                                  // UNDER the stage: use a ledge only because the solid floor blocks a direct climb.
+                // Pick the reachable lip using both horizontal distance and vertical route distance.
+                const leftX = STAGE.x - 90, rightX = STAGE.x + STAGE.width + 90;
+                const routeCost = (x) => Math.hypot(this.x - x, (this.y - (STAGE.y + 60)) * 0.65);
+                const side = routeCost(leftX) <= routeCost(rightX) ? -1 : 1;
+                tx = side < 0 ? leftX : rightX;
+                ty = STAGE.y + 60;                                    // get outside the platform first, then climb to the top
             }
             if (offL || offR) ty = STAGE.y - 90;
             else ty = STAGE.y + 60;
