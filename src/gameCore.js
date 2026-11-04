@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103ab — Ember throw knockback normalized + 1.3s air freeze
+// BUILD_STAMP 20261103ac — Ember throw knockback normalized + 1.3s air freeze
 // ============================================================================
 //  COOL BATTLE GAME - game core
 //  All gameplay runs in the original 2D world space: x -> right, y -> down,
