@@ -622,7 +622,8 @@ class Fighter {
             this.bombPrimed = this.bombShots > 0;
         }
         if (this.recoilT > 0) {                                // throwing the bubbles shoves Ember straight back (a quick push, no leftover speed)
-            this.recoilT--; this.x += this.recoilX; this.y += this.recoilY; this.vx = 0; this.vy = 0; this.glide = false;
+            this.recoilT--; this.x += this.recoilX; this.y += this.recoilY; this.recoilX *= 0.88; this.recoilY *= 0.88; this.glide = false;
+            if (this.recoilT > 0) { this.vx = 0; this.vy = 0; } else { this.vx = this.recoilX * 0.4; this.vy = this.recoilY * 0.4; }   // the shove slows as it goes and then coasts on, it never stops dead
         }
         if (this.tickFreezeT > 0) { this.tickFreezeT--; return; }
         if (this.freezeAirTimer > 0) { this.vx = this.vy = 0; return; }
@@ -2192,7 +2193,7 @@ class Fighter {
                 d: 2, R: this.height * 1.75 * 1.25, bkb: 9.6 * 0.3, kbg: 0.72 * 0.3, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
         }
         this.bombShots--; this.bombPrimed = this.bombShots > 0;
-        { const RC = 350 * 0.6, N = 8; this.recoilT = N; this.recoilX = -Math.cos(a0) * RC / N; this.recoilY = -Math.sin(a0) * RC / N; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: 0.23 of the small stage length (1520), opposite the middle bubble
+        { const V0 = 31, N = 10; this.recoilT = N; this.recoilX = -Math.cos(a0) * V0; this.recoilY = -Math.sin(a0) * V0; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: a quick backwards dash that decays (about 210 px in all)
         this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
         return true;
     }
