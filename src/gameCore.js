@@ -622,7 +622,7 @@ class Fighter {
             this.bombPrimed = this.bombShots > 0;
         }
         if (this.recoilT > 0) {                                // throwing the bubbles shoves Ember straight back (a quick push, no leftover speed)
-            this.recoilT--; this.x += this.recoilX; this.y += this.recoilY; this.vx = 0; this.vy = 0; this.glide = false;
+            this.recoilT--; this.x += this.recoilX; this.y += this.recoilY; this.glide = false;
         }
         if (this.tickFreezeT > 0) { this.tickFreezeT--; return; }
         if (this.freezeAirTimer > 0) { this.vx = this.vy = 0; return; }
@@ -2187,11 +2187,11 @@ class Fighter {
         if (Math.cos(a0) !== 0) this.facing = Math.cos(a0) >= 0 ? 1 : -1;
         for (const da of [-22, 0, 22]) {
             const a = a0 + da * Math.PI / 180;
-            orbs.push({ x: this.x + Math.cos(a) * 60, y: this.y + Math.sin(a) * 60, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65 * 1.5, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
-                d: 7, R: this.height * 1.75 * 1.5, bkb: 9.6, kbg: 0.72, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
+            orbs.push({ x: this.x + Math.cos(a) * 60, y: this.y + Math.sin(a) * 60, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65 * 0.6, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
+                d: 2, R: this.height * 1.75 * 0.6, bkb: 9.6 * 0.3, kbg: 0.72 * 0.3, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
         }
         this.bombShots--; this.bombPrimed = this.bombShots > 0;
-        { const RC = 350, N = 8; this.recoilT = N; this.recoilX = -Math.cos(a0) * RC / N; this.recoilY = -Math.sin(a0) * RC / N; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: 0.23 of the small stage length (1520), opposite the middle bubble
+        { const RC = 350, N = 8; this.vx *= 0.3; this.vy *= 0.3; this.recoilT = N; this.recoilX = -Math.cos(a0) * RC / N; this.recoilY = -Math.sin(a0) * RC / N; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: 0.23 of the small stage length (1520), opposite the middle bubble
         this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
         return true;
     }
@@ -3410,7 +3410,7 @@ function bombBurst(o) {
         const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2)), cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
         if (Math.hypot(o.x - cx, o.y - cy) > o.R) continue;
         if (t.isShielding) { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 10); fx('block', t.x, t.y); continue; }
-        launch(o.owner, t, { damage: o.d, bkb: o.bkb, kbg: o.kbg, angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || 1), x: o.x, y: o.y });          // 7 damage and rocket knockback up front, then the burn
+        launch(o.owner, t, { damage: o.d, bkb: o.bkb, kbg: o.kbg, angle: Math.atan2(t.y - o.y - 25, (t.x - o.x) || 1), x: o.x, y: o.y });          t.hitstun = Math.max(t.hitstun, 30);   // 2 damage, 0.3x rocket knockback, 0.5 s stun, then the burn
         t.bombN = 5; t.bombT = 0; t.bombBy = o.owner;            // 5 ticks of 2 over 3 s (re-getting hit restarts it, it does not stack)
     }
 }
