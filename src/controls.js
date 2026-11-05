@@ -12,7 +12,7 @@ export const ACTIONS = [
     { id: 'grab',     label: 'Grab (aim, then release)',               def: 'KeyQ',      group: 'Attacks' },
     { id: 'shield',   label: 'Shield',                    def: 'KeyE',      group: 'Defense' },
     { id: 'roll',     label: 'Roll (while shielding)',    def: 'KeyR',      group: 'Defense' },
-    { id: 'tutorial', label: 'Open the tutorial',         def: 'KeyH',      group: 'Menus' },
+    { id: 'tutorial', label: 'Open the tutorial',         def: 'KeyG',      group: 'Menus' },
     { id: 'fullscreen', label: 'Toggle fullscreen',       def: 'Semicolon', group: 'Menus' },
     { id: 'drop',       label: 'Drop through platforms',   def: 'KeyS',      group: 'Movement' },
 ];
@@ -24,6 +24,11 @@ for (const a of ACTIONS) bindings[a.id] = a.def;
 try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (saved) for (const a of ACTIONS) if (typeof saved[a.id] === 'string' || saved[a.id] === null) bindings[a.id] = saved[a.id];
+    // H used to open the tutorial. If nobody rebound it, G does now.
+    if (bindings.tutorial === 'KeyH') {
+        bindings.tutorial = 'KeyG';
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(bindings)); } catch (e) { /* ignore */ }
+    }
 } catch (e) { /* no storage: defaults */ }
 
 let persister = null;

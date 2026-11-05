@@ -281,6 +281,7 @@ export class UI {
             <h4 class="lm-group">PC controls (keyboard &amp; mouse)</h4>`;
         group = 'PC';
         for (const a of ACTIONS) {
+            if (a.id === 'tutorial' && touchMode()) continue;   // tutorial key is a PC control
             if (a.group !== group) { group = a.group; html += `<h4 class="lm-group">${esc(group)}</h4>`; }
             html += `<div class="lm-row"><span>${esc(a.label)}</span><button class="lm-key" data-action="${a.id}">${esc(codeName(bindings[a.id]))}</button></div>`;
         }

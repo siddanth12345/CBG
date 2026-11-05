@@ -5,7 +5,8 @@ import { CHAR_IDS, CHARS, getMyChar, setMyChar, portraitSVG } from './characters
 const ACCENTS = { luminent: '#22d3ee', bulwark: '#60a5fa', zephyr: '#34d399', ember: '#fb923c', tide: '#38bdf8', volt: '#facc15', umbra: '#a78bfa', terra: '#a8a29e' };
 
 export class CharUI {
-    constructor({ root, openBtn }) {
+    constructor({ root, openBtn, onTry }) {
+        this.onTry = onTry || null;
         this.el = document.createElement('div');
         this.el.className = 'lm-modal lm-hidden';
         this.el.innerHTML = `<div class="lm-panel" role="dialog" aria-label="Characters">
@@ -19,6 +20,8 @@ export class CharUI {
             if (e.target === this.el || e.target.closest('[data-close]')) return this.hide();
             const info = e.target.closest('[data-info]');
             if (info) { e.stopPropagation(); const id = info.dataset.info; if (this.open_.has(id)) this.open_.delete(id); else this.open_.add(id); this.render(); return; }
+            const tryBtn = e.target.closest('[data-try]');
+            if (tryBtn) { e.stopPropagation(); setMyChar(tryBtn.dataset.try); this.hide(); if (this.onTry) this.onTry(tryBtn.dataset.try); return; }
             const card = e.target.closest('[data-pick]');
             if (card) { setMyChar(card.dataset.pick); this.render(); }
         });
@@ -40,8 +43,11 @@ export class CharUI {
                     ${on ? '<em class="ch-tag">Equipped</em>' : ''}
                     <button class="lm-btn lm-btn-ghost lm-mini ch-info" data-info="${id}" aria-expanded="${this.open_.has(id)}">${this.open_.has(id) ? 'Hide' : 'Info'}</button>
                 </div>
-                ${this.open_.has(id) ? `<p class="ch-desc">${c.desc}<br><small>Walk speed ${spd}% · ${c.jumps} jumps in the air · takes ${Math.round(c.kb * 100)}% knockback</small>
-                    <span class="ch-sp">${c.specials.map(s => `<b>${s.key}: ${s.name}</b> ${s.desc}`).join('<br>')}</span></p>` : ''}
+                ${this.open_.has(id) ? `<div class="ch-desc">
+                    <div class="ch-intro"><p>${c.desc}</p><button type="button" class="lm-btn lm-mini ch-try" data-try="${id}">Try in tutorial</button></div>
+                    <small>Walk ${spd}% · ${c.jumps} air jumps · takes ${Math.round(c.kb * 100)}% knockback</small>
+                    <span class="ch-sp">${c.specials.map(s => `<b>${s.key}: ${s.name}</b> — ${s.desc}`).join('<br>')}</span>
+                </div>` : ''}
             </div>`;
         }).join('');
     }

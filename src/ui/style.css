@@ -341,6 +341,9 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .ch-tag{position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:999px;background:var(--ac);color:#02131a;font:800 9px/1.6 system-ui;letter-spacing:.1em;text-transform:uppercase;font-style:normal}
 .ch-info{position:absolute;top:8px;right:8px}
 .ch-desc{font-size:12px;line-height:1.5;color:#a5b4c8;padding:8px 10px;border-radius:10px;background:#0a1626;border-left:3px solid var(--ac)}
+.ch-intro{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.ch-intro p{margin:0;flex:1}
+.ch-try{flex:none;white-space:nowrap}
 .ch-desc small{color:#7b8ba3}
 .lm-charsel{background:#0a1626;border:1px solid #27465c;border-radius:8px;color:#e2e8f0;padding:3px 6px;font-size:11px;font-weight:700}
 

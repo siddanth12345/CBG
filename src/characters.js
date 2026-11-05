@@ -129,6 +129,12 @@ export const BRIEF = {
     },
 };
 export const brief = (id) => BRIEF[id] || BRIEF.luminent;
+const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA']];
+for (const c of Object.values(CHARS)) {
+    const b = BRIEF[c.id];
+    if (!b) continue;
+    c.specials = SLOT_LABEL.map(([k, slot]) => ({ key: k, name: b[slot][0], desc: b[slot][1] }));
+}
 
 export const charOf = (id) => CHARS[id] || CHARS[DEFAULT_CHAR];
 

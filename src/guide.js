@@ -161,14 +161,17 @@ export class Guide {
         }, true);
     }
 
-    start() {
+    start(at = 0) {
         this.active = true;
         this.finished = false;
         this.i = 0;
         this.st = null;
+        this.doneAt = 0;
         this.el.classList.remove('lm-hidden');
         startMatchSequence('training');          // a real training match: you, plus a dummy to hit
-        this.render();
+        const n = Math.max(0, Math.min(STEPS.length - 1, at | 0));
+        if (n > 0) this.go(n);
+        else this.render();
     }
     stop() {
         this.active = false;
