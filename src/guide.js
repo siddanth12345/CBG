@@ -130,7 +130,7 @@ const STEPS = [
     },
     {
         title: 'Open settings',
-        text: () => `Press <b>G</b> to open Settings. You can change controls and other game options there. Press Done or Esc to return to the tutorial.`,
+        text: () => `Press ${K('settings')} to open Settings. You can change controls there. Press ${K('tutorial')} to return to the tutorial, or Done / Esc.`,
         init: () => ({ opened: false }),
         check: (st) => st.opened,
     },
