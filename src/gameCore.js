@@ -1214,6 +1214,9 @@ class Fighter {
                 if (x.t % 4 === 0) createParticles(this.x, this.y, col, 2);
                 if (!this.fActive && !this.isAI) { this.launchRoll(); }
                 else if (this === p1 && mouse.touchMode && S.online !== 'guest' && mouse.direction !== (x.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT')) this.launchRoll();
+            } else if (x.pause > 0) {                                  // hit mid-roll: frozen in place for 0.5 s, the roll's clock stands still too
+                x.pause--; x.t--; this.vx = 0; this.vy = Math.min(this.vy, 0); this.activeHitbox = null; this.activeMove = { type: 'BLINK', t: 2 };
+                if (x.pause % 6 === 0) createParticles(this.x, this.y, '#fb923c', 2);
             } else {
                 const c = x.c, walk = 8.5 * charOf(this.char).walk;
                 // tiers first (needed for distance)
@@ -3234,6 +3237,11 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
+    if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll') {   // rolling Ember: takes 90% damage, no knockback, the roll just PAUSES 0.5 s (the roll's timer pauses too) and then carries on
+        defender.damage += hb.damage * 0.9; defender.lastHitBy = attacker; defender.lastHitT = 0; defender.sx.pause = 30;
+        S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(defender.x, defender.y, '#fb923c', 8); fx('hit', defender.x, defender.y, 10, hb.angle);
+        return;
+    }
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll' && (defender.sx.c || 0) >= 0.9) {
         // BLUE fireball: nothing stops it. It still takes the damage, but ploughs straight through with no flinch, knockback or stun;
         // the hit costs it speed (0.6x) for the rest of this roll, and it keeps damaging whatever it touches.
@@ -4409,5 +4417,5 @@ export { spawnItem };
 export {
     WORLD, STAGE, BLAST_ZONES, dramaticZoom, keys, mouse, particles, p1, p2,
     Fighter, AIBot, updateAimMatrix, renderHUD, startMatchSequence, endGame, gameOverModal,
-    CHARGE_MAX, triggerDramaticZoom,
+    CHARGE_MAX, triggerDramaticZoom, launch,
 };
