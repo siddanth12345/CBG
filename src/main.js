@@ -109,7 +109,8 @@ document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' 
 
 function doAction(action) {
     if (action === 'neutral') { if (getNfToggle()) { toggleNeutral(); updateAimMatrix(); } return; }     // "toggle neutral force" setting: press once to force neutral, again to release
-    if (action === 'tutorial') { if (!touchMode()) { if (ui.guide.active) { ui.guide.markSettingsOpened(); ui.openSettings(); } else ui.toggleTutorial(); } return; }   // PC controls only
+    if (action === 'settings') { if (!touchMode()) { if (ui.guide.active) ui.guide.markSettingsOpened(); ui.openSettings(); } return; }
+    if (action === 'tutorial') { if (!touchMode()) { if (ui.guide.active) ui.toggleTutorial(); else ui.openTutorial(); } return; }   // PC controls only
     if (action === 'fullscreen') { toggleFullscreen(); return; }
     if (S.gameState !== 'playing') return;
     if (S.online === 'guest') {                                    // the host runs the match: forward the input
