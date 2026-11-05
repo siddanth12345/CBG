@@ -209,6 +209,7 @@ export class UI {
         // key / mouse capture for rebinding (capture phase: it runs before the game's own handlers)
         window.addEventListener('keydown', (e) => {
             if (this.capturing) { e.preventDefault(); e.stopImmediatePropagation(); this.finishCapture(e.code); return; }
+            if (this.set && !this.set.classList.contains('lm-hidden') && bindings.tutorial === e.code && this.guide.active) { e.preventDefault(); e.stopImmediatePropagation(); this.closeAll(); return; }
             if (e.code === 'Escape' && this.isOpen()) { e.preventDefault(); this.closeAll(); }
         }, true);
         window.addEventListener('mousedown', (e) => {
