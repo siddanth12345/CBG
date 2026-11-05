@@ -132,7 +132,7 @@ export class TouchControls {
         // ---------------------------------------------------------- dynamic joystick (left half)
         const z = this.zone;
         z.addEventListener('pointerdown', (e) => {
-            if (this.joy) return;
+            if (this.joy) { this.joy = null; this.joyVec = null; mouse.joy = null; virtual.left = virtual.right = virtual.drop = false; }   // a stale touch must never lock the stick
             e.preventDefault(); z.setPointerCapture(e.pointerId);
             this.joy = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
             this.base.style.display = 'block';
@@ -162,7 +162,7 @@ export class TouchControls {
             this.joy = null; this.joyVec = null; mouse.joy = null; this.dirX = 0; this.base.style.display = 'none';
             virtual.left = virtual.right = virtual.drop = false; this.api.heldChanged();
         };
-        z.addEventListener('pointerup', joyEnd); z.addEventListener('pointercancel', joyEnd);
+        z.addEventListener('pointerup', joyEnd); z.addEventListener('pointercancel', joyEnd); z.addEventListener('lostpointercapture', joyEnd);
 
         // ---------------------------------------------------------- outer circle: touching it presses the NEAREST arrow (melee, hold = charge)
         const mx = this.refs.matrix, hit = mx.querySelector('[data-hit]'), ring = mx.querySelector('.tz-ring');
@@ -192,7 +192,6 @@ export class TouchControls {
         const clearSel = () => { for (const b of this.refs.matrix.querySelectorAll('.tz-dir')) b.classList.remove('sel'); };
         const showAim = (v) => { mouse.touchAim = v || null; if (!aimEl) return; if (!v) { aimEl.classList.remove('on'); return; } aimEl.classList.add('on'); aimEl.style.transform = `translateY(-50%) rotate(${Math.atan2(v[1], v[0])}rad)`; };
         main.addEventListener('pointerdown', (e) => {
-            if (g) return;
             e.preventDefault(); e.stopPropagation(); main.setPointerCapture(e.pointerId);
             // clear any stuck prior gesture (spam / lost pointer softlock)
             if (g) { try { clearTimeout(g.timer); } catch (err) {} this.api.cancelF(); mouse.touchAim = null; g = null; }
@@ -291,7 +290,7 @@ export class TouchControls {
         let gg = null;
         const gShow = (v) => { mouse.touchAim = v || null; if (!v) { gAim.classList.remove('on'); return; } gAim.classList.add('on'); gAim.style.transform = `translateY(-50%) rotate(${Math.atan2(v[1], v[0])}rad)`; };
         gb.addEventListener('pointerdown', (e) => {
-            if (gg) return;
+            if (gg) { gg = null; gb.style.transform = ''; gShow(null); }
             e.preventDefault(); e.stopPropagation(); gb.setPointerCapture(e.pointerId);
             gg = { id: e.pointerId, sx: e.clientX, sy: e.clientY, aim: null };
             gb.classList.add('down');
@@ -308,10 +307,10 @@ export class TouchControls {
             if (!gg || e.pointerId !== gg.id) return;
             const s = gg; gg = null;
             gb.classList.remove('down'); gb.style.transform = ''; gShow(null);
-            if (e.type === 'pointercancel' || !s.aim) return;           // a grab only fires when it was aimed, then released
+            if (e.type === 'pointercancel' || e.type === 'lostpointercapture' || !s.aim) return;           // a grab only fires when it was aimed, then released
             this.act('grab', 'NEUTRAL', s.aim);
         };
-        gb.addEventListener('pointerup', gEnd); gb.addEventListener('pointercancel', gEnd);
+        gb.addEventListener('pointerup', gEnd); gb.addEventListener('pointercancel', gEnd); gb.addEventListener('lostpointercapture', gEnd);
 
         // ---------------------------------------------------------- shield: hold (no drag); joystick left / right while shielding = roll
         const sh = this.refs.shield;

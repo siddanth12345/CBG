@@ -986,7 +986,7 @@ export class Effects {
 
         // ---- aim line
         const ta = mouse.touchMode ? mouse.touchAim : null;
-        const show = S.gameState === 'playing' && (!mouse.touchMode || !!ta);   // on phones the guide only shows while the grab / grid is being aimed
+        const show = S.gameState === 'playing';   // on phones the guide follows the joystick (or the facing) unless the grab / grid is being aimed
         this.aim.visible = show;
         if (show) {
             const a = this.aim.geometry.attributes.position;
