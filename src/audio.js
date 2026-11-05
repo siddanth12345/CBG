@@ -12,13 +12,13 @@ const loadVol = () => {
 const saveVol = (v) => { try { localStorage.setItem(VOL_KEY, JSON.stringify(v)); } catch (e) { /* blocked */ } };
 
 const BGM = {
-    title: 'audio/bgm/01_title_start_screen.wav?v=7',
-    duel: 'audio/bgm/02_duel_1v1.wav?v=7',
-    training: 'audio/bgm/07_training.wav?v=7',
-    frontier: 'audio/bgm/03_stage_frontier.wav?v=7',
-    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=7',
-    horizon: 'audio/bgm/05_stage_horizon.wav?v=7',
-    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=7',
+    title: 'audio/bgm/01_title_start_screen.wav?v=8',
+    duel: 'audio/bgm/02_duel_1v1.wav?v=8',
+    training: 'audio/bgm/07_training.wav?v=8',
+    frontier: 'audio/bgm/03_stage_frontier.wav?v=8',
+    frontier_big: 'audio/bgm/04_stage_frontier_big.wav?v=8',
+    horizon: 'audio/bgm/05_stage_horizon.wav?v=8',
+    horizon_big: 'audio/bgm/06_stage_horizon_big.wav?v=8',
 };
 
 export class SoundEngine {
@@ -38,7 +38,18 @@ export class SoundEngine {
     setMusicVolume(v) {
         this._vol.music = Math.max(0, Math.min(1, +v || 0));
         saveVol(this._vol);
-        if (this._music) this._music.volume = this._vol.music;
+        if (this._musicGain) this._musicGain.gain.value = this._vol.music;
+        if (this._music) this._music.volume = this._music._hooked ? 1 : this._vol.music;
+    }
+    /** route the music through Web Audio so the Music slider works everywhere (iPhones ignore HTMLAudio.volume) */
+    _hookMusic(a) {
+        if (!a || a._hooked || !this._ctx) return;
+        try {
+            const src = this._ctx.createMediaElementSource(a);
+            if (!this._musicGain) { this._musicGain = this._ctx.createGain(); this._musicGain.connect(this._ctx.destination); }
+            this._musicGain.gain.value = this._vol.music;
+            src.connect(this._musicGain); a._hooked = true; a.volume = 1;
+        } catch (e) { /* keep plain HTMLAudio volume */ }
     }
     setSfxVolume(v) {
         this._vol.sfx = Math.max(0, Math.min(1, +v || 0));
@@ -56,6 +67,7 @@ export class SoundEngine {
         if (this._ctx.state === 'suspended') this._ctx.resume();
         this._musicUnlocked = true;
         // retry title if we failed autoplay earlier
+        this._hookMusic(this._music);
         if (this._music && this._music.paused) this._music.play().catch(() => {});
     }
 
@@ -71,7 +83,7 @@ export class SoundEngine {
         if (this._musicKey === key && this._music && !this._music.paused) return;
         // same track paused (autoplay block) → just try play again
         if (this._musicKey === key && this._music) {
-            this._music.volume = this._vol.music;
+            this._music.volume = this._music._hooked ? 1 : this._vol.music;
             this._music.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
             return;
         }
@@ -85,6 +97,7 @@ export class SoundEngine {
         a.addEventListener('canplaythrough', tryPlay, { once: true });
         tryPlay();
         this._music = a;
+        this._hookMusic(a);
     }
     stopMusic() {
         if (this._music) {
@@ -115,7 +128,7 @@ export class SoundEngine {
         if (now - (this._sfxLast[key] || 0) < 35) return true;
         this._sfxLast[key] = now;
         let a = this._sfxEls[key];
-        if (!a) { a = new Audio('audio/' + key + '.wav?v=7'); a.preload = 'auto'; this._sfxEls[key] = a; }
+        if (!a) { a = new Audio('audio/' + key + '.wav?v=8'); a.preload = 'auto'; this._sfxEls[key] = a; }
         try { const c = a.cloneNode(true); c.volume = Math.max(0, Math.min(1, this._vol.sfx * gain)); c.play().catch(() => {}); } catch (e) { /* */ }
         return true;
     }
