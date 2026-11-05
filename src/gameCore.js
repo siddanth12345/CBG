@@ -837,6 +837,7 @@ class Fighter {
             if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') gMul *= 0.6;
             this.vy = Math.min(this.vy + WORLD.gravity * gMul, WORLD.terminalVelocity);
             if (!this.glide) this.vx *= WORLD.airFriction;
+            if (!this.glide && !this.sx && !this.activeMove && !this.recoilT && !this.isGrabDashing && this.attackTimer <= 0 && this.lastHitT > 45 && Math.abs(this.vx) > 14) this.vx *= 0.93;   // speed left over from a dash / blink bleeds off quickly instead of carrying a bot across the map
         } else {
             this.vx *= WORLD.friction;
         }
