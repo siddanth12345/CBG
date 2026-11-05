@@ -3676,7 +3676,7 @@ function checkCombatCollisions(attacker, defender) {
         const dy = defender.y - attacker.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        const enlargedGrabHitboxRadius = 72;
+        const enlargedGrabHitboxRadius = (defender.char === 'ember' && defender.sx && defender.sx.k === 'rocket') ? 72 + 95 : 72;      // a grab catches a Phoenix Dash across the whole of its (big) flame
 
         if (dist < enlargedGrabHitboxRadius) {
             const res = interaction('GRAB', defender);
@@ -3709,6 +3709,9 @@ function checkCombatCollisions(attacker, defender) {
 
     // ---- Ember's Fireball Roll beats every other Side-F move (except Tide's bubble and Umbra's step): it cancels the move, ignores armour / vanish and stuns
     if (emberCounter(attacker, defender) || emberCounter(defender, attacker)) return;
+
+    // ---- Ember's Phoenix Dash hitbox lets a grab dash THROUGH it: the grab connects (and counters the dash) instead of the drill taking the grabber
+    if (attacker.char === 'ember' && attacker.sx && attacker.sx.k === 'rocket' && defender.isGrabDashing && !defender.grabHolding) return;
 
     // ---- swings, headbutt, spiral
     if (!attacker.activeHitbox || defender.invincibleTimer > 0) return;
