@@ -291,6 +291,10 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .tz-grab.down{transition:box-shadow .16s ease,filter .16s ease,transform 0s}
 .tz-shield{border-color:#e2e8f0;--glow:rgba(125,211,252,.75);background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.24),rgba(255,255,255,0) 46%),linear-gradient(160deg,rgba(51,65,85,.7),rgba(8,12,24,.86))}
 .tz-shield.down{border-color:#7dd3fc}
+.tz-neutral{border-color:#4ade80;--glow:rgba(74,222,128,.75);background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.26),rgba(255,255,255,0) 46%),linear-gradient(160deg,rgba(34,197,94,.55),rgba(5,46,22,.88))}
+.tz-neutral.on{box-shadow:0 0 0 3px rgba(74,222,128,.55),0 0 26px 6px rgba(74,222,128,.75);filter:brightness(1.25)}
+.tz-neutral.down{border-color:#bbf7d0}
+#cbgNfPill{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:60;padding:4px 12px;border-radius:999px;background:rgba(5,46,22,.85);color:#86efac;border:1px solid #4ade80;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.08em;pointer-events:none;box-shadow:0 0 14px rgba(74,222,128,.5)}
 .tz-aim{position:absolute;left:50%;top:50%;width:230%;height:3px;margin-left:0;transform-origin:0 50%;background:linear-gradient(90deg,rgba(255,255,255,.95),rgba(255,255,255,0));border-radius:3px;opacity:0;pointer-events:none;transition:opacity .1s;box-shadow:0 0 8px rgba(255,255,255,.6)}
 .tz-aim.on{opacity:1}
 .tz-main .tz-aim{background:linear-gradient(90deg,rgba(216,180,254,.95),rgba(216,180,254,0))}

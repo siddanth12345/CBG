@@ -5,7 +5,7 @@ import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf,
 } from './gameCore.js';
-import { held, actionsFor } from './controls.js';
+import { held, actionsFor, getNfToggle, toggleNeutral, neutralLatched } from './controls.js';
 import { TouchControls } from './touch.js';
 import { LayoutEditor } from './layoutUI.js';
 import { UI } from './ui.js';
@@ -99,6 +99,7 @@ document.addEventListener('touchmove', (e) => {
 document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && wantFs && !inFs()) enterFs(); }, true);
 
 function doAction(action) {
+    if (action === 'neutral') { if (getNfToggle()) { toggleNeutral(); updateAimMatrix(); } return; }     // "toggle neutral force" setting: press once to force neutral, again to release
     if (action === 'tutorial') { ui.toggleTutorial(); return; }
     if (action === 'fullscreen') { toggleFullscreen(); return; }
     if (S.gameState !== 'playing') return;
@@ -333,7 +334,16 @@ function musicHint() {
         } else if (_hint) _hint.style.display = 'none';
     } catch (e) { /* */ }
 }
-setInterval(() => { tickMusic(false); musicHint(); }, 500);
+let _nfPill = null;
+function nfPill() {                                  // PC: a small pill shows while neutral force is latched on
+    try {
+        const on = getNfToggle() && neutralLatched() && (S.gameState === 'playing' || S.gameState === 'countdown');
+        if (on && !_nfPill) { _nfPill = document.createElement('div'); _nfPill.id = 'cbgNfPill'; _nfPill.textContent = 'NEUTRAL FORCE ON'; document.body.appendChild(_nfPill); }
+        if (_nfPill) _nfPill.style.display = on ? '' : 'none';
+    } catch (e) { /* */ }
+}
+window.addEventListener('cbg-nf', () => { nfPill(); updateAimMatrix(); });
+setInterval(() => { tickMusic(false); musicHint(); nfPill(); }, 500);
 const unlockMusic = () => { try { audio.init(); tickMusic(true); } catch (e) {} };
 for (const ev of ['pointerdown', 'pointerup', 'keydown', 'touchstart', 'touchend', 'mousedown', 'click']) {
     document.addEventListener(ev, unlockMusic, { passive: true, capture: true });

@@ -7,7 +7,7 @@ export const ACTIONS = [
     { id: 'right',    label: 'Move right',                def: 'KeyD',      group: 'Movement' },
     { id: 'jump',     label: 'Jump / leave ledge',        def: 'Space',     group: 'Movement' },
     { id: 'attack',   label: 'Melee (aim matrix, hold = charge)',     def: 'Mouse0',    group: 'Attacks' },
-    { id: 'neutral',  label: 'Hold: force neutral aim',   def: 'Mouse2',    group: 'Attacks' },
+    { id: 'neutral',  label: 'Force neutral (hold, or toggle in settings)',   def: 'Mouse2',    group: 'Attacks' },
     { id: 'special',  label: 'F special (hold = Core)',   def: 'KeyF',      group: 'Attacks' },
     { id: 'grab',     label: 'Grab (aim, then release)',               def: 'KeyQ',      group: 'Attacks' },
     { id: 'shield',   label: 'Shield',                    def: 'KeyE',      group: 'Defense' },
@@ -41,7 +41,7 @@ export function importBindings(obj) {
 /** every code that is currently held down (keyboard + mouse) */
 export const held = new Set();
 /** on-screen (touch) controls set these; they count as held inputs just like keys */
-export const virtual = { left: false, right: false, shield: false, drop: false };
+export const virtual = { left: false, right: false, shield: false, drop: false, neutral: false };
 export const isDown = (action) => !!virtual[action] || (!!bindings[action] && held.has(bindings[action]));
 export const actionsFor = (code) => ACTIONS.filter(a => bindings[a.id] === code).map(a => a.id);
 
@@ -75,3 +75,17 @@ export function codeName(code) {
 }
 /** label of the key currently bound to an action */
 export const keyLabel = (action) => codeName(bindings[action]);
+
+
+// ---- Neutral force: the 'neutral' action forces every attack / special to read NEUTRAL (hold it, or toggle it with the setting below).
+//      On phones it is the green button (only shown when the setting "Neutral-force button" is on).
+const lsGet = (k) => { try { return localStorage.getItem(k) === '1'; } catch (e) { return false; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch (e) { /* blocked */ } };
+export const getNfToggle = () => lsGet('cbg.nfToggle');
+export const setNfToggle = (v) => { lsSet('cbg.nfToggle', v); nf.latched = false; window.dispatchEvent(new CustomEvent('cbg-nf')); };
+export const getNfBtn = () => lsGet('cbg.nfBtn');
+export const setNfBtn = (v) => { lsSet('cbg.nfBtn', v); window.dispatchEvent(new CustomEvent('cbg-nf')); };
+const nf = { latched: false };
+export const neutralForced = () => getNfToggle() ? nf.latched : isDown('neutral');
+export const neutralLatched = () => nf.latched;
+export function toggleNeutral() { nf.latched = !nf.latched; window.dispatchEvent(new CustomEvent('cbg-nf')); return nf.latched; }

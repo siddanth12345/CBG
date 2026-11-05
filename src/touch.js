@@ -7,7 +7,7 @@
 //   grab         drag to aim, release to fire the grab (or throw / use an item); springs back
 //   shield       hold = shield | joystick left/right while shielding = roll
 import { S, mouse, fighters, p1 } from './gameCore.js';
-import { virtual } from './controls.js';
+import { virtual, neutralForced, getNfBtn, getNfToggle, toggleNeutral, neutralLatched } from './controls.js';
 import { spec } from './specials.js';
 import { getLayout, touchMode, onLayout } from './layout.js';
 
@@ -34,9 +34,10 @@ export function buildControls(host) {
         </div>
         <button class="tz-b tz-round tz-jump" data-k="jump"><svg viewBox="0 0 24 24" class="tz-ic"><path d="M6 14l6-6 6 6" /><path d="M6 20l6-6 6 6" /></svg><span>JUMP</span></button>
         <button class="tz-b tz-round tz-grab" data-k="grab"><svg viewBox="0 0 24 24" class="tz-ic"><path d="M8 12V6.5a1.5 1.5 0 0 1 3 0V11M11 10V5a1.5 1.5 0 0 1 3 0v6M14 10.5V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 6-5.5 6S6.5 18 6 15l-1.4-3.2a1.5 1.5 0 0 1 2.6-1.4L8 12" /></svg><span>GRAB</span><small>drag · release</small><i class="tz-aim"></i></button>
-        <button class="tz-b tz-round tz-shield" data-k="shield"><svg viewBox="0 0 24 24" class="tz-ic"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z" /></svg><span>SHIELD</span></button>`);
+        <button class="tz-b tz-round tz-shield" data-k="shield"><svg viewBox="0 0 24 24" class="tz-ic"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z" /></svg><span>SHIELD</span></button>
+        <button class="tz-b tz-round tz-neutral" data-k="neutral"><svg viewBox="0 0 24 24" class="tz-ic"><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="8" /></svg><span>NEUTRAL</span></button>`);
     const q = (s) => host.querySelector(s);
-    return { matrix: q('[data-k="matrix"]'), jump: q('[data-k="jump"]'), grab: q('[data-k="grab"]'), shield: q('[data-k="shield"]'), host };
+    return { matrix: q('[data-k="matrix"]'), jump: q('[data-k="jump"]'), grab: q('[data-k="grab"]'), shield: q('[data-k="shield"]'), neutral: q('[data-k="neutral"]'), host };
 }
 
 /** place the controls according to a layout (fractions of the host size) */
@@ -48,7 +49,7 @@ export function positionControls(refs, cfg, w = window.innerWidth, h = window.in
         el.style.left = (x - size / 2) + 'px'; el.style.top = (y - size / 2) + 'px';
     };
     place(refs.matrix, cfg.matrix, M);
-    for (const k of ['jump', 'grab', 'shield']) place(refs[k], cfg[k], cfg[k].s);
+    for (const k of ['jump', 'grab', 'shield', 'neutral']) if (cfg[k]) place(refs[k], cfg[k], cfg[k].s);
     // grid internals
     const sub = refs.matrix, d = M * 0.22, off = M * 0.33, c = M / 2;
     const put = (el, dx, dy, dd) => { el.style.width = el.style.height = dd + 'px'; el.style.left = (c + dx - dd / 2) + 'px'; el.style.top = (c + dy - dd / 2) + 'px'; };
@@ -100,6 +101,7 @@ export class TouchControls {
         if (this.on) {
             const m = this.me();
             if (!this.pressedAim) { mouse.worldX = m.x + this.facingVec(m)[0] * 400; mouse.worldY = m.y + this.facingVec(m)[1] * 400; }
+            const nb = this.refs.neutral; if (nb && !this.editing) { nb.style.display = getNfBtn() ? '' : 'none'; nb.classList.toggle('on', neutralForced()); }
             // Ember side-F on cooldown: left/right arrows go grey with a grey glow
             const sideCd = !!(m && m.active && !m.out && spec(m.char, 'S').kind === 'roll' && m.cd.BLINK > 0);
             for (const b of this.refs.matrix.querySelectorAll('.tz-dir[data-dir="SIDE_LEFT"], .tz-dir[data-dir="SIDE_RIGHT"]')) {
@@ -123,7 +125,7 @@ export class TouchControls {
         mouse.direction = dir || 'NEUTRAL';
         mouse.worldX = m.x + v[0] * 500; mouse.worldY = m.y + v[1] * 500;
     }
-    act(name, dir, vec) { this.pressedAim = true; this.setAim(dir, vec); this.api.doAction(name); this.pressedAim = false; }
+    act(name, dir, vec) { if (neutralForced() && (name === 'attack' || name === 'special')) dir = 'NEUTRAL'; this.pressedAim = true; this.setAim(dir, vec); this.api.doAction(name); this.pressedAim = false; }
 
     wire() {
         const R = 58;
@@ -227,7 +229,7 @@ export class TouchControls {
                 return;
             }
             let sel = null;
-            if (len > this.geo.d * 0.45) sel = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN');
+            if (len > this.geo.d * 0.45 && !neutralForced()) sel = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN');   // neutral force: dragging only AIMS (the move is always neutral)
             if (sel !== g.sel) {
                 const me = this.me();
                 if (spec(me.char, 'S').kind === 'roll') {             // Ember: dragging onto a side starts the roll charge at once; another direction = release
@@ -264,7 +266,7 @@ export class TouchControls {
                     this.api.releaseAction('special');
                     this.pressedAim = false;
                 } else {
-                    this.act('attack', 'NEUTRAL');
+                    this.act('attack', 'NEUTRAL', neutralForced() ? s.aim : null);       // neutral force: the drag direction aims the throw (Ember's bubbles, Terra's rock)
                     this.api.cancelF();   // ensure F never stays latched after a tap/spam
                 }
             } finally {
@@ -328,6 +330,19 @@ export class TouchControls {
             virtual.shield = false; this.api.heldChanged();
         };
         sh.addEventListener('pointerup', shEnd); sh.addEventListener('pointercancel', shEnd);
+
+        // ---------------------------------------------------------- neutral force (green): hold = forced neutral while held; with "toggle neutral force" on, a tap switches it on / off
+        const nb = this.refs.neutral;
+        if (nb) {
+            let ng = null;
+            nb.addEventListener('pointerdown', (e) => {
+                if (ng) return; e.preventDefault(); e.stopPropagation(); try { nb.setPointerCapture(e.pointerId); } catch (err) {}
+                ng = { id: e.pointerId }; nb.classList.add('down');
+                if (getNfToggle()) toggleNeutral(); else { virtual.neutral = true; this.api.heldChanged(); }
+            });
+            const nEnd = (e) => { if (!ng || e.pointerId !== ng.id) return; ng = null; nb.classList.remove('down'); if (!getNfToggle()) { virtual.neutral = false; this.api.heldChanged(); } };
+            nb.addEventListener('pointerup', nEnd); nb.addEventListener('pointercancel', nEnd);
+        }
 
         // keep the page from scrolling / zooming while playing
         this.hud.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });

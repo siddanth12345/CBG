@@ -9,6 +9,7 @@ export const DEFAULT_LAYOUT = {
         jump:   { x: 0.64, y: 0.80, s: 86 },
         grab:   { x: 0.775, y: 0.86, s: 80 },
         shield: { x: 0.91, y: 0.84, s: 86 },
+        neutral: { x: 0.70, y: 0.60, s: 70 },        // the green neutral-force button (only shown when its setting is on)
     },
 };
 const clone = (o) => JSON.parse(JSON.stringify(o));

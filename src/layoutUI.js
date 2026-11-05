@@ -3,8 +3,8 @@
 import { copyLayout, saveLayout, DEFAULT_LAYOUT } from './layout.js';
 import { buildControls, positionControls, matrixSize, MATRIX_MIN, MATRIX_MAX } from './touch.js';
 
-const SIZED = ['matrix', 'jump', 'grab', 'shield'];
-const NAMES = { matrix: 'Aim grid (scales around its middle)', jump: 'Jump', grab: 'Grab (drag to aim)', shield: 'Shield' };
+const SIZED = ['matrix', 'jump', 'grab', 'shield', 'neutral'];
+const NAMES = { matrix: 'Aim grid (scales around its middle)', jump: 'Jump', grab: 'Grab (drag to aim)', shield: 'Shield', neutral: 'Neutral force (green)' };
 
 export class LayoutEditor {
     constructor({ root }) {
@@ -42,7 +42,7 @@ export class LayoutEditor {
         window.addEventListener('resize', () => { if (!this.el.hidden) this.layout(); });
 
         // the grid's inner buttons are inert in the editor: the whole control drags as one
-        for (const k of ['matrix', 'jump', 'grab', 'shield']) {
+        for (const k of ['matrix', 'jump', 'grab', 'shield', 'neutral']) {
             const el = this.refs[k];
             el.classList.add('le-ctl');
             el.addEventListener('pointerdown', (e) => this.down(k, e), true);

@@ -3,6 +3,8 @@ import { S } from './gameCore.js';
 import { Guide } from './guide.js';
 import { getLayout, setMode } from './layout.js';
 import { getGfx, setGfx, getHitboxes, setHitboxes, getZoom, setZoom } from './gfx.js';
+import { getNfToggle, setNfToggle, getNfBtn, setNfBtn } from './controls.js';
+import { touchMode } from './layout.js';
 import { audio } from './gameCore.js';
 import { ACTIONS, bindings, keyLabel, codeName, setBinding, resetBindings } from './controls.js';
 
@@ -261,6 +263,10 @@ export class UI {
               <span class="lm-seg">${[['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']].map(([m, t]) => `<button class="lm-segb${gfx === m ? ' on' : ''}" data-gfx="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row lm-row-wrap"><span>Camera zoom<small class="lm-sub">Only YOUR view. All = every fighter · Stage = stage lock · Player = you + nearest · Full = whole arena</small></span>
               <span class="lm-seg lm-seg-wrap">${[['all', 'All'], ['stage', 'Stage'], ['player', 'Player'], ['full', 'Full']].map(([m, t]) => `<button class="lm-segb${getZoom() === m ? ' on' : ''}" data-zoom="${m}">${t}</button>`).join('')}</span></div>
+            ${touchMode() ? `<div class="lm-row"><span>Neutral-force button (green)<small class="lm-sub">Adds a green button that forces every move to be NEUTRAL. Then drag the aim grid's red centre to aim neutral throws (Ember's bubbles, Terra's rock) and release</small></span>
+              <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getNfBtn() ? 1 : 0) === m ? ' on' : ''}" data-nfbtn="${m}">${t}</button>`).join('')}</span></div>` : ''}
+            <div class="lm-row"><span>Toggle neutral force<small class="lm-sub">Off = hold the neutral key / green button. On = press once to force neutral, press again to go back (PC and mobile)</small></span>
+              <span class="lm-seg">${[[0, 'Hold'], [1, 'Toggle']].map(([m, t]) => `<button class="lm-segb${(getNfToggle() ? 1 : 0) === m ? ' on' : ''}" data-nftoggle="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Show hitboxes<small class="lm-sub">Draws the red attack boxes (for learning the moves). Off by default</small></span>
               <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getHitboxes() ? 1 : 0) === m ? ' on' : ''}" data-hb="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Fullscreen<small class="lm-sub">Also the corner button on phones</small></span><button class="lm-key" data-fs>Toggle fullscreen</button></div>
@@ -275,6 +281,8 @@ export class UI {
         rows.querySelectorAll('.lm-key[data-action]').forEach(b => b.addEventListener('click', () => this.startCapture(b.dataset.action, b)));
         rows.querySelectorAll('[data-gfx]').forEach(b => b.addEventListener('click', () => { setGfx(b.dataset.gfx); this.renderSettings(); }));
         rows.querySelectorAll('[data-zoom]').forEach(b => b.addEventListener('click', () => { setZoom(b.dataset.zoom); this.renderSettings(); }));
+        rows.querySelectorAll('[data-nfbtn]').forEach(b => b.addEventListener('click', () => { setNfBtn(b.dataset.nfbtn === '1'); this.renderSettings(); }));
+        rows.querySelectorAll('[data-nftoggle]').forEach(b => b.addEventListener('click', () => { setNfToggle(b.dataset.nftoggle === '1'); this.renderSettings(); }));
         rows.querySelectorAll('[data-hb]').forEach(b => b.addEventListener('click', () => { setHitboxes(b.dataset.hb === '1'); this.renderSettings(); }));
         rows.querySelectorAll('[data-vol]').forEach(inp => {
             const apply = () => {

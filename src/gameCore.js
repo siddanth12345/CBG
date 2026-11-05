@@ -9,7 +9,7 @@ import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
 import { SoundEngine } from './audio.js';
-import { isDown } from './controls.js';
+import { isDown, neutralForced } from './controls.js';
 import { ITEM_TYPES } from './items.js';
 import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
 
@@ -217,7 +217,7 @@ function updateAimMatrix() {
 
     const DEADZONE = 45;
 
-    const forcedNeutral = isDown('neutral');          // hold the neutral key: the matrix reads NEUTRAL
+    const forcedNeutral = neutralForced();          // hold the neutral key: the matrix reads NEUTRAL
     if (forcedNeutral || mouse.dist <= DEADZONE) {
         mouse.direction = 'NEUTRAL';
     } else {
@@ -392,7 +392,7 @@ class Fighter {
         this.grabDashTimer = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
 
         this.hitstun = 0;
         this.freezeAirTimer = 0;
@@ -491,7 +491,7 @@ class Fighter {
         this.dropT = 0;
         this.grabHolding = null;
         this.grabbedBy = null;
-        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
+        this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
         this.dizzyTimer = 0;
@@ -614,6 +614,15 @@ class Fighter {
                 this.damage += 2; if (this.bombBy) { this.lastHitBy = this.bombBy; this.lastHitT = 0; }
                 this.bombN--; this.tickFreezeT = 12; fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); audio.playHit(false);
             }
+        }
+        if (this.char === 'ember') {                           // cluster bomb bookkeeping: 2 shots per prime; 2 s before it can be primed again once every bubble has gone off
+            const live = orbs.some(o => o && o.owner === this && o.kind === 'bomb') ? 1 : 0;
+            if (this.bombWas && !live && this.bombShots <= 0) this.bombLockT = 120;
+            this.bombWas = live; if (this.bombLockT > 0) this.bombLockT--;
+            this.bombPrimed = this.bombShots > 0;
+        }
+        if (this.recoilT > 0) {                                // throwing the bubbles shoves Ember straight back (a quick push, no leftover speed)
+            this.recoilT--; this.x += this.recoilX; this.y += this.recoilY; this.vx = 0; this.vy = 0; this.glide = false;
         }
         if (this.tickFreezeT > 0) { this.tickFreezeT--; return; }
         if (this.freezeAirTimer > 0) { this.vx = this.vy = 0; return; }
@@ -1377,8 +1386,8 @@ class Fighter {
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
         if (kind === 'SUPLEX' && !this.grounded) return false;
-        if (kind === 'SUPLEX' && this.char === 'ember' && !this.bombPrimed && !orbs.some(o => o && o.owner === this && o.kind === 'bomb')) {   // Ember's Down-F first PRIMES the cluster bomb (neutral melee throws it); once primed or while bombs live it is the fire pillars
-            this.bombPrimed = true; this.cd.SUPLEX = 24; this.actionLock = Math.max(this.actionLock, lk(this, 16));
+        if (kind === 'SUPLEX' && this.char === 'ember' && this.bombShots <= 0 && this.bombLockT <= 0 && !orbs.some(o => o && o.owner === this && o.kind === 'bomb')) {   // Ember's Down-F first PRIMES the cluster bomb (neutral melee throws it); once primed or while bombs live it is the fire pillars
+            this.bombShots = 2; this.bombPrimed = true; this.cd.SUPLEX = 24; this.actionLock = Math.max(this.actionLock, lk(this, 16));
             fx('explosion', this.x, this.y, 46, 0.3, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 14); audio.playGrab(); return true;
         }
         if (kind === 'HEADBUTT' && this.grounded) return false;
@@ -2144,10 +2153,13 @@ class Fighter {
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
-        if (this.char === 'ember' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) {          // neutral melee: throw the primed cluster bomb, or set live bombs off
-            const live = orbs.filter(o => o && o.owner === this && o.kind === 'bomb');
-            if (live.length) { for (const o of live) bombBurst(o); this.actionLock = Math.max(this.actionLock, 14); return true; }
-            if (this.bombPrimed) return this.throwBombs();
+        if (this.char === 'ember') {                       // cluster bomb: Neutral melee throws 3 bubbles (2 throws per prime); Side / Up / Down melee detonates every live bubble
+            const neutral = !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection);
+            if (neutral && this.bombShots > 0) return this.throwBombs();
+            if (!neutral) {
+                const live = orbs.filter(o => o && o.owner === this && o.kind === 'bomb');
+                if (live.length) { for (const o of live) bombBurst(o); this.actionLock = Math.max(this.actionLock, 14); return true; }
+            }
         }
         let kind = 'JAB';
         switch (aimDirection) {
@@ -2175,10 +2187,12 @@ class Fighter {
         if (Math.cos(a0) !== 0) this.facing = Math.cos(a0) >= 0 ? 1 : -1;
         for (const da of [-22, 0, 22]) {
             const a = a0 + da * Math.PI / 180;
-            orbs.push({ x: this.x + Math.cos(a) * 60, y: this.y + Math.sin(a) * 60, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65 * 2.5, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
-                d: 7, R: this.height * 1.75 * 2.5, bkb: 9.6, kbg: 0.72, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
+            orbs.push({ x: this.x + Math.cos(a) * 60, y: this.y + Math.sin(a) * 60, vx: Math.cos(a) * 14, vy: Math.sin(a) * 14, r: this.height * 0.65 * 1.5, charge: 0.3, owner: this, life: 180, color: '#fb923c', id: ++orbSerial,
+                d: 7, R: this.height * 1.75 * 1.5, bkb: 9.6, kbg: 0.72, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'bomb', stuck: false, flat: true });
         }
-        this.bombPrimed = false; this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
+        this.bombShots--; this.bombPrimed = this.bombShots > 0;
+        { const RC = 350, N = 8; this.recoilT = N; this.recoilX = -Math.cos(a0) * RC / N; this.recoilY = -Math.sin(a0) * RC / N; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: 0.23 of the small stage length (1520), opposite the middle bubble
+        this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
         return true;
     }
     /** Terra's neutral melee: a rock thrown as fast as the ball (and pulled down by gravity the same way), ball-sized, 5 damage and half the ball's knockback */
@@ -2447,9 +2461,9 @@ class AIBot extends Fighter {
         // Ember's cluster bomb: prime it, throw it at the foe, and set it off when the foe is inside the blast
         if (this.char === 'ember' && (this.level === 'hard' || this.level === 'medium') && !this.actionBlocked() && this.actionLock <= 0 && this.actionTimer % 5 === 0) {
             const mine = orbs.filter(o => o && o.owner === this && o.kind === 'bomb'), dT = Math.hypot(target.x - this.x, target.y - this.y);
-            if (mine.length) { if ((mine.some(o => Math.hypot(o.x - target.x, o.y - target.y) < o.R * 0.8) || mine.some(o => o.age > 150)) && this.attack('NEUTRAL')) return; }
-            else if (this.bombPrimed) { if (dT < 650 && dT > 110 && this.attack('NEUTRAL')) return; }
-            else if (this.grounded && this.cd.SUPLEX <= 0 && dT > 250 && Math.random() < 0.2 && this.useSpecial('SUPLEX', target.x, target.y)) return;
+            if (this.bombShots > 0 && dT < 650 && dT > 110 && (!mine.length || mine.every(o => o.age > 20)) && this.attack('NEUTRAL')) return;
+            if (mine.length) { if ((mine.some(o => Math.hypot(o.x - target.x, o.y - target.y) < o.R * 0.8) || mine.some(o => o.age > 150)) && this.attack('UP')) return; }
+            else if (!mine.length && this.bombShots <= 0 && this.grounded && this.cd.SUPLEX <= 0 && dT > 250 && Math.random() < 0.2 && this.useSpecial('SUPLEX', target.x, target.y)) return;
         }
 
         if (this.isHanging) {
