@@ -99,6 +99,9 @@ kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 7px;border
 .lm-g-x:hover{background:#16263a;color:#fff}
 .lm-g-title{font-weight:800;font-size:16px;color:#fff;margin:6px 0 2px}
 .lm-g-prog{min-height:16px;font-size:12px;font-weight:700;color:#34d399;margin-top:4px}
+.lm-g-nav{display:flex;gap:8px;margin-top:8px}
+.lm-g-nav button{flex:1;padding:8px 10px;border-radius:10px;border:1px solid #1e6a80;background:#0b2230;color:#e2e8f0;font-weight:800;font-size:13px}
+.lm-g-nav button:active{background:#155e75}
 .lm-g-keys{margin-top:6px;font-size:11px;color:#64748b}
 .lm-g-keys span{margin:0 2px}
 .lm-guide kbd{display:inline-block;padding:0 6px;border-radius:5px;background:#13233a;border:1px solid #27465c;color:#67e8f9;font-family:inherit;font-weight:700;font-size:11px}
