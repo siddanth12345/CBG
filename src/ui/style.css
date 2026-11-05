@@ -470,3 +470,9 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 /* loader: build sits between CBG and Enter — high contrast so it's always readable */
 .cbg-build-loader{display:block;margin:.55rem 0 1rem;text-align:center;font:700 14px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.12em;color:#e0f2fe;opacity:1;text-shadow:0 0 14px rgba(103,232,249,.55),0 2px 8px rgba(0,0,0,.8);pointer-events:none;z-index:1}
 .cbg-lstage{display:flex;flex-direction:column;align-items:center}
+
+/* During the guided tutorial, the instructions take the top-left HUD slot. */
+.tutorial-layout-active .lm-guide{left:16px;top:16px;transform:none;width:min(430px,calc(100% - 32px));}
+.tutorial-layout-active #gameHud>div:first-child{position:absolute;left:16px;top:205px;}
+.tutorial-layout-active #gameHud>div:last-child{display:none!important;}
+@media(max-width:560px){.tutorial-layout-active .lm-guide{left:8px;top:8px;width:calc(100% - 16px);}.tutorial-layout-active #gameHud>div:first-child{left:8px;top:220px;}}
