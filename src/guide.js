@@ -217,7 +217,7 @@ export class Guide {
         this.el.classList.remove('ok');
     }
 
-    markSettingsOpened() { if (this.active && this.i === 16 && this.st) this.st.opened = true; }
+    markSettingsOpened() { if (this.active && this.i === 16) { this.st = this.st || STEPS[this.i].init(); this.st.opened = true; } }
 
     /** called every frame by main.js */
     tick() {
