@@ -128,6 +128,12 @@ const STEPS = [
         init: () => ({}),
         check: () => p1.diving || p1.cd.HEADBUTT > 0,
     },
+    {
+        title: 'Open settings',
+        text: () => `Press <b>G</b> to open Settings. You can change controls and other game options there. Press Done or Esc to return to the tutorial.`,
+        init: () => ({ opened: false }),
+        check: (st) => st.opened,
+    },
 ];
 
 export class Guide {
@@ -138,6 +144,7 @@ export class Guide {
         this.st = null;
         this.doneAt = 0;
         this.finished = false;
+        this.root = root;
 
         this.el = document.createElement('div');
         this.el.className = 'lm-guide lm-hidden';
@@ -163,6 +170,7 @@ export class Guide {
 
     start(at = 0) {
         this.active = true;
+        this.root.classList.add('tutorial-layout-active');
         this.finished = false;
         this.i = 0;
         this.st = null;
@@ -175,13 +183,14 @@ export class Guide {
     }
     stop() {
         this.active = false;
+        this.root.classList.remove('tutorial-layout-active');
         this.el.classList.add('lm-hidden');
     }
 
     go(i) {
         if (i < 0) i = 0;
         this.doneAt = 0;
-        if (i >= STEPS.length) { this.finished = true; this.i = STEPS.length; }
+        if (i >= STEPS.length) { this.finished = true; this.i = STEPS.length; this.root.classList.remove('tutorial-layout-active'); }
         else { this.finished = false; this.i = i; }
         this.st = null;
         this.render();
@@ -208,6 +217,8 @@ export class Guide {
         this.el.classList.remove('ok');
     }
 
+    markSettingsOpened() { if (this.active && this.i === 16 && this.st) this.st.opened = true; }
+
     /** called every frame by main.js */
     tick() {
         if (!this.active) return;
@@ -219,6 +230,7 @@ export class Guide {
             return;
         }
         if (!this.st) this.st = s.init();
+        if (this.i >= 10 && this.i < 16) { if (s.progress) this.el.querySelector('.lm-g-prog').textContent = s.progress(this.st); return; }
         if (s.check(this.st)) {
             this.doneAt = performance.now();
             this.el.classList.add('ok');
