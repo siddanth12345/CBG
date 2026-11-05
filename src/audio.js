@@ -38,8 +38,16 @@ export class SoundEngine {
     setMusicVolume(v) {
         this._vol.music = Math.max(0, Math.min(1, +v || 0));
         saveVol(this._vol);
-        if (this._musicGain) this._musicGain.gain.value = this._vol.music;
-        if (this._music) this._music.volume = this._music._hooked ? 1 : this._vol.music;
+        this._applyMusicVol();
+    }
+    /** the Music slider: gain + element volume + mute; at 0 the track is paused outright so nothing can leak through */
+    _applyMusicVol() {
+        const v = this._vol.music;
+        if (this._musicGain) this._musicGain.gain.value = v;
+        const a = this._music; if (!a) return;
+        try { a.volume = a._hooked ? 1 : v; a.muted = v <= 0.001; } catch (e) { /* */ }
+        if (v <= 0.001) { if (!a.paused) a.pause(); }
+        else if (a.paused && this._musicUnlocked) a.play().catch(() => {});
     }
     /** route the music through Web Audio so the Music slider works everywhere (iPhones ignore HTMLAudio.volume) */
     _hookMusic(a) {
@@ -68,7 +76,7 @@ export class SoundEngine {
         this._musicUnlocked = true;
         // retry title if we failed autoplay earlier
         this._hookMusic(this._music);
-        if (this._music && this._music.paused) this._music.play().catch(() => {});
+        if (this._music && this._music.paused && this._vol.music > 0.001) this._music.play().catch(() => {});
     }
 
     dest() {
@@ -83,8 +91,8 @@ export class SoundEngine {
         if (this._musicKey === key && this._music && !this._music.paused) return;
         // same track paused (autoplay block) → just try play again
         if (this._musicKey === key && this._music) {
-            this._music.volume = this._music._hooked ? 1 : this._vol.music;
-            this._music.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
+            this._applyMusicVol();
+            if (this._vol.music > 0.001) this._music.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
             return;
         }
         this.stopMusic();
@@ -93,7 +101,8 @@ export class SoundEngine {
         a.loop = loop;
         a.volume = this._vol.music;
         a.preload = 'auto';
-        const tryPlay = () => a.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
+        a.muted = this._vol.music <= 0.001;
+        const tryPlay = () => this._vol.music <= 0.001 ? Promise.resolve() : a.play().then(() => { this._musicUnlocked = true; }).catch(() => {});
         a.addEventListener('canplaythrough', tryPlay, { once: true });
         tryPlay();
         this._music = a;

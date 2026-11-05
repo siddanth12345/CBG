@@ -1047,6 +1047,15 @@ class Fighter {
             if (x.t >= sp.windup + n * ev + 6) { this.sx = null; this.activeMove = null; this.actionLock = Math.max(this.actionLock, lk(this, sp.lock || trainLock())); }
         } else if (x.k === 'rocket') {
             const sp = spec(this.char, 'U');
+            if (x.charge > 0) {                                        // 1 s of charging in place (aim still steers the launch) before the Phoenix Dash starts
+                x.charge--; x.t--; this.activeMove = null; this.activeHitbox = null; this.vx = this.vy = 0; this.grounded = false;
+                const aim0 = aimOf(this); x.ang = Math.atan2(aim0.y - this.y, aim0.x - this.x); if (Math.sin(x.ang) > 0.3) x.ang = -x.ang;
+                this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
+                const u = 1 - x.charge / 60;
+                if (x.charge % 6 === 0) { fx('explosion', this.x, this.y, 26 + 44 * u, 0.15, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 3); }
+                if (x.charge === 0) { fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); }
+                return;
+            }
             this.activeMove = { type: 'SPIRAL', t: 3 };
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
@@ -1591,12 +1600,12 @@ class Fighter {
         let ang = Math.atan2(aim.y - this.y, aim.x - this.x);
         if (Math.sin(ang) > 0.3) ang = -ang;                                    // a recovery: never aimed down into the floor
         this.grounded = false; this.y -= 4;
-        this.startSx('rocket', 0, { ang, hits: 0 });
+        this.startSx('rocket', 0, { ang, hits: 0, charge: 60 });
         this.swingHitSet = new Set();
         if (sp.armor) this.armorT = sp.frames + 6;
         this.facing = Math.cos(ang) >= 0 ? 1 : -1;
-        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames;
-        this.setMove('SPIRAL', sp.frames);
+        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + 60;
+        this.setMove('SPIRAL', sp.frames + 60);
         fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
     }
 
