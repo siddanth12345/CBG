@@ -687,11 +687,13 @@ export class FighterModel {
     /** Returns { w, kind, u, pose } for an in-progress attack, or null. */
     #attackOverlay(alpha) {
         const f = this.f;
-        if (f.attackTimer <= 0 || !f.attackKind) return null;
+        const rip = f.char === 'bulwark' && (f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0);      // the riposte reuses the uppercut pose: ready -> thrust -> recover
+        if (!rip && (f.attackTimer <= 0 || !f.attackKind)) return null;
         if (f.isRolling || f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.isHanging || f.grabbedBy) return null;
-        const u = clamp01((ATTACK_FRAMES - 1 - f.attackTimer + alpha) / ATTACK_FRAMES);
+        const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? 0.16 + 0.32 * (1 - f.stabT / 42) : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
+                      : clamp01((ATTACK_FRAMES - 1 - f.attackTimer + alpha) / ATTACK_FRAMES);
         const w = smooth(u / 0.1) * (1 - smooth(seg(u, 0.72, 1)));
-        const k = f.attackKind;
+        const k = rip ? 'UP' : f.attackKind;
         const o = {};
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
@@ -775,6 +777,19 @@ export class FighterModel {
         const hidden = (S.gameState === 'gameover' && f.stocks <= 0) || f.active === false || f.out === true;
         this.root.visible = !hidden;
         if (hidden) { this.#hideExtras(); return; }
+
+        // ---- Bulwark's Up-F: a floating sword under his feet carries him up
+        if (f.swordRide) {
+            if (!this.rideSword) {
+                const g = new THREE.Group();
+                const m = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.7, roughness: 0.25, emissive: 0x60a5fa, emissiveIntensity: 0.7 });
+                const blade = new THREE.Mesh(new THREE.BoxGeometry(120, 9, 14), m);
+                const tip = new THREE.Mesh(new THREE.ConeGeometry(7, 26, 4), m); tip.rotation.z = -Math.PI / 2; tip.rotation.x = Math.PI / 4; tip.position.x = 72;
+                const guard = new THREE.Mesh(new THREE.BoxGeometry(8, 34, 18), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.6, roughness: 0.4 })); guard.position.x = -58;
+                g.add(blade, tip, guard); this.root.add(g); this.rideSword = g;
+            }
+            this.rideSword.visible = true; this.rideSword.position.set(0, -f.height / 2 - 4 + Math.sin(this.t * 14) * 1.5, 0); this.rideSword.scale.x = f.facing >= 0 ? 1 : -1;
+        } else if (this.rideSword) this.rideSword.visible = false;
 
         // ---- pose
         const airNow = !f.grounded && !f.isHanging;

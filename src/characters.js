@@ -81,7 +81,8 @@ export const BRIEF = {
     bulwark: {
         N: ['Bastion Core', 'Hold F for a slow, huge orb. A full charge hits very hard (up to 22).'],
         S: ['Shield Rush', 'Tap side F for an armoured charge. Swords fall along the path you ran.'],
-        U: ['Rocket Hoist', 'Tap up F to fly where you aim. You do not flinch, and you plough through people.'],
+        U: ['Sword Lift', 'Tap up F to ride up on a floating sword as high as Zephyr rises. Foes above you get knocked off to a random side. Melee hops you off early.'],
+        M: ['Riposte', 'Neutral melee is a sword uppercut counter: 0.7 s open window, 0.7 s aftermath if nothing comes, 1 s cooldown. Counters everything except down moves. Projectiles fly back (homing ones home to their owner, straight ones 2x faster); up close it ends in a stab: 1.8 s stun and bleeding.'],
         DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft.'],
         DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft.'],
     },
@@ -129,11 +130,11 @@ export const BRIEF = {
     },
 };
 export const brief = (id) => BRIEF[id] || BRIEF.luminent;
-const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA']];
+const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA'], ['Neutral melee', 'M']];
 for (const c of Object.values(CHARS)) {
     const b = BRIEF[c.id];
     if (!b) continue;
-    c.specials = SLOT_LABEL.map(([k, slot]) => ({ key: k, name: b[slot][0], desc: b[slot][1] }));
+    c.specials = SLOT_LABEL.filter(([k, slot]) => b[slot]).map(([k, slot]) => ({ key: k, name: b[slot][0], desc: b[slot][1] }));
 }
 
 export const charOf = (id) => CHARS[id] || CHARS[DEFAULT_CHAR];

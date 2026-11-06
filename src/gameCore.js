@@ -45,6 +45,20 @@ const WORLD = {
     airFriction: 0.985
 };
 
+/** After a fighter has been moved by force (grab carry, whirlpool pull, Phoenix drag ...): never leave them inside the stage block.
+ *  Decide which face to stay on from where they were BEFORE the move, so they are never ejected through the floor or across the stage. */
+function pushOutOfStage(f, ox, oy) {
+    const L = STAGE.x, R = STAGE.x + STAGE.width, T = STAGE.y, B = STAGE.y + STAGE.height, hw = f.width / 2, hh = f.height / 2;
+    if (f.x + hw <= L || f.x - hw >= R || f.y + hh <= T || f.y - hh >= B) return;
+    if (oy + hh <= T + 1) f.y = T - hh;
+    else if (oy - hh >= B - 1) f.y = B + hh;
+    else if (ox + hw <= L + 1) f.x = L - hw;
+    else if (ox - hw >= R - 1) f.x = R + hw;
+    else {                                                   // was already inside: leave by the nearest face
+        const d = [f.y + hh - T, B - (f.y - hh), f.x + hw - L, R - (f.x - hw)], m = Math.min(...d);
+        if (m === d[0]) f.y = T - hh; else if (m === d[1]) f.y = B + hh; else if (m === d[2]) f.x = L - hw; else f.x = R + hw;
+    }
+}
 const STAGE = {
     x: 1140,
     y: 1250,
@@ -147,6 +161,7 @@ export const AIR_F_MAX = 2;   // F moves usable in the air before you must touch
 /** training-menu overrides (only while gameMode === 'training') */
 export const trainLock = () => (S.gameMode === 'training' && S.train && S.train.lock != null) ? S.train.lock : LOCK;
 export const trainStun = () => (S.gameMode === 'training' && S.train && S.train.stun != null) ? S.train.stun : STUN;
+export const airFOf = (f) => trainAirF() + (f && f.char === 'volt' ? 1 : 0);      // Volt gets 3 air F moves instead of 2
 export const trainAirF = () => (S.gameMode === 'training' && S.train && S.train.airF != null) ? S.train.airF : AIR_F_MAX;
 export const trainWalk = () => (S.gameMode === 'training' && S.train && S.train.walk != null) ? S.train.walk : 1;
 export const trainJumps = (f) => {
@@ -323,7 +338,8 @@ function counters(defType, atkType) {
     }
 }
 /** 'hit' | 'shield' | 'countered' | 'clash' */
-function interaction(atkType, defender) {
+function interaction(atkType, defender, down = false) {
+    if (defender.riposteT > 0 && !down) return 'riposte';          // Bulwark's open counter window: everything except Down moves
     // Active Phoenix Dash is countered by grabs, melee, directional specials and Cores.
     // Detached Phoenix rockets are separate projectiles and keep their own shield rules.
     if (defender.char === 'ember' && defender.sx && defender.sx.k === 'rocket' &&
@@ -437,6 +453,9 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
+        this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
+        this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
+        this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
         this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
@@ -534,7 +553,8 @@ class Fighter {
         this.fActive = false; this.chargeFrames = 0; this.aiChargeGoal = 0;
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
-        this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null;
+        this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null; this.swordRide = false;
+        this.riposteT = 0; this.riposteAfter = 0; this.stabT = 0; this._stabVictim = null;
         this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
         this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0; this.freezeAirTimer = 0;
@@ -549,6 +569,17 @@ class Fighter {
         }
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
+        if (this.char === 'bulwark') this.tickRiposte();
+        if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
+            if (this.stocks <= 0 || this.out) this.bleedT = 0;
+            else {
+                this.bleedT--;
+                if (++this.bleedTick % 12 === 0) {
+                    this.damage += 1.5; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
+                    createParticles(this.x, this.y - 6, '#dc2626', 7); fx('burn', this.x, this.y - 30, 0, 0, 'blood'); audio.playHit(false);
+                }
+            }
+        }
         if (this.sideT > 0) this.sideT--;
         if (this.upT > 0) this.upT--;
         if (this.glideT > 0) {
@@ -696,7 +727,7 @@ class Fighter {
         if (this.grabbedBy) {
             this.vx = 0;
             this.vy = 0;
-            const g = this.grabbedBy;
+            const g = this.grabbedBy, gox = this.x, goy = this.y;
             if (g.throwU > 0) {                   // the thrower's wind-up: the foe is carried round with the flip / spin
                 const u = g.throwU, th = g.throwKind === 'up' ? -2 * Math.PI * u : g.throwKind === 'down' ? -Math.PI * 0.6 * u : 0;
                 this.x = g.x + g.facing * 46 * Math.cos(th);
@@ -713,6 +744,7 @@ class Fighter {
                 this.x = g.x + (g.facing * 35);
                 this.y = g.y;
             }
+            pushOutOfStage(this, gox, goy); this.px = this.x; this.py = this.y;
             return;
         }
 
@@ -944,6 +976,16 @@ class Fighter {
                 };
                 fx('spiral', this.x, this.y);
             }
+            if (sp.sword) {                                   // Bulwark: anything above the sword is knocked off to a random side
+                for (const t of foesOf(this)) {
+                    if (this._swordHit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+                    if (Math.abs(t.x - this.x) < 80 + t.width / 2 && t.y < this.y + 10 && this.y - t.y < 190) {
+                        this._swordHit.add(t);
+                        if (interaction('SPIRAL', t) === 'hit') launch(this, t, { damage: 0, bkb: 6.5, kbg: 0.35, angle: Math.random() < 0.5 ? -0.3 : Math.PI + 0.3, x: this.x, y: this.y - 20 });
+                    }
+                }
+                if (this.spiralT % 4 === 0) createParticles(this.x, this.y + this.height / 2, '#e2e8f0', 2);
+            }
             if (this.spiralT === 0) this.endSpiral();
         }
 
@@ -1051,7 +1093,7 @@ class Fighter {
                 x.charge--; x.t--; this.activeMove = null; this.activeHitbox = null; this.vx = this.vy = 0; this.grounded = false;
                 const aim0 = aimOf(this); x.ang = Math.atan2(aim0.y - this.y, aim0.x - this.x); if (Math.sin(x.ang) > 0.3) x.ang = -x.ang;
                 this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
-                const u = 1 - x.charge / 60;
+                const u = 1 - x.charge / 36;
                 if (x.charge % 6 === 0) { fx('explosion', this.x, this.y, 26 + 44 * u, 0.15, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 3); }
                 if (x.charge === 0) { fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); }
                 return;
@@ -1094,7 +1136,7 @@ class Fighter {
                     if (x.caught.has(f)) {
                         if (f.isShielding || f.stocks <= 0) { x.caught.delete(f); continue; }
                         const k = 0.55;                                       // strong pull toward the drill's tip
-                        f.x += (hx - f.x) * k; f.y += (hy - f.y) * k; f.px = f.x; f.py = f.y;
+                        const ox = f.x, oy = f.y; f.x += (hx - f.x) * k; f.y += (hy - f.y) * k; pushOutOfStage(f, ox, oy); f.px = f.x; f.py = f.y;
                         f.vx = Math.cos(x.ang) * sp.speed * 0.95; f.vy = Math.sin(x.ang) * sp.speed * 0.95;
                         f.hitstun = Math.max(f.hitstun, 8); f.grounded = false; f.lastHitBy = this; if (f.lastHitT > 6) f.lastHitT = 6;
                     }
@@ -1268,7 +1310,7 @@ class Fighter {
                 // keep carried foes glued to us
                 for (const f of foesOf(this)) {
                     if (f._rollCarry === this && f.hitstun > 0) {
-                        f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false;
+                        const cox = f.x, coy = f.y; f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false; pushOutOfStage(f, cox, coy);
                     }
                 }
                 // RED: last 5 ticks × 2 damage (direct, reliable)
@@ -1305,7 +1347,13 @@ class Fighter {
             if (x.t === sp.windup - 4) fx('explosion', this.x, this.y, 120, 0.8, 'dark');
             if (x.t >= sp.windup) { const d = x.d; this.sx = null; this._wound = true; this.startBlink(d, sp); this._wound = false; }
         } else if (x.k === 'bolt') {
-            if (x.t >= 10) { this.sx = null; this.activeMove = null; }
+            const sp = spec(this.char, 'U');
+            if (x.ph === 'freeze') {                                   // hanging in the air, crackling, for 0.3 s
+                this.vx = 0; this.vy = -WORLD.gravity; this.grounded = false; this.activeMove = { type: 'SPIRAL', t: 2 }; this.invincibleTimer = Math.max(this.invincibleTimer, 2);
+                const a = aimOf(this); if (Math.abs(a.x - this.x) > 8) this.facing = a.x > this.x ? 1 : -1;
+                if (x.fz % 3 === 0) createParticles(this.x, this.y, '#fde047', 3);
+                if (--x.fz <= 0) { x.ph = 'go'; x.t = 0; this.boltStrike(sp); }
+            } else if (x.t >= 10) { this.sx = null; this.activeMove = null; }
         }
     }
 
@@ -1330,7 +1378,7 @@ class Fighter {
     }
 
     endSpiral() {
-        this.activeMove = null;
+        this.activeMove = null; this.swordRide = false;
         const overStage = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
         if (!overStage) this.actionLock = Math.max(this.actionLock, 96);   // missed the stage -> extra lag
     }
@@ -1357,7 +1405,7 @@ class Fighter {
     // ------------------------------------------------------------ F special: input
     canStartF(dir) {
         if (this.actionBlocked()) return false;
-        if (!this.grounded && this.airSpecials >= trainAirF()) return false;
+        if (!this.grounded && this.airSpecials >= airFOf(this)) return false;
         if (dir === 'NEUTRAL' && this.cd.CORE > 0) return false;
         return true;
     }
@@ -1405,7 +1453,7 @@ class Fighter {
             fx('explosion', this.x, this.y, 46, 0.3, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 14); audio.playGrab(); return true;
         }
         if (kind === 'HEADBUTT' && this.grounded) return false;
-        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= trainAirF()) return false;
+        if (!this.grounded && kind !== 'SUPLEX' && this.airSpecials >= airFOf(this)) return false;
 
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
@@ -1486,7 +1534,7 @@ class Fighter {
         fx('pillar', this.x, this.y - 300, 40, 600, 'volt!'); fx('core', this.x, this.y - 300, c, Math.PI / 2, 'volt'); fx('gust', this.x, this.y, 100, 0, 'volt');
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
     }
-    canRollStart() { return this.cd.BLINK <= 0 && this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < AIR_F_MAX); }
+    canRollStart() { return this.cd.BLINK <= 0 && this.actionLock <= 0 && this.hitstun <= 0 && this.clashStunTimer <= 0 && this.freezeTimer <= 0 && (this.grounded || this.airSpecials < airFOf(this)); }
     /** Ember's Fireball Roll, step 1: charge under gravity (1.2 s to full). A hit now stuns for 1 s. */
     startRollCharge(d) {
         this.facing = d;
@@ -1603,30 +1651,41 @@ class Fighter {
         let ang = Math.atan2(aim.y - this.y, aim.x - this.x);
         if (Math.sin(ang) > 0.3) ang = -ang;                                    // a recovery: never aimed down into the floor
         this.grounded = false; this.y -= 4;
-        this.startSx('rocket', 0, { ang, hits: 0, charge: 60 });
+        this.startSx('rocket', 0, { ang, hits: 0, charge: 36 });
         this.swingHitSet = new Set();
         if (sp.armor) this.armorT = sp.frames + 6;
         this.facing = Math.cos(ang) >= 0 ? 1 : -1;
-        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + 60;
-        this.setMove('SPIRAL', sp.frames + 60);
+        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + 36;
+        this.setMove('SPIRAL', sp.frames + 36);
         fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
     }
 
     /** Volt's Lightning Rod: vanish and strike upward instantly, zapping and stunning everything along the bolt */
+    /** Volt's Lightning Rod: blink a short way up, hang in the air for 0.3 s (the aim can still move), then strike to wherever the aim points */
     startBolt(sp) {
-        const aim = aimOf(this);
-        let ang = Math.atan2(aim.y - this.y, aim.x - this.x);
-        if (Math.sin(ang) > -0.5) ang = -Math.PI / 2 + Math.max(-0.6, Math.min(0.6, Math.cos(ang)));   // always mostly upward
         const fx0 = this.x, fy0 = this.y;
         this.jumpsLeft = Math.max(0, this.jumpsLeft - 1);
-        this.x = Math.min(WORLD.width - 20, Math.max(20, this.x + Math.cos(ang) * sp.dist)); this.y += Math.sin(ang) * sp.dist;
-        this.vx = Math.cos(ang) * 3; this.vy = -5; this.grounded = false;
-        this.startSx('bolt');
+        this.y -= sp.hop || 110; this.vx = this.vy = 0; this.grounded = false;
+        this.startSx('bolt', 0, { ph: 'freeze', fz: sp.freeze || 18 });
+        this.invincibleTimer = Math.max(this.invincibleTimer, 10);
+        this.setMove('SPIRAL', (sp.freeze || 18) + 14); this.specialKind = 'SPIRAL'; this.specialDur = (sp.freeze || 18) + 14;
+        for (let i = 1; i <= 4; i++) this.ghosts.push({ x: fx0, y: fy0 + (this.y - fy0) * i / 5, alpha: 0.8 - i * 0.12, color: '#fde047' });
+        fx('blink', fx0, fy0, this.x, this.y); fx('gust', this.x, this.y, 90, 0, STYLE_OF[this.char]);
+        audio.playHit(false);
+    }
+    /** the strike itself: instantly to the aim point (limited reach), zapping and stunning everything along the path */
+    boltStrike(sp) {
+        const aim = aimOf(this), fx0 = this.x, fy0 = this.y;
+        let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1, reach = Math.min(d, sp.dist2 || 480);
+        dx = dx / d * Math.max(reach, 60); dy = dy / d * Math.max(reach, 60);
+        this.x = Math.min(WORLD.width - 20, Math.max(20, this.x + dx)); this.y += dy;
+        if (Math.abs(dx) > 8) this.facing = dx > 0 ? 1 : -1;
+        this.vx = dx / reach * 3; this.vy = dy / reach * 3; this.grounded = false;
         this.invincibleTimer = Math.max(this.invincibleTimer, 10);
         this.swingHitSet = new Set();
         this.activeHitbox = { x: (fx0 + this.x) / 2, y: (fy0 + this.y) / 2, w: Math.abs(this.x - fx0) + sp.w, h: Math.abs(this.y - fy0) + sp.w, type: 'SPIRAL', ttl: 8, multi: true,
             damage: sp.dmg, bkb: 0, kbg: 0, angle: -1.5, stun: sp.stun, lift: 4 };
-        this.setMove('SPIRAL', 12); this.specialKind = 'SPIRAL'; this.specialDur = 12;
+        this.setMove('SPIRAL', 12);
         for (let i = 1; i <= 6; i++) this.ghosts.push({ x: fx0 + (this.x - fx0) * i / 7, y: fy0 + (this.y - fy0) * i / 7, alpha: 0.8 - i * 0.09, color: '#fde047' });
         fx('blink', fx0, fy0, this.x, this.y); fx('gust', this.x, this.y, 120, 0, STYLE_OF[this.char]);
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
@@ -1694,6 +1753,7 @@ class Fighter {
         if (sp.armor) this.armorT = sp.frames;
         if (sp.inv) this.invincibleTimer = Math.max(this.invincibleTimer, sp.inv);
         this.specialKind = 'SPIRAL'; this.specialT = 0; this.specialDur = sp.frames;
+        this.swordRide = !!sp.sword; this._swordHit = new Set();
         if (sp.kind === 'lift') {                             // no attack: a gust that only shoves, or a smoke vanish
             fx('gust', this.x, this.y, sp.gust || 90, 0, STYLE_OF[this.char]);
             if (sp.gust) for (const t of foesOf(this)) { const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy); if (d < sp.gust && t.invincibleTimer <= 0 && !t.armorT) { t.vx += (dx / (d || 1)) * 9; t.vy -= 4; t.grounded = false; } }
@@ -2164,7 +2224,9 @@ class Fighter {
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
         if (this.isHanging) return false;    // ledge: jump only
+        if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this.spiralT = 0; this.endSpiral(); this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
+        if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
 
         if (this.char === 'ember') {                       // cluster bomb: Neutral melee throws 3 bubbles (2 throws per prime); Side / Up / Down melee detonates every live bubble
@@ -2194,6 +2256,26 @@ class Fighter {
         this.actionLock = lk(this, trainLock()) + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0);   // firestick: 0.2 s more aftermath
         audio.playHit(false);
         return true;
+    }
+    /** Bulwark's neutral melee: a sword uppercut counter. 0.7 s open window, 0.7 s aftermath if nothing came, then a 1 s cooldown */
+    startRiposte() {
+        if (this.riposteCd > 0 || this.riposteT > 0 || this.riposteAfter > 0 || this.stabT > 0) return false;
+        this.riposteT = 42; this.actionLock = Math.max(this.actionLock, 84); this.activeMove = { type: 'RIPOSTE', t: 2 };
+        this.vx *= 0.3; audio.playHit(false); fx('spiral', this.x, this.y); createParticles(this.x, this.y - 10, '#e2e8f0', 6);
+        return true;
+    }
+    tickRiposte() {
+        if (this.riposteT > 0) {
+            this.riposteT--; this.activeMove = { type: 'RIPOSTE', t: 2 };
+            if (this.riposteT === 0) this.riposteAfter = 42;                    // nothing came: 0.7 s of aftermath
+        } else if (this.riposteAfter > 0) {
+            if (--this.riposteAfter === 0) this.riposteCd = 60;
+        } else if (this.stabT > 0) {
+            const v = this._stabVictim;
+            if (v && isAlive(v)) { v.vx = 0; v.vy = 0; v.hitstun = Math.max(v.hitstun, 4); v.x += (this.x + this.facing * 40 - v.x) * 0.3; pushOutOfStage(v, v.x, v.y); }
+            if (this.stabT === 21 && v) { createParticles(v.x, v.y - 6, '#dc2626', 16); fx('hit', v.x, v.y, 14, this.facing > 0 ? 0 : Math.PI); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true); }
+            if (--this.stabT === 0) { this._stabVictim = null; this.riposteCd = 60; }
+        } else if (this.riposteCd > 0) this.riposteCd--;
     }
     /** Ember's cluster bomb: three sticky fire bubbles (middle one on the aim, two 22 degrees either side) */
     throwBombs() {
@@ -3136,7 +3218,33 @@ function counterStun(attacker, defender) {
     attacker.vy = -4;
 }
 
+/** Bulwark's riposte lands: both are thrown apart; up close the sword goes into the chest (stun 1.8 s + bleeding) */
+function bulwarkRiposte(bw, atk) {
+    const dx = atk.x - bw.x, dy = atk.y - bw.y, close = Math.abs(dx) < 120 && Math.abs(dy) < 110;
+    bw.riposteT = 0; bw.riposteAfter = 0; bw.facing = dx >= 0 ? 1 : -1;
+    audio.playHit(true); S.screenShake = Math.max(S.screenShake, 12);
+    fx('counter', (bw.x + atk.x) / 2, (bw.y + atk.y) / 2); createParticles((bw.x + atk.x) / 2, (bw.y + atk.y) / 2, '#e2e8f0', 16);
+    atk.interrupt();
+    if (close) {
+        bw.stabT = 42; bw.actionLock = 42; bw._stabVictim = atk; bw.activeMove = null;
+        atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 108; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
+    } else {
+        const d = dx >= 0 ? 1 : -1;
+        atk.clashStunTimer = STUN; atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 20; bw.riposteCd = 60;
+    }
+}
+/** a projectile met Bulwark's riposte: homing ones home back to their owner, straight ones go back twice as fast */
+function reflectOrb(o, bw) {
+    const prev = o.owner; if (!prev) return;
+    if (o.homing || o.curve) { o.homing = prev; o.curve = 0; o.homingDelay = 0; o.homingTurn = 0.25; o.spd = o.spd || Math.hypot(o.vx, o.vy) || 10; }
+    else { const a = Math.atan2(prev.y - o.y, prev.x - o.x), sp = Math.min(40, (Math.hypot(o.vx, o.vy) || 8) * 2); o.vx = Math.cos(a) * sp; o.vy = Math.sin(a) * sp; o.grav = 0; }
+    o.owner = bw; o.age = 0; o.life = Math.max(o.life, 160); o.reflected = true;
+    bw.riposteT = 0; bw.riposteAfter = 0; bw.riposteCd = 60; bw.actionLock = 16; bw.activeMove = null;
+    audio.playShield(); S.screenShake = Math.max(S.screenShake, 8); fx('counter', bw.x, bw.y); createParticles(o.x, o.y, '#e2e8f0', 10);
+}
+
 function handleBlocked(res, attacker, defender) {
+    if (res === 'riposte') { bulwarkRiposte(defender, attacker); return; }
     if (res === 'shield') {
         audio.playShield();
         defender.shieldHealth = Math.max(0, defender.shieldHealth - 10);
@@ -3442,7 +3550,7 @@ function updateDrops() {
             if (d.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
             if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                 d.hit.add(t);
-                const res = interaction('SPIRAL', t);
+                const res = interaction('SPIRAL', t, true);
                 if (res === 'hit') launch(d.owner, t, { damage: d.dmg, bkb: d.bkb, kbg: d.kbg, angle: -1.25, mirror: true, x: d.x, y: d.y });
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             }
@@ -3468,7 +3576,7 @@ function updatePillars() {
             if (dy > p.h / 2 + t.height / 2) continue;
             const ax = Math.abs(t.x - p.x);
             if (ax < p.w / 2 + t.width / 2) {
-                const res = interaction('SPIRAL', t);
+                const res = interaction('SPIRAL', t, true);
                 if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: 0, kbg: 0, angle: -1.4, stun: 60, lift: 5, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
                 else if (res === 'shield') { p.hit.add(t); audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             } else if (ax < p.aw / 2 + t.width / 2) {
@@ -3504,8 +3612,10 @@ function updateWhirlpools() {
             f.vy = 0;
             // strong lerp into centre (forcible, like being held)
             const k = 0.55;
+            const wox = f.x, woy = f.y;
             f.x += (tx - f.x) * k;
             f.y += (ty - f.y) * k;
+            pushOutOfStage(f, wox, woy); f.px = f.x; f.py = f.y;
             // residual velocity so physics/other systems still see motion toward centre
             f.vx = (tx - f.x) * 2.5;
             f.vy = (ty - f.y) * 2.5;
@@ -3589,6 +3699,7 @@ function updateOrbs() {
             const cx = Math.max(t.x - t.width / 2, Math.min(o.x, t.x + t.width / 2));
             const cy = Math.max(t.y - t.height / 2, Math.min(o.y, t.y + t.height / 2));
             if (Math.hypot(o.x - cx, o.y - cy) < o.r + (o.homing ? 6 : 0)) {
+                if (t.riposteT > 0 && o.owner !== t) { reflectOrb(o, t); hitOrb = true; break; }       // Bulwark's riposte sends it back
                 if (o.shieldCounter && t.isShielding) {
                     dropOrb(o); audio.playShield();
                     t.shieldHealth = Math.max(0, t.shieldHealth - 10);
@@ -3698,7 +3809,7 @@ function checkCombatCollisions(attacker, defender) {
         const enlargedGrabHitboxRadius = (defender.char === 'ember' && defender.sx && defender.sx.k === 'rocket') ? 72 + 95 : 72;      // a grab catches a Phoenix Dash across the whole of its (big) flame
 
         if (dist < enlargedGrabHitboxRadius) {
-            const res = interaction('GRAB', defender);
+            const res = interaction('GRAB', defender, !!attacker.suplexPending);
             if (res !== 'hit') {
                 attacker.isGrabDashing = false;
                 handleBlocked(res, attacker, defender);
@@ -3747,7 +3858,7 @@ function checkCombatCollisions(attacker, defender) {
     const hbBottom = hb.y + hb.h / 2;
 
     if (hbLeft < defRight && hbRight > defLeft && hbTop < defBottom && hbBottom > defTop) {
-        const res = interaction(hb.type || 'J', defender);
+        const res = interaction(hb.type || 'J', defender, ((hb.type || 'J') === 'J' && attacker.attackKind === 'DOWN') || hb.type === 'HEADBUTT');
         if (hb.multi) {                                      // sword spin: hits everyone around you once, the swing carries on
             const set = attacker.swingHitSet || (attacker.swingHitSet = new Set());
             if (set.has(defender)) return;
@@ -3838,8 +3949,8 @@ function renderHUD() {
     if (fBadge) {
         let cls, txt, col;
         if (me.charging) { col = '#ddd6fe'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/60'; txt = `CORE ${Math.min(100, Math.round(me.chargeFrames / CHARGE_MAX * 100))}%`; }
-        else if (!me.grounded && me.airSpecials >= trainAirF()) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
-        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${trainAirF() - me.airSpecials}/${trainAirF()}`; }
+        else if (!me.grounded && me.airSpecials >= airFOf(me)) { col = '#64748b'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-900 text-slate-500 border border-slate-700'; txt = 'AIR F: 0 LEFT'; }
+        else { col = '#c4b5fd'; cls = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-500/40'; txt = `AIR F: ${airFOf(me) - me.airSpecials}/${airFOf(me)}`; }
         const key = cls + txt + col;
         if (hudCache.fb !== key) { hudCache.fb = key; fBadge.className = cls; fBadge.textContent = txt; fBadge.style.color = col; }
     }
