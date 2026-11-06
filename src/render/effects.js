@@ -627,10 +627,10 @@ export class Effects {
                     if (isRock) {
                         obj = new THREE.Mesh(new THREE.DodecahedronGeometry(46, 0), new THREE.MeshStandardMaterial({ color: 0x78716c, flatShading: true, roughness: 1, emissive: 0x3b3531, emissiveIntensity: 0.9 }));
                     } else {
-                        obj = buildSword(); obj.scale.setScalar(1.5); obj.rotation.z = (Math.random() - 0.5) * 0.25;
+                        obj = buildSword(); obj.rotation.z = (Math.random() - 0.5) * 0.25;
                     }
                     obj.position.set(pos.x, pos.y, 4); obj.renderOrder = 6; this.scene.add(obj);
-                    const y0 = pos.y, y1 = land + (isRock ? 40 : 105);
+                    const y0 = pos.y, y1 = land + (isRock ? 40 : 70);
                     this.timed.push({ obj, t: 0, dur, step: (u) => { obj.position.y = y0 + (y1 - y0) * u * u; if (isRock) { obj.rotation.x += 0.2; obj.rotation.y += 0.15; } },
                         free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });
                     break;

@@ -570,7 +570,7 @@ class Fighter {
         this.fActive = false; this.chargeFrames = 0; this.aiChargeGoal = 0;
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
-        this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null; this.swordRide = false;
+        this.spiralT = 0; this.suplexT = 0; this.suplexPending = false; this.diving = false; this.sx = null; this.swordRide = false; this._carry = [];
         this.riposteT = 0; this.riposteAfter = 0; this.stabT = 0; this._stabVictim = null;
         this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
@@ -994,14 +994,15 @@ class Fighter {
                 };
                 fx('spiral', this.x, this.y);
             }
-            if (sp.sword) {                                   // Bulwark: anything above the sword is knocked off to a random side
+            if (sp.sword) {                                   // Bulwark: the rising sword spears whoever is above it and carries them up (they go on with the sword when he lets go)
                 for (const t of foesOf(this)) {
-                    if (this._swordHit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
-                    if (Math.abs(t.x - this.x) < 80 + t.width / 2 && t.y < this.y + 10 && this.y - t.y < 190) {
-                        this._swordHit.add(t);
-                        if (interaction('SPIRAL', t) === 'hit') launch(this, t, { damage: 0, bkb: 6.5, kbg: 0.35, angle: Math.random() < 0.5 ? -0.3 : Math.PI + 0.3, x: this.x, y: this.y - 20 });
+                    if (this._carry.includes(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+                    if (Math.abs(t.x - this.x) < 80 + t.width / 2 && t.y < this.y + 10 && this.y - t.y < 190 && interaction('SPIRAL', t, true) === 'hit') {
+                        t.interrupt(); t.lastHitBy = this; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); this._carry.push(t);
+                        S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2);
                     }
                 }
+                for (const t of this._carry) if (isAlive(t)) { t.x += (this.x - t.x) * 0.5; t.y = this.y - this.height / 2 - 64; t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y; }
                 if (this.spiralT % 4 === 0) createParticles(this.x, this.y + this.height / 2, '#e2e8f0', 2);
             }
             if (this.spiralT === 0) this.endSpiral();
@@ -1393,11 +1394,8 @@ class Fighter {
         let yl = BLAST_ZONES.bottom, surface = false;                       // they keep falling until a stage / platform stops them, or they leave through the kill zone
         if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > y0 && STAGE.y < yl) { yl = STAGE.y; surface = true; }
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > y0 && pl.y < yl) { yl = pl.y; surface = true; }
-        const big = dr.kind === 'sword', off = big && surface ? SWORD_OFF : 0, ylE = yl - off;             // swords are 1.5x bigger: the tip, not the middle, meets the ground
-        const frames = Math.max(2, Math.ceil((ylE - y0) / v));
-        const d = { x: px, y: y0, yl: ylE, off, v, surface, owner: this, hit: new Set(), ...dr };
-        if (big) { d.w *= SWORD_SCALE; d.h *= SWORD_SCALE; d.caught = []; }
-        drops.push(d);
+        const frames = Math.max(2, Math.ceil((yl - y0) / v));
+        drops.push({ x: px, y: y0, yl, off: 0, v, surface, owner: this, hit: new Set(), ...dr });
         fx('drop', px, y0, frames, yl, dr.kind);
     }
 
@@ -1410,15 +1408,17 @@ class Fighter {
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > yA && pl.y < yl) { yl = pl.y; surface = true; }
         const stop = yl - (surface ? SWORD_OFF : 0);
         let F = N + 1; while (yA + 0.5 * g * (F - N) * (F - N) < stop && F < 400) F++;
-        drops.push({ x: px, y: y0, yl: stop, v: 0, surface, owner: this, hit: new Set(), hitUp: new Set(), kind: 'sword', caught: [], off: surface ? SWORD_OFF : 0, dmg: 6, bkb: 8, kbg: 0.7, w: 70 * SWORD_SCALE, h: 150 * SWORD_SCALE, fly: { y0, yA, v0, N, g, f: 0 } });
-        fx('swordfly', px, y0, F, stop, N);
+        drops.push({ x: px, y: y0, yl: stop, v: 0, surface, owner: this, hit: new Set(), hitUp: new Set(), kind: 'sword', caught: (this._carry || []).filter(isAlive), off: surface ? SWORD_OFF : 0, dmg: 6, bkb: 8, kbg: 0.7, w: 70 * SWORD_SCALE, h: 150 * SWORD_SCALE, fly: { y0, yA, v0, N, g, f: 0 } });
+        fx('swordfly', px, y0, F, stop, N); this._carry = [];
     }
 
     endSpiral() {
+        if (!(this.swordRide && this.char === 'bulwark' && this.spiralT <= 0)) this._carry = [];
         if (this.swordRide && this.char === 'bulwark' && this.spiralT <= 0) this.launchSwordFly();
         this.activeMove = null; this.swordRide = false;
         const overStage = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
-        if (!overStage) this.actionLock = Math.max(this.actionLock, 96);   // missed the stage -> extra lag
+        if (this.char === 'bulwark' && spec('bulwark', 'U').sword) { this.actionLock = Math.max(this.actionLock, 18); this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 18); }      // Sword Lift: only 0.3 s of tiredness before any move (and Up) is ready again
+        else if (!overStage) this.actionLock = Math.max(this.actionLock, 96);   // missed the stage -> extra lag
     }
 
     diveImpact() {
@@ -1795,7 +1795,7 @@ class Fighter {
         if (sp.armor) this.armorT = sp.frames;
         if (sp.inv) this.invincibleTimer = Math.max(this.invincibleTimer, sp.inv);
         this.specialKind = 'SPIRAL'; this.specialT = 0; this.specialDur = sp.frames;
-        this.swordRide = !!sp.sword; this._swordHit = new Set();
+        this.swordRide = !!sp.sword; this._swordHit = new Set(); this._carry = [];
         if (sp.kind === 'lift') {                             // no attack: a gust that only shoves, or a smoke vanish
             fx('gust', this.x, this.y, sp.gust || 90, 0, STYLE_OF[this.char]);
             if (sp.gust) for (const t of foesOf(this)) { const dx = t.x - this.x, dy = t.y - this.y, d = Math.hypot(dx, dy); if (d < sp.gust && t.invincibleTimer <= 0 && !t.armorT) { t.vx += (dx / (d || 1)) * 9; t.vy -= 4; t.grounded = false; } }
@@ -3617,7 +3617,7 @@ function updateDrops() {
             if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                 d.hit.add(t);
                 const res = interaction('SPIRAL', t, true);
-                if (res === 'hit' && d.kind === 'sword') {            // the sword spears them and drags them down with it
+                if (res === 'hit' && d.fly) {            // the Up-F sword spears them and drags them down with it
                     t.interrupt(); t.damage += d.dmg; t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t);
                     S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(t.x, t.y, '#e2e8f0', 12); fx('hit', t.x, t.y, 12, Math.PI / 2);
                 } else if (res === 'hit') launch(d.owner, t, { damage: d.dmg, bkb: d.bkb, kbg: d.kbg, angle: -1.25, mirror: true, x: d.x, y: d.y });
@@ -3630,7 +3630,7 @@ function updateDrops() {
         }
         if (d.y >= d.yl && !up) {
             drops.splice(i, 1);
-            if (d.kind === 'sword' && d.surface) {                                            // impact: area knockback; anyone dragged to or below the surface is thrown up
+            if (d.fly && d.surface) {                                            // impact: area knockback; anyone dragged to or below the surface is thrown up
                 const sy = d.yl + d.off, R = 230;
                 for (const t of foesOf(d.owner)) {
                     const caught = d.caught.includes(t);
@@ -3643,7 +3643,7 @@ function updateDrops() {
                 fx('quake', d.x, sy, R * 2, 0, STYLE_OF[d.owner.char] + '@'); S.screenShake = Math.max(S.screenShake, 14);
             }
             if (d.surface) {
-                const sy = d.yl + d.off; fx('stomp', d.x, sy, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
+                const sy = d.yl + (d.off || 0); fx('stomp', d.x, sy, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
                 createParticles(d.x, sy, d.kind === 'rock' ? '#a8a29e' : '#cbd5e1', 8);
             }
         }

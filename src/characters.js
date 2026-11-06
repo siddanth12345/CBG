@@ -81,7 +81,7 @@ export const BRIEF = {
     bulwark: {
         N: ['Bastion Core', 'Hold F for a slow, huge orb. A full charge hits very hard (up to 22).'],
         S: ['Shield Rush', 'Tap side F for an armoured charge. Swords fall along the path you ran.'],
-        U: ['Sword Lift', 'Tap up F to ride up on a floating sword as high as Zephyr rises. Foes above you get knocked off to a random side. Melee hops you off early, and the sword then flies on up and falls like a Shield Rush sword.'],
+        U: ['Sword Lift', 'Tap up F to ride up on a floating sword as high as Zephyr rises. Foes above you are speared and carried up. Melee hops you off early; the sword flies on, then falls dragging them down and bursts on landing. 0.3 s recovery.'],
         M: ['Riposte', 'Neutral melee is a sword uppercut counter: 0.7 s open window, 0.7 s aftermath if nothing comes, 1 s cooldown (none after a successful counter). Counters everything except down moves. Every projectile (cores, rocks, bubbles, rockets, items) flies back (homing ones home to their owner, straight ones 2x faster); up close it ends in a stab: 1.8 s stun and bleeding.'],
         DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft.'],
         DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft.'],
