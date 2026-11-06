@@ -1356,7 +1356,10 @@ class Fighter {
                 const a = aimOf(this); if (Math.abs(a.x - this.x) > 8) this.facing = a.x > this.x ? 1 : -1;
                 if (x.fz % 3 === 0) createParticles(this.x, this.y, '#fde047', 3);
                 if (--x.fz <= 0) { x.ph = 'go'; x.t = 0; this.boltStrike(sp); }
-            } else if (x.t >= 10) { this.sx = null; this.activeMove = null; }
+            } else if (x.t >= 10) {
+                if (x.left > 0) { x.left--; x.ph = 'freeze'; x.fz = sp.freeze2 || 14; this.swingHitSet = new Set(); }
+                else { this.sx = null; this.activeMove = null; }
+            }
         }
     }
 
@@ -1669,9 +1672,9 @@ class Fighter {
         const fx0 = this.x, fy0 = this.y;
         this.jumpsLeft = Math.max(0, this.jumpsLeft - 1);
         this.y -= sp.hop || 110; this.vx = this.vy = 0; this.grounded = false;
-        this.startSx('bolt', 0, { ph: 'freeze', fz: sp.freeze || 18 });
+        this.startSx('bolt', 0, { ph: 'freeze', fz: sp.freeze || 18, left: (sp.strikes || 2) - 1 });
         this.invincibleTimer = Math.max(this.invincibleTimer, 10);
-        this.setMove('SPIRAL', (sp.freeze || 18) + 14); this.specialKind = 'SPIRAL'; this.specialDur = (sp.freeze || 18) + 14;
+        const tot = (sp.freeze || 18) + 14 + ((sp.strikes || 2) - 1) * ((sp.freeze2 || 14) + 12); this.setMove('SPIRAL', tot); this.specialKind = 'SPIRAL'; this.specialDur = tot;
         for (let i = 1; i <= 4; i++) this.ghosts.push({ x: fx0, y: fy0 + (this.y - fy0) * i / 5, alpha: 0.8 - i * 0.12, color: '#fde047' });
         fx('blink', fx0, fy0, this.x, this.y); fx('gust', this.x, this.y, 90, 0, STYLE_OF[this.char]);
         audio.playHit(false);
@@ -1691,6 +1694,7 @@ class Fighter {
         this.setMove('SPIRAL', 12);
         for (let i = 1; i <= 6; i++) this.ghosts.push({ x: fx0 + (this.x - fx0) * i / 7, y: fy0 + (this.y - fy0) * i / 7, alpha: 0.8 - i * 0.09, color: '#fde047' });
         fx('blink', fx0, fy0, this.x, this.y); fx('gust', this.x, this.y, 120, 0, STYLE_OF[this.char]);
+        zapTrails.push({ x1: fx0, y1: fy0, x2: this.x, y2: this.y, life: 30, owner: this, hit: new Set(), push: 24 }); fx('zigzag', fx0, fy0, this.x, this.y, 'volt');
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
     }
 
@@ -3583,6 +3587,10 @@ function updateZapTrails() {
             const tt = Math.max(0, Math.min(1, ((f.x - z.x1) * dx + (f.y - z.y1) * dy) / L2));
             if (Math.hypot(f.x - (z.x1 + dx * tt), f.y - (z.y1 + dy * tt)) > 46 + f.height * 0.25) continue;
             z.hit.add(f);
+            if (z.push) {                                                // Lightning Rod trail: only shoves them the way the bolt travelled
+                const L = Math.sqrt(L2); f.interrupt(); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.lastHitBy = z.owner; f.lastHitT = 0;
+                S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
+            }
             f.interrupt(); f.clashStunTimer = 42; f.vx = 0; f.vy = Math.min(f.vy, 0); f.invertT = 42 + 120; f.lastHitBy = z.owner; f.lastHitT = 0;
             S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(f.x, f.y, '#60a5fa', 16); fx('hit', f.x, f.y, 12, 0);
         }
