@@ -3608,12 +3608,12 @@ function updateDrops() {
                 if (d.hitUp.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
                 if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                     d.hitUp.add(t);
-                    if (interaction('SPIRAL', t, true) === 'hit') launch(d.owner, t, { damage: 0, bkb: 6.5, kbg: 0.35, angle: Math.random() < 0.5 ? -0.3 : Math.PI + 0.3, x: d.x, y: d.y });
+                    if (interaction('SPIRAL', t, true) === 'hit') { t.interrupt(); t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2); }      // speared on the way up: it carries them along
                 }
             }
         } else d.y += d.v;
         if (!up) for (const t of foesOf(d.owner)) {                      // anyone in the path gets hit once
-            if (d.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+            if (d.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0 || (d.caught && d.caught.includes(t))) continue;
             if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                 d.hit.add(t);
                 const res = interaction('SPIRAL', t, true);
@@ -3624,9 +3624,9 @@ function updateDrops() {
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             }
         }
-        if (d.caught && d.caught.length && !up) for (const t of d.caught) {                // caught foes ride the sword down
+        if (d.caught && d.caught.length) for (const t of d.caught) {                // caught foes ride the sword up and then down
             if (!isAlive(t)) continue;
-            t.x += (d.x - t.x) * 0.6; t.y = d.y + d.h * 0.22; t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y;
+            t.x += (d.x - t.x) * 0.6; t.y = d.y + (up ? 0 : d.h * 0.22); t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y;
         }
         if (d.y >= d.yl && !up) {
             drops.splice(i, 1);
