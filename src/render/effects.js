@@ -460,6 +460,20 @@ export class Effects {
                     this.sparks(to, '#ede9fe', 14, 280, 0.32);
                     break;
                 }
+                case 'zigzag': {         // Volt's lingering lightning trail from pos to (a, b)
+                    const to = new THREE.Vector3(wx(e.a), wy(e.b), 0), dir = to.clone().sub(pos), len = dir.length() || 1, nrm = new THREE.Vector3(-dir.y, dir.x, 0).normalize();
+                    const n = Math.max(5, Math.round(len / 38)), pts = [];
+                    for (let i = 0; i <= n; i++) pts.push(pos.clone().lerp(to, i / n).addScaledVector(nrm, i === 0 || i === n ? 0 : (i % 2 ? 1 : -1) * (16 + Math.random() * 12)));
+                    const g = new THREE.Group(), mats = [];
+                    for (let i = 0; i < n; i++) for (const [w, col, mul] of [[9, '#2563eb', 1.6], [3.5, '#e0f2fe', 2.4]]) {
+                        const a0 = pts[i], b0 = pts[i + 1], seg = b0.clone().sub(a0), m = new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(mul), transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+                        const mesh = new THREE.Mesh(new THREE.BoxGeometry(seg.length() + w * 0.6, w, w), m); mesh.position.copy(a0).add(b0).multiplyScalar(0.5); mesh.rotation.z = Math.atan2(seg.y, seg.x); g.add(mesh); mats.push(m);
+                    }
+                    g.renderOrder = 6; this.scene.add(g);
+                    this.timed.push({ obj: g, t: 0, dur: 1.1, step: (u) => { const fl = 0.65 + 0.35 * Math.random(); for (const m of mats) m.opacity = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * fl; }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } });
+                    for (let i = 0; i <= n; i++) this.sparks(pts[i], '#93c5fd', 3, 160, 0.4);
+                    break;
+                }
                 case 'spiral':
                     this.ring(pos, 10, 90, 0.26, '#8b5cf6', 'screen');
                     this.sparks(pos, '#c4b5fd', 8, 240, 0.3);

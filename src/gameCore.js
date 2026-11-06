@@ -30,6 +30,7 @@ export const fxEvents = [];
 export const orbs = [];                    // CBG Core projectiles
 export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, life, owner, pull }
 let orbSerial = 0;
+const zapTrails = [];               // Volt's Thunder Dash: lingering zigzag lightning that stuns and scrambles the controls of anyone who touches it (host only)
 const pillars = [];                  // Ember's twin fire pillars (host only)
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 72;              // Ember's rolling charge: 1.2 s to full
@@ -453,6 +454,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
+        this.invertT = 0;                    // frames of inverted controls left (Volt's lightning trail)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -513,7 +515,7 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
-        this.dizzyTimer = 0;
+        this.dizzyTimer = 0; this.invertT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
@@ -569,6 +571,7 @@ class Fighter {
         }
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
+        if (this.invertT > 0) this.invertT--;
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
@@ -946,7 +949,7 @@ class Fighter {
 
     // ------------------------------------------------------------ F specials: per-frame state
     updateSpecials() {
-        if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + (this.char === 'tide' && this.chargeFrames >= HOLD_TO_CORE ? 2 : 1));   // Tide's Core charges 2x faster
+        if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + (this.char === 'tide' && this.chargeFrames >= HOLD_TO_CORE ? 2 : this.char === 'volt' && this.chargeFrames >= HOLD_TO_CORE ? 2.75 : 1));   // Tide's Core twice as fast, Volt's fully charged 0.7 s after pressing charges 2x faster
         if (this.fActive && !this.sx && spec(this.char, 'S').kind === 'roll' && this.cd.BLINK <= 0 && this.canRollStart()) {
             const dr = this === p1 && !(S.online === 'guest') ? mouse.direction : this.fDirPress;
             if (dr === 'SIDE_LEFT' || dr === 'SIDE_RIGHT') { if (!this.grounded) this.airSpecials++; this.startRollCharge(dr === 'SIDE_LEFT' ? -1 : 1); }
@@ -1733,6 +1736,7 @@ class Fighter {
             this.ghosts.push({ x: fromX + (this.x - fromX) * i / 7, y: fromY, alpha: 0.75 - i * 0.08, color: '#a78bfa' });
         }
         fx('blink', fromX, fromY, this.x, this.y);
+        if (sp.trail) { zapTrails.push({ x1: fromX, y1: fromY, x2: this.x, y2: this.y, life: 66, owner: this, hit: new Set() }); fx('zigzag', fromX, fromY, this.x, this.y, 'volt'); }
         this.attackKind = d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT';
         this.attackTimer = ATTACK_FRAMES;
         this.attackSerial++;
@@ -2959,7 +2963,8 @@ function aimOf(f) {
         if (f.x < STAGE.x - 20 || f.x > STAGE.x + STAGE.width + 20 || f.y > STAGE.y) return { x: cx, y: STAGE.y - 220 };
         const foe = nearestOf(f, foesOf(f)); return foe ? { x: foe.x, y: foe.y } : { x: cx, y: STAGE.y - 300 };
     }
-    return f.remoteAim ? f.remoteAim : { x: mouse.worldX, y: mouse.worldY };
+    const a = f.remoteAim ? f.remoteAim : { x: mouse.worldX, y: mouse.worldY };
+    return f.invertT > 0 ? { x: 2 * f.x - a.x, y: 2 * f.y - a.y } : a;       // inverted: the aim points the other way
 }
 /** who this fighter can hurt: everyone still in the match, except teammates in team matches */
 const foesOf = (f) => fighters.filter(o => o !== f && isAlive(o) && !(S.match && S.match.teams && f.team && o.team === f.team));
@@ -3345,6 +3350,7 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
+    if (defender.invertT > 0 && attacker && attacker !== defender) { hb = { ...hb, damage: (hb.damage || 0) * 1.4, bkb: 0, kbg: 0 }; defender.invertT = 0; }   // hit while scrambled: 1.4x damage, no knockback, the scramble ends
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll') {   // rolling Ember: takes 90% damage, no knockback, the roll just PAUSES 0.5 s (the roll's timer pauses too) and then carries on
         defender.damage += hb.damage * 0.9; defender.lastHitBy = attacker; defender.lastHitT = 0; defender.sx.pause = 30;
         S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(defender.x, defender.y, '#fb923c', 8); fx('hit', defender.x, defender.y, 10, hb.angle);
@@ -3566,6 +3572,22 @@ function updateDrops() {
 }
 
 /** Ember's twin fire pillars: a direct hit deals damage and sets you on fire; standing in the flames only burns */
+/** Volt's lightning trail: whoever touches it is stunned 0.7 s and has inverted controls for 2 s after */
+function updateZapTrails() {
+    for (let i = zapTrails.length - 1; i >= 0; i--) {
+        const z = zapTrails[i];
+        if (--z.life <= 0 || !z.owner) { zapTrails.splice(i, 1); continue; }
+        const dx = z.x2 - z.x1, dy = z.y2 - z.y1, L2 = dx * dx + dy * dy || 1;
+        for (const f of foesOf(z.owner)) {
+            if (z.hit.has(f) || f.invincibleTimer > 0 || f.stocks <= 0 || f.out) continue;
+            const tt = Math.max(0, Math.min(1, ((f.x - z.x1) * dx + (f.y - z.y1) * dy) / L2));
+            if (Math.hypot(f.x - (z.x1 + dx * tt), f.y - (z.y1 + dy * tt)) > 46 + f.height * 0.25) continue;
+            z.hit.add(f);
+            f.interrupt(); f.clashStunTimer = 42; f.vx = 0; f.vy = Math.min(f.vy, 0); f.invertT = 42 + 120; f.lastHitBy = z.owner; f.lastHitT = 0;
+            S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(f.x, f.y, '#60a5fa', 16); fx('hit', f.x, f.y, 12, 0);
+        }
+    }
+}
 function updatePillars() {
     for (let i = pillars.length - 1; i >= 0; i--) {
         const p = pillars[i];
@@ -4018,7 +4040,7 @@ export function startDemo(map, chars) {
         f.startX = STAGE.x + STAGE.width * (0.3 + 0.4 * i); f.startY = STAGE.y - 120;
         f.reset(true); f.shieldHold = 0; f.remoteAim = null; f.maxJumps = charOf(f.char).jumps; f.jumpsLeft = f.maxJumps;
     });
-    orbs.length = 0; drops.length = 0; pillars.length = 0; whirlpools.length = 0; items.length = 0;
+    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0; whirlpools.length = 0; items.length = 0;
     return { map: m, chars: cs };
 }
 
@@ -4052,7 +4074,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
-    orbs.length = 0; drops.length = 0; pillars.length = 0;
+    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0;
     whirlpools.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
@@ -4216,6 +4238,7 @@ function aiWalk(f) {
 
 /** walking / shielding for one fighter from a held-input state ({left,right,shield,drop}) */
 function drive(f, h) {
+    if (f.invertT > 0) h = { ...h, left: h.right, right: h.left };       // scrambled by Volt's lightning trail: left and right are swapped
     const free = f.hitstun === 0 && f.dizzyTimer === 0 && f.clashStunTimer === 0 && !f.grabHolding &&
         !f.isRolling && f.freezeTimer === 0;
     if (free) {
@@ -4466,7 +4489,7 @@ export function step() {
             f.update();
         }
         updateWhirlpools();
-        updateOrbs(); updateDrops(); updatePillars();
+        updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
         const live2 = fighters.filter(isAlive);
         for (const a of live2) for (const b of live2) {
@@ -4486,7 +4509,7 @@ export function step() {
         p2.update();
 
         updateWhirlpools();
-        updateOrbs(); updateDrops(); updatePillars();
+        updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
 
         checkCombatCollisions(p1, p2);
