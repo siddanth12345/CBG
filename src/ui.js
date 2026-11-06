@@ -1,4 +1,5 @@
 // Tutorial + controls settings. Both are plain DOM modals built here; styles live in ui/style.css (.lm-*).
+import { charOf, getMyChar, brief } from './characters.js';
 import { S } from './gameCore.js';
 import { Guide } from './guide.js';
 import { getLayout, setMode } from './layout.js';
@@ -15,9 +16,9 @@ const PAGES = [
     {
         title: 'The Goal',
         html: (k) => `
-            <div class="lm-guidecta"><div><b>Want to learn by doing?</b><br><span>Play the tutorial inside the map: every step asks you to do one thing, and moves on by itself when you do it. <kbd>Backspace</kbd> goes back a step, <kbd>Enter</kbd> skips one, <kbd>${k('fullscreen')}</kbd> toggles fullscreen.</span></div>
+            <div class="lm-guidecta"><div><b>Want to learn by doing?</b><br><span>Play the character based tutorial inside the map: every step asks you to do one thing, and moves on by itself when you do it. <kbd>Backspace</kbd> goes back a step, <kbd>Enter</kbd> skips one, <kbd>${k('fullscreen')}</kbd> toggles fullscreen.</span></div>
                 <button class="lm-btn" data-start-guide>▶ Start guided tutorial</button></div>
-            <p class="lm-lead">Knock the bot off the stage. Reach <b>250%</b> damage and you are KO'd instantly. Everyone has 3 stocks (custom matches can use a 1 to 10 minute kill timer instead).</p>
+            <p class="lm-lead">You are <b>${esc(charOf(getMyChar()).name)}</b>. Knock the bot off the stage. Reach <b>250%</b> damage and you are KO'd instantly. Everyone has 3 stocks (custom matches can use a 1 to 10 minute kill timer instead).</p>
             <div class="lm-grid">
                 <div class="lm-card"><h4>Aim matrix</h4>
                     <p>Your mouse is measured <b>from your fighter</b>. Inside the small centre circle it reads <b>NEUTRAL</b>; outside it reads <b>UP / DOWN / SIDE</b>. The matrix at the bottom of the screen shows what you are aiming. Hold <kbd>${k('neutral')}</kbd> to force NEUTRAL without moving the mouse.</p></div>
@@ -49,9 +50,9 @@ const PAGES = [
         html: (k) => `
             <div class="lm-grid">
                 <div class="lm-card"><h4>Melee · PC <kbd>${k('attack')}</kbd> · Mobile: aim grid</h4>
-                    <p>A slash chosen by your aim (PC: mouse position; mobile: which arrow you tap). The hitbox is only live during the swing. <b>Hold</b> a side, up or down melee to charge it (1.7 s, you glow white, then glisten): up to +30% damage and knockback on release.</p>
+                    <p>You are <b>${esc(charOf(getMyChar()).name)}</b>. Aim picks the swing (PC: mouse; mobile: which arrow). The hit only lasts during the swing. <b>Hold</b> side, up, or down to charge (1.7 s) for up to +30% damage and knockback. Neutral cannot be charged. Melee hitboxes are 1.3× bigger than before.</p>
                     <table class="lm-table"><tr><th>Aim</th><th>Move</th></tr>
-                        <tr><td>Neutral</td><td>Sword spin all the way around (ground or air), knocks up only; can't be charged</td></tr><tr><td>Side</td><td>Side slash</td></tr>
+                        <tr><td>Neutral</td><td>Neutral melee all the way around (ground or air), knocks up only; can't be charged</td></tr><tr><td>Side</td><td>Side slash</td></tr>
                         <tr><td>Up</td><td>Up slash</td></tr><tr><td>Down</td><td>Down strike (launches on the ground, spikes in the air)</td></tr></table></div>
                 <div class="lm-card"><h4>Grab · PC <kbd>${k('grab')}</kbd> · Mobile: Grab button</h4>
                     <p>PC: aim with the mouse, press grab. Mobile: <b>drag the Grab button</b> toward your target and <b>release</b> (it snaps back; a grab only fires once aimed and released). Grab <b>beats shield</b>, loses to nearly everything else, and its knockback is 0.7x a melee and grows with damage. It also picks up and throws items.</p></div>
@@ -61,20 +62,24 @@ const PAGES = [
     },
     {
         title: 'F Specials',
-        html: (k) => `
-            <p class="lm-lead"><kbd>${k('special')}</kbd> is your special. <b>Hold it</b> (mobile: hold the red centre, and you can drag it to aim while it charges) (or aim neutral) and you charge a CBG Core. <b>Tap it</b> (released within 0.5 s) with your aim off-centre and you get a variant for that direction.</p>
+        html: (k) => {
+            const c = charOf(getMyChar()), b = brief(c.id);
+            const row = (aim, slot) => `<tr><td>${aim}</td><td><b>${esc(b[slot][0])}</b></td><td>${b[slot][1]}</td></tr>`;
+            return `
+            <p class="lm-lead">This page is for <b>${esc(c.name)}</b>. <kbd>${k('special')}</kbd> is F. <b>Hold it</b> (mobile: hold the red centre and drag to aim) for the neutral special. <b>Tap it</b> while aiming side, up, or down for that special.</p>
             <table class="lm-table lm-wide">
                 <tr><th>Aim</th><th>Move</th><th>What it does</th></tr>
-                <tr><td>Neutral / hold</td><td><b>CBG Core</b></td><td>Charge up to 1.05 s. Release fires a slowish orb in a straight line at your cursor (no homing). Full charge: bigger orb, more damage, bigger explosion, and it turns <b>purple</b> (blue fighter) or <b>orange</b> (red fighter). Walk at 1.5x speed while charging.</td></tr>
-                <tr><td>Side</td><td><b>Blink Slash</b></td><td>Teleport 220 units and slash. Great for edgeguarding.</td></tr>
-                <tr><td>Up</td><td><b>Rising Spiral</b></td><td>Multi-hit rise for recovery. Costs no jumps. Extra lag if you miss the stage.</td></tr>
-                <tr><td>Down, on the ground</td><td><b>Suplex</b></td><td>A grab move: dash forward (it <b>homes in</b> on an opponent within 0.45 of the stage length; with nobody in range it is a blank dash), and if you catch them you carry them up and slam them down for 14 damage. It is a grab, so everything that beats a grab beats it (and it beats shields). Reaching the top of the map cancels it. No cooldown or get-up afterwards.</td></tr>
-                <tr><td>Down, in the air</td><td><b>Headbutt</b></td><td>Dive down hitting several times on the way (2 damage each, same size as the Spiral), then slam the floor for 15 damage and a stun wave 1/8 of the stage wide.</td></tr>
+                ${row('Neutral / hold', 'N')}
+                ${row('Side', 'S')}
+                ${row('Up', 'U')}
+                ${row('Down, on the ground', 'DG')}
+                ${row('Down, in the air', 'DA')}
             </table>
             <div class="lm-grid">
-                <div class="lm-card"><h4>Air limit</h4><p>Only <b>2 F moves in the air</b>. Touch the ground to get them back (the ledge does not). The HUD shows <i>AIR F</i>.</p></div>
-                <div class="lm-card"><h4>Cooldowns &amp; recovery</h4><p>Core, Blink, Spiral and Headbutt each have their own cooldown (the Suplex has none). After a Headbutt you stay frozen for 0.3 s while you get up (not a stun, no damage).</p></div>
-            </div>`,
+                <div class="lm-card"><h4>Air limit</h4><p>Only <b>2 F moves in the air</b>. Touch the ground to get them back (a ledge does not). The HUD shows <i>AIR F</i>.</p></div>
+                <div class="lm-card"><h4>After a move</h4><p>You wait <b>0.7 s</b> before the next move. You can still walk, and jump again after <b>0.3 s</b>. Each special has its own cooldown.</p></div>
+            </div>`;
+        },
     },
     {
         title: 'Shield & Roll',
@@ -91,18 +96,21 @@ const PAGES = [
     },
     {
         title: 'Counters',
-        html: () => `
-            <p class="lm-lead">When two moves meet, the one that <b>counters</b> the other wins and the loser is stunned. If both counter each other they clash and bounce apart.</p>
+        html: () => {
+            const c = charOf(getMyChar()), b = brief(c.id);
+            return `
+            <p class="lm-lead"><b>${esc(c.name)}</b>: if two moves meet, the one that counters wins and the other is stunned. If both counter each other, they clash and bounce.</p>
             <table class="lm-table lm-wide">
-                <tr><th>Move</th><th>Counters</th><th>Loses to</th></tr>
-                <tr><td><b>Shield</b></td><td>Everything except Grab</td><td>Grab</td></tr>
-                <tr><td><b>Grab / Suplex</b></td><td>Shield, Headbutt</td><td>Every other active move</td></tr>
-                <tr><td><b>Headbutt</b></td><td>Everything except Grab and Shield</td><td>Grab, Shield (clashes with J and Core)</td></tr>
-                <tr><td><b>J attack</b></td><td>Everything except Shield</td><td>Shield (clashes with Headbutt and J)</td></tr>
-                <tr><td><b>Core</b></td><td>Blink, Spiral, Headbutt, Grab (and the Suplex)</td><td>Shield, J, Headbutt</td></tr>
-                <tr><td><b>Blink, Spiral</b></td><td>Grab</td><td>Shield, J, Headbutt (and Core, for the F moves)</td></tr>
+                <tr><th>Move</th><th>Beats</th><th>Loses to</th></tr>
+                <tr><td><b>Shield</b></td><td>Most hits, including a spare homing rocket</td><td>Grab</td></tr>
+                <tr><td><b>Grab</b></td><td>Shield, and ${esc(b.U[0])} while it is the dash (not its rockets)</td><td>Melee, side, up, down, and cores</td></tr>
+                <tr><td><b>Melee</b></td><td>Grab, a charging core, and ${esc(b.U[0])}. Hitbox is 1.3× bigger.</td><td>Shield</td></tr>
+                <tr><td><b>${esc(b.S[0])}</b></td><td>Grab, charging cores, and ${esc(b.U[0])}</td><td>Shield and melee</td></tr>
+                <tr><td><b>${esc(b.N[0])}</b></td><td>Grab and most dashes while it is live</td><td>Shield, melee, and a side move that beats cores</td></tr>
+                <tr><td><b>Up / down F</b></td><td>Grab, and ${esc(b.U[0])} during the dash</td><td>Shield and melee</td></tr>
             </table>
-            <p class="lm-note">A move only counters while it is "live": a J attack during its swing, a Core while it is being cast, and so on.</p>`,
+            <p class="lm-note">A move only counters while it is live. Rockets fired after a missed ${esc(b.U[0])} are blocked by shield.</p>`;
+        },
     },
     {
         title: 'The Bots',
@@ -152,8 +160,8 @@ export class UI {
         this.tut = document.createElement('div');
         this.tut.className = 'lm-modal lm-hidden';
         this.tut.innerHTML = `
-            <div class="lm-panel" role="dialog" aria-label="How to play">
-                <div class="lm-head"><h2>How to play</h2><button class="lm-x" data-close aria-label="Close">✕</button></div>
+            <div class="lm-panel" role="dialog" aria-label="Character Based Tutorial">
+                <div class="lm-head"><h2>Character Based Tutorial</h2><button class="lm-x" data-close aria-label="Close">✕</button></div>
                 <div class="lm-tabs" role="tablist"></div>
                 <div class="lm-body"></div>
                 <div class="lm-foot">
@@ -201,6 +209,7 @@ export class UI {
         // key / mouse capture for rebinding (capture phase: it runs before the game's own handlers)
         window.addEventListener('keydown', (e) => {
             if (this.capturing) { e.preventDefault(); e.stopImmediatePropagation(); this.finishCapture(e.code); return; }
+            if (this.set && !this.set.classList.contains('lm-hidden') && bindings.tutorial === e.code && this.guide.active) { e.preventDefault(); e.stopImmediatePropagation(); this.closeAll(); return; }
             if (e.code === 'Escape' && this.isOpen()) { e.preventDefault(); this.closeAll(); }
         }, true);
         window.addEventListener('mousedown', (e) => {
@@ -273,6 +282,7 @@ export class UI {
             <h4 class="lm-group">PC controls (keyboard &amp; mouse)</h4>`;
         group = 'PC';
         for (const a of ACTIONS) {
+            if (a.id === 'tutorial' && touchMode()) continue;   // tutorial key is a PC control
             if (a.group !== group) { group = a.group; html += `<h4 class="lm-group">${esc(group)}</h4>`; }
             html += `<div class="lm-row"><span>${esc(a.label)}</span><button class="lm-key" data-action="${a.id}">${esc(codeName(bindings[a.id]))}</button></div>`;
         }

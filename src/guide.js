@@ -4,8 +4,7 @@ import { S, p1, orbs, startMatchSequence } from './gameCore.js';
 import { keyLabel } from './controls.js';
 import { touchMode } from './layout.js';
 import { items, spawnItem } from './gameCore.js';
-import { charOf } from './characters.js';
-import { spec } from './specials.js';
+import { charOf, brief } from './characters.js';
 
 const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const K = (a) => `<kbd>${esc(keyLabel(a))}</kbd>`;
@@ -35,8 +34,8 @@ const STEPS = [
     },
     {
         title: 'Melee: all four aims',
-        text: (m) => m ? `Use the aim grid: <b>tap the red centre</b> for the neutral sword spin, and <b>tap the side, up and down arrows</b> for those slashes.`
-            : `Attack with ${K('attack')} while aiming <b>neutral</b> (small centre circle, or hold ${K('neutral')}: a sword spin that launches up), <b>side</b>, <b>up</b> and <b>down</b>. The aim matrix at the bottom shows your aim.`,
+        text: (m) => m ? `Use the aim grid: <b>tap the red centre</b> for the neutral melee, and <b>tap the side, up and down arrows</b> for those slashes.`
+            : `Attack with ${K('attack')} while aiming <b>neutral</b> (small centre circle, or hold ${K('neutral')}: a neutral swing that launches up), <b>side</b>, <b>up</b> and <b>down</b>. The aim matrix at the bottom shows your aim.`,
         init: () => ({ got: new Set(), serial: p1.attackSerial }),
         check(st) {
             if (p1.attackSerial !== st.serial) {
@@ -64,7 +63,7 @@ const STEPS = [
     },
     {
         title: 'Pick up an item',
-        text: (m) => `A ball just dropped in. Walk to it and ${m ? '<b>aim a grab</b> at it' : 'grab it with ' + K('grab')}. Items are picked up and used with the grab (balloons use Jump).`,
+        text: (m) => `A ball drops in and falls with gravity. Walk to it and ${m ? '<b>aim a grab</b> at it' : 'grab it with ' + K('grab')}.`,
         init: () => { spawnItem('BALL'); const b = items[items.length - 1]; b.x = p1.x + (p1.facing || 1) * 260; return {}; },
         check: () => !!p1.heldItem,
     },
@@ -87,14 +86,14 @@ const STEPS = [
         check: () => p1.isRolling,
     },
     {
-        title: 'CBG Core',
-        text: (m) => m ? `<b>Hold the red centre</b> to charge a CBG Core. While it charges you can <b>drag the red button</b> to aim it, then release to fire.` : `Hold ${K('special')} to charge a CBG Core, then release. It flies straight along your aim (no homing).`,
+        title: 'Neutral special',
+        text: (m) => { const sp = brief(p1.char).N; return (m ? `<b>Hold the red centre</b> to charge <b>${esc(sp[0])}</b>. Drag it to aim, then release.` : `Hold ${K('special')} to charge <b>${esc(sp[0])}</b>, then release.`) + ' ' + sp[1]; },
         init: () => ({}),
         check: () => p1.specialKind === 'CORE',
     },
     {
-        title: 'Full-charge Core',
-        text: (m) => `Hold ${m ? 'the red centre' : K('special')} for about a second until the orb turns <b>purple</b>, then release. Bigger, stronger, bigger explosion.`,
+        title: 'Full charge',
+        text: (m) => { const sp = brief(p1.char).N; return `Keep holding ${m ? 'the red centre' : K('special')} until <b>${esc(sp[0])}</b> is fully charged, then release.`; },
         init: () => ({ seen: new WeakSet(orbs.filter(o => o.owner === p1)) }),
         check(st) {
             for (const o of orbs) {
@@ -107,27 +106,33 @@ const STEPS = [
     },
     {
         title: 'Side special',
-        text: (m) => { const sp = spec(p1.char, 'S'); return `${m ? '<b>Drag the red centre onto the side arrow</b> and release' : 'Aim to the <b>side</b>, then <b>tap</b> ' + K('special') + ' (do not hold it)'}. Your side special is <b>${sp.name}</b>: ${sp.desc}`; },
+        text: (m) => { const sp = brief(p1.char).S; return `${m ? '<b>Drag the red centre onto the side arrow</b> and release' : 'Aim <b>side</b> and tap ' + K('special')}. <b>${esc(charOf(p1.char).name)}</b> — <b>${esc(sp[0])}</b>: ${sp[1]}`; },
         init: () => ({}),
         check: () => p1.cd.BLINK > 0 || !!p1.sx || !!(p1.activeMove && p1.activeMove.type === 'BLINK'),
     },
     {
         title: 'Up special',
-        text: (m) => { const sp = spec(p1.char, 'U'); return `${m ? '<b>Drag the red centre onto the up arrow</b>' : 'Aim <b>up</b> and tap ' + K('special')}. Your up special is <b>${sp.name}</b>: ${sp.desc}`; },
+        text: (m) => { const sp = brief(p1.char).U; return `${m ? '<b>Drag the red centre onto the up arrow</b>' : 'Aim <b>up</b> and tap ' + K('special')}. <b>${esc(charOf(p1.char).name)}</b> — <b>${esc(sp[0])}</b>: ${sp[1]}`; },
         init: () => ({}),
         check: () => p1.spiralT > 0 || !!p1.sx || p1.cd.SPIRAL > 0,
     },
     {
         title: 'Ground down special',
-        text: (m) => { const sp = spec(p1.char, 'DG'); return `Stand on the ground, ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')}. Your ground down special is <b>${sp.name}</b>: ${sp.desc}`; },
+        text: (m) => { const sp = brief(p1.char).DG; return `Stand on the ground. ${m ? '<b>Drag the red centre onto the down arrow</b>' : 'Aim <b>down</b> and tap ' + K('special')}. <b>${esc(charOf(p1.char).name)}</b> — <b>${esc(sp[0])}</b>: ${sp[1]}`; },
         init: () => ({}),
         check: () => p1.suplexT > 0 || !!p1.sx || p1.cd.SUPLEX > 0,
     },
     {
         title: 'Air down special',
-        text: (m) => { const sp = spec(p1.char, 'DA'); return `Jump, then ${m ? '<b>drag the red centre onto the down arrow</b>' : 'aim <b>down</b> and tap ' + K('special')} in the air. Your air down special is <b>${sp.name}</b>: ${sp.desc}`; },
+        text: (m) => { const sp = brief(p1.char).DA; return `Jump first. ${m ? '<b>Drag the red centre onto the down arrow</b>' : 'Aim <b>down</b> and tap ' + K('special')} in the air. <b>${esc(charOf(p1.char).name)}</b> — <b>${esc(sp[0])}</b>: ${sp[1]}`; },
         init: () => ({}),
         check: () => p1.diving || p1.cd.HEADBUTT > 0,
+    },
+    {
+        title: 'Open settings',
+        text: () => `Press ${K('settings')} to open Settings. You can change controls there. Press ${K('tutorial')} to return to the tutorial, or Done / Esc.`,
+        init: () => ({ opened: false }),
+        check: (st) => st.opened,
     },
 ];
 
@@ -139,6 +144,7 @@ export class Guide {
         this.st = null;
         this.doneAt = 0;
         this.finished = false;
+        this.root = root;
 
         this.el = document.createElement('div');
         this.el.className = 'lm-guide lm-hidden';
@@ -147,9 +153,12 @@ export class Guide {
             <div class="lm-g-title"></div>
             <div class="lm-g-text"></div>
             <div class="lm-g-prog"></div>
+            <div class="lm-g-nav"><button type="button" data-g-back>← Back</button><button type="button" data-g-skip>Skip →</button></div>
             <div class="lm-g-keys"><kbd>Backspace</kbd> back <span>·</span> <kbd>Enter</kbd> skip <span>·</span> <kbd>Esc</kbd> exit</div>`;
         root.appendChild(this.el);
         this.el.querySelector('[data-g-exit]').addEventListener('click', (e) => { e.stopPropagation(); this.stop(); });
+        this.el.querySelector('[data-g-back]').addEventListener('click', (e) => { e.stopPropagation(); if (this.active) this.go(this.i - 1); });
+        this.el.querySelector('[data-g-skip]').addEventListener('click', (e) => { e.stopPropagation(); if (!this.active) return; if (this.finished) this.stop(); else this.go(this.i + 1); });
 
         window.addEventListener('keydown', (e) => {
             if (!this.active || this.isBlocked()) return;
@@ -159,24 +168,29 @@ export class Guide {
         }, true);
     }
 
-    start() {
+    start(at = 0) {
         this.active = true;
+        this.root.classList.add('tutorial-layout-active');
         this.finished = false;
         this.i = 0;
         this.st = null;
+        this.doneAt = 0;
         this.el.classList.remove('lm-hidden');
         startMatchSequence('training');          // a real training match: you, plus a dummy to hit
-        this.render();
+        const n = Math.max(0, Math.min(STEPS.length - 1, at | 0));
+        if (n > 0) this.go(n);
+        else this.render();
     }
     stop() {
         this.active = false;
+        this.root.classList.remove('tutorial-layout-active');
         this.el.classList.add('lm-hidden');
     }
 
     go(i) {
         if (i < 0) i = 0;
         this.doneAt = 0;
-        if (i >= STEPS.length) { this.finished = true; this.i = STEPS.length; }
+        if (i >= STEPS.length) { this.finished = true; this.i = STEPS.length; this.root.classList.remove('tutorial-layout-active'); }
         else { this.finished = false; this.i = i; }
         this.st = null;
         this.render();
@@ -189,7 +203,7 @@ export class Guide {
             set('.lm-g-step', 'DONE');
             bar.style.width = '100%';
             set('.lm-g-title', 'You know everything');
-            set('.lm-g-text', `Keep practising on the dummy, or press ${'<kbd>Enter</kbd>'} to close this. Reopen the tutorial any time with ${K('tutorial')}.`);
+            set('.lm-g-text', `Keep practising on the dummy, or press Skip / Enter to close this. Reopen it any time with ${K('tutorial')}.`);
             set('.lm-g-prog', '');
             this.el.classList.remove('ok');
             return;
@@ -203,6 +217,8 @@ export class Guide {
         this.el.classList.remove('ok');
     }
 
+    markSettingsOpened() { if (this.active && this.i === 16) { this.st = this.st || STEPS[this.i].init(); this.st.opened = true; } }
+
     /** called every frame by main.js */
     tick() {
         if (!this.active) return;
@@ -214,6 +230,7 @@ export class Guide {
             return;
         }
         if (!this.st) this.st = s.init();
+        if (this.i >= 10 && this.i < 16) { if (s.progress) this.el.querySelector('.lm-g-prog').textContent = s.progress(this.st); return; }
         if (s.check(this.st)) {
             this.doneAt = performance.now();
             this.el.classList.add('ok');

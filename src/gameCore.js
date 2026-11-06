@@ -4376,9 +4376,11 @@ export function step() {
 
         updateWhirlpools();
         updateOrbs(); updateDrops(); updatePillars();
+        updateItems();
 
         checkCombatCollisions(p1, p2);
         checkCombatCollisions(p2, p1);
+        itemInteractions();
     }
     if (S.online === 'host' && NETHOOK.send && (++netTick % 2) === 0) NETHOOK.send(snapshot());
 

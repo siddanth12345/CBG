@@ -1,4 +1,4 @@
-// BUILD_STAMP 20261103ac
+// BUILD_STAMP 20261103ad
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
 import {
@@ -21,8 +21,9 @@ import { joinQueue } from './net/queue.js';
 import { ACC, initAccount, setProfileListener, recordResult } from './account.js';
 import { AccountUI, Toasts } from './accountUI.js';
 import { BorgsUI } from './borgsUI.js';
-import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, sendBorgRequest } from './net/inbox.js';
-import { isBorg, getRequests, onBorgs } from './friends.js';
+import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, declineRequest, sendBorgRequest } from './net/inbox.js';
+import { isBorg, isSelf, getRequests, onBorgs } from './friends.js';
+import { touchMode } from './layout.js';
 
 const $ = (id) => document.getElementById(id);
 const view = new View($('gameCanvas'));
@@ -36,7 +37,15 @@ ui.layoutEditor = new LayoutEditor({ root: document.body });
 const lobby = new LobbyUI({ root: $('luminary-root'), openBtn: $('onlineBtnStart') });
 const toasts = new Toasts($('luminary-root'));
 const borgsUI = new BorgsUI({ root: $('luminary-root'), toasts, onInviteSent: () => lobby.open('Invite sent. Waiting for your friend to join…') });
-const charUI = new CharUI({ root: $('luminary-root'), openBtn: $('charBtnStart') });
+const charUI = new CharUI({
+    root: $('luminary-root'), openBtn: $('charBtnStart'),
+    onTry: () => {
+        $('menuDropdown').classList.add('hidden');
+        $('startScreen').classList.add('hidden');
+        ui.closeAll();
+        ui.guide.start(10);   // step 11/16: that character's neutral special
+    },
+});
 const custom = new CustomUI({ root: $('luminary-root'), openBtn: $('customBtnStart'), openBorgs: () => borgsUI.open('borgs') });
 const trainUI = new TrainUI({ root: $('luminary-root'), isGuideActive: () => ui.guide && ui.guide.active });
 const partyUI = new PartyUI({ root: $('luminary-root'), openBtn: $('partyBtnStart'), toasts });
@@ -100,7 +109,8 @@ document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' 
 
 function doAction(action) {
     if (action === 'neutral') { if (getNfToggle()) { toggleNeutral(); updateAimMatrix(); } return; }     // "toggle neutral force" setting: press once to force neutral, again to release
-    if (action === 'tutorial') { ui.toggleTutorial(); return; }
+    if (action === 'settings') { if (!touchMode()) { if (ui.guide.active) ui.guide.markSettingsOpened(); ui.openSettings(); } return; }
+    if (action === 'tutorial') { if (!touchMode()) { if (ui.guide.active) ui.toggleTutorial(); else ui.openTutorial(); } return; }   // PC controls only
     if (action === 'fullscreen') { toggleFullscreen(); return; }
     if (S.gameState !== 'playing') return;
     if (S.online === 'guest') {                                    // the host runs the match: forward the input

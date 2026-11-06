@@ -68,6 +68,74 @@ for (const c of Object.values(CHARS)) {
     const sp = SP[c.id];
     c.specials = [['Hold F', sp.N], ['Side F', sp.S], ['Up F', sp.U], ['Down F (ground)', sp.DG], ['Down F (air)', sp.DA]].map(([k, v]) => ({ key: k, name: v.name, desc: v.desc }));
 }
+
+/** One plain sentence per F slot, for the tutorial. Covers what the move actually does. */
+export const BRIEF = {
+    luminent: {
+        N: ['CBG Core', 'Hold F to charge a straight orb. A full charge is bigger, stronger, and purple.'],
+        S: ['Blink Slash', 'Tap side F to teleport a short way and slash. Good for getting back or chasing.'],
+        U: ['Rising Spiral', 'Tap up F to rise while hitting. It does not spend a jump.'],
+        DG: ['Suplex', 'On the ground, down F dashes and grabs. If you catch someone you slam them. It beats shield.'],
+        DA: ['Headbutt', 'In the air, down F dives with small hits, then slams the floor and stuns nearby.'],
+    },
+    bulwark: {
+        N: ['Bastion Core', 'Hold F for a slow, huge orb. A full charge hits very hard (up to 22).'],
+        S: ['Shield Rush', 'Tap side F for an armoured charge. Swords fall along the path you ran.'],
+        U: ['Rocket Hoist', 'Tap up F to fly where you aim. You do not flinch, and you plough through people.'],
+        DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft.'],
+        DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft.'],
+    },
+    zephyr: {
+        N: ['Gale Burst', 'Hold F for a close wind blast. It shoves everyone around you away. No projectile.'],
+        S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back.'],
+        U: ['Updraft', 'Tap up F for a very high, very fast rise. It only shoves nearby people. No real hit.'],
+        DG: ['Cyclone Kick', 'On the ground, down F spins in place. Two pulses fling people away.'],
+        DA: ['Dive Kick', 'In the air, down F is a quick diagonal kick that bounces you back up.'],
+    },
+    ember: {
+        N: ['Flamethrower', 'Hold F and aim a stream of fire. A longer hold means a longer flame and a stronger end burst.'],
+        S: ['Fireball Roll', 'Tap side F to roll in a fireball. It carries people. Charge it: red carries, white then knocks back, blue is a faster white. It beats Core charges.'],
+        U: ['Phoenix Dash', 'Tap up F, charge in place, then fly where you aim. Grab, melee, side, up, down, and Cores beat the dash itself. The homing rockets are separate.'],
+        DG: ['Cluster Bomb', 'On the ground, down F primes you. Then a neutral melee throws sticky fire bubbles.'],
+        DA: ['Meteor Fist', 'In the air, down F is a straight punch. The floor hit stuns and does not knock back.'],
+    },
+    tide: {
+        N: ['Water Orb', 'Hold F for a big water orb that flies far and pulls people in. It charges twice as fast.'],
+        S: ['Tide Bubble', 'Tap side F for a fast bubble. It only does damage: no knockback, no stun. Press side F again to pop it early.'],
+        U: ['Geyser', 'Tap up F and a water pillar under you lifts you. People in it are stunned, not flung. Then you get a short aim boost.'],
+        DG: ['Whirlpool', 'On the ground, down F makes a pool that pulls people to the centre. No damage. Only one at a time.'],
+        DA: ['Splash Dive', 'In the air, down F plunges into a wide splash that shoves people aside.'],
+    },
+    volt: {
+        N: ['Enlightened', 'Hold F, then release to hang in the air and steer a lightning ball (mouse or joystick). It explodes when it hits, ends, or you get hit.'],
+        S: ['Thunder Dash', 'Tap side F to teleport a long way and stun whoever you land on.'],
+        U: ['Lightning Rod', 'Tap up F to vanish and zap upward along your aim. It stuns. No knockback.'],
+        DG: ['Shock Slam', 'On the ground, down F stomps and stuns everyone nearby.'],
+        DA: ['Bolt Dive', 'In the air, down F is a very fast dive with a stunning hit.'],
+    },
+    umbra: {
+        N: ['Void Orb', 'Hold F for a slow orb that bends a little toward your opponent.'],
+        S: ['Shadow Step', 'Tap side F. After a short purple startup you appear behind the nearest person and stab.'],
+        U: ['Smoke Vanish', 'Tap up F to vanish, become untouchable, and reappear high up. No attack.'],
+        DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
+        DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
+    },
+    terra: {
+        N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],
+        S: ['Boulder Roll', 'Tap side F for an armoured roll. Rocks fall along the path you rolled.'],
+        U: ['Rubble Launch', 'Tap up F for a blast under your feet, then a slow armoured lift with a hit at the top.'],
+        DG: ['Quake', 'On the ground, down F winds up (you are armoured), then a big pound. Knockback is soft.'],
+        DA: ['Landslide', 'In the air, down F is one heavy drop. Knockback is soft.'],
+    },
+};
+export const brief = (id) => BRIEF[id] || BRIEF.luminent;
+const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA']];
+for (const c of Object.values(CHARS)) {
+    const b = BRIEF[c.id];
+    if (!b) continue;
+    c.specials = SLOT_LABEL.map(([k, slot]) => ({ key: k, name: b[slot][0], desc: b[slot][1] }));
+}
+
 export const charOf = (id) => CHARS[id] || CHARS[DEFAULT_CHAR];
 
 const KEY = 'luminary.char';

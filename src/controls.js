@@ -12,7 +12,8 @@ export const ACTIONS = [
     { id: 'grab',     label: 'Grab (aim, then release)',               def: 'KeyQ',      group: 'Attacks' },
     { id: 'shield',   label: 'Shield',                    def: 'KeyE',      group: 'Defense' },
     { id: 'roll',     label: 'Roll (while shielding)',    def: 'KeyR',      group: 'Defense' },
-    { id: 'tutorial', label: 'Open the tutorial',         def: 'KeyH',      group: 'Menus' },
+    { id: 'settings',  label: 'Open settings',           def: 'KeyG',      group: 'Menus' },
+    { id: 'tutorial', label: 'Return to tutorial',       def: 'KeyH',      group: 'Menus' },
     { id: 'fullscreen', label: 'Toggle fullscreen',       def: 'Semicolon', group: 'Menus' },
     { id: 'drop',       label: 'Drop through platforms',   def: 'KeyS',      group: 'Movement' },
 ];
@@ -24,6 +25,10 @@ for (const a of ACTIONS) bindings[a.id] = a.def;
 try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (saved) for (const a of ACTIONS) if (typeof saved[a.id] === 'string' || saved[a.id] === null) bindings[a.id] = saved[a.id];
+    // Migrate the previous G tutorial binding to the new G=settings, H=tutorial layout.
+    if (bindings.tutorial === 'KeyG' && !saved.settings) bindings.tutorial = 'KeyH';
+    if (!saved.settings) bindings.settings = 'KeyG';
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(bindings)); } catch (e) { /* ignore */ }
 } catch (e) { /* no storage: defaults */ }
 
 let persister = null;
@@ -35,6 +40,7 @@ export const exportBindings = () => ({ ...bindings });
 export function importBindings(obj) {
     if (!obj) return;
     for (const a of ACTIONS) if (typeof obj[a.id] === 'string' || obj[a.id] === null) bindings[a.id] = obj[a.id];
+    if (obj.tutorial === 'KeyG' && !obj.settings) { bindings.tutorial = 'KeyH'; bindings.settings = 'KeyG'; }
     try { localStorage.setItem(STORE_KEY, JSON.stringify(bindings)); } catch (e) { /* ignore */ }
 }
 
