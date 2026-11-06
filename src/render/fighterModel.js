@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { S } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { Trail } from './trail.js';
+import { buildSword } from './swordModel.js';
 
 const BLADE_LEN = 40;
 const WHITE = new THREE.Color(0xffffff);
@@ -562,6 +563,11 @@ export class FighterModel {
             p.rK = 26; p.lK = 40; p.rHx = -8; p.lHx = -12; p.headX = 6; p.lean = 10 + Math.sin(t * 22) * 2; p.aura = 1;
             return p;
         }
+        if (f.specialKind === 'SPIRAL' && f.swordRide) {              // Bulwark's Up-F: riding the sword, no spinning
+            this.visFacing = f.facing;
+            p.dy = -2; p.rSx = 70; p.lSx = 70; p.rSz = 22; p.lSz = 22; p.rE = 8; p.lE = 8; p.rK = 6; p.lK = 6; p.headX = -2; p.aura = 0.6;
+            return p;
+        }
         if (f.specialKind === 'SPIRAL') {
             p.spin = f.specialT * 52; p.dy = -2; p.rSx = 172; p.lSx = 172; p.rSz = 8; p.lSz = 8; p.rE = 4; p.lE = 4;
             p.rHx = 8; p.lHx = -6; p.rK = 22; p.lK = 30; p.headX = -10; p.aura = 1; p.blade = 1;
@@ -780,15 +786,8 @@ export class FighterModel {
 
         // ---- Bulwark's Up-F: a floating sword under his feet carries him up
         if (f.swordRide) {
-            if (!this.rideSword) {
-                const g = new THREE.Group();
-                const m = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.7, roughness: 0.25, emissive: 0x60a5fa, emissiveIntensity: 0.7 });
-                const blade = new THREE.Mesh(new THREE.BoxGeometry(120, 9, 14), m);
-                const tip = new THREE.Mesh(new THREE.ConeGeometry(7, 26, 4), m); tip.rotation.z = -Math.PI / 2; tip.rotation.x = Math.PI / 4; tip.position.x = 72;
-                const guard = new THREE.Mesh(new THREE.BoxGeometry(8, 34, 18), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.6, roughness: 0.4 })); guard.position.x = -58;
-                g.add(blade, tip, guard); this.root.add(g); this.rideSword = g;
-            }
-            this.rideSword.visible = true; this.rideSword.position.set(0, -f.height / 2 - 4 + Math.sin(this.t * 14) * 1.5, 0); this.rideSword.scale.x = f.facing >= 0 ? 1 : -1;
+            if (!this.rideSword) { const g = buildSword(false); g.rotation.z = Math.PI; const h = new THREE.Group(); h.add(g); this.root.add(h); this.rideSword = h; }
+            this.rideSword.visible = true; this.rideSword.position.set(0, -f.height / 2 + 70 + Math.sin(this.t * 14) * 1.5, -14);        // the same sword as the falling ones, tip up, behind him; he stands on its crossguard
         } else if (this.rideSword) this.rideSword.visible = false;
 
         // ---- pose

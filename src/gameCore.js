@@ -60,6 +60,20 @@ function pushOutOfStage(f, ox, oy) {
         if (m === d[0]) f.y = T - hh; else if (m === d[1]) f.y = B + hh; else if (m === d[2]) f.x = L - hw; else f.x = R + hw;
     }
 }
+/** teleports stop at the first solid face of the stage instead of passing through it: sweep the fighter's box along the path, return the last free point */
+function clipTeleport(f, x0, y0, x1, y1) {
+    const hw = f.width / 2, hh = f.height / 2, L = STAGE.x - hw, R = STAGE.x + STAGE.width + hw, T = STAGE.y - hh, B = STAGE.y + STAGE.height + hh;
+    const dx = x1 - x0, dy = y1 - y0;
+    let t0 = 0, t1 = 1;
+    for (const [p, d, lo, hi] of [[x0, dx, L, R], [y0, dy, T, B]]) {
+        if (Math.abs(d) < 1e-9) { if (p <= lo + 0.5 || p >= hi - 0.5) return { x: x1, y: y1 }; continue; }       // parallel and outside (or sliding along a face): free
+        let a = (lo - p) / d, b = (hi - p) / d; if (a > b) { const q = a; a = b; b = q; }
+        t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+    }
+    if (t0 >= t1 || t0 <= 0 || t0 >= 1) return t0 <= 0 && t0 < t1 ? { x: x0, y: y0 } : { x: x1, y: y1 };            // misses the stage (or already inside: leave it to the push-out)
+    const t = Math.max(0, t0 - 0.002);
+    return { x: x0 + dx * t, y: y0 + dy * t };
+}
 const STAGE = {
     x: 1140,
     y: 1250,
@@ -454,7 +468,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
-        this.invertT = 0;                    // frames of inverted controls left (Volt's lightning trail)
+        this.zapN = 0; this.zapT = 0;        // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -515,7 +529,7 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
-        this.dizzyTimer = 0; this.invertT = 0;
+        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
@@ -571,7 +585,7 @@ class Fighter {
         }
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
-        if (this.invertT > 0) this.invertT--;
+        if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
@@ -1383,7 +1397,21 @@ class Fighter {
         fx('drop', px, y0, frames, yl, dr.kind);
     }
 
+    /** Bulwark lets go of his Up-F sword: it keeps rising a moment (knocking foes aside), then falls like a Shield Rush sword */
+    launchSwordFly() {
+        const v0 = 12.15, N = 16, g = 0.9, y0 = this.y + this.height / 2 - 70, px = this.x;
+        const yA = y0 - v0 * N / 2;
+        let yl = BLAST_ZONES.bottom, surface = false;
+        if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > yA && STAGE.y < yl) { yl = STAGE.y; surface = true; }
+        for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > yA && pl.y < yl) { yl = pl.y; surface = true; }
+        const stop = yl - (surface ? 70 : 0);
+        let F = N + 1; while (yA + 0.5 * g * (F - N) * (F - N) < stop && F < 400) F++;
+        drops.push({ x: px, y: y0, yl: stop, v: 0, surface, owner: this, hit: new Set(), hitUp: new Set(), kind: 'sword', dmg: 6, bkb: 8, kbg: 0.7, w: 70, h: 150, fly: { y0, yA, v0, N, g, f: 0 } });
+        fx('swordfly', px, y0, F, stop, N);
+    }
+
     endSpiral() {
+        if (this.swordRide && this.char === 'bulwark' && this.spiralT <= 0) this.launchSwordFly();
         this.activeMove = null; this.swordRide = false;
         const overStage = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
         if (!overStage) this.actionLock = Math.max(this.actionLock, 96);   // missed the stage -> extra lag
@@ -1671,7 +1699,8 @@ class Fighter {
     startBolt(sp) {
         const fx0 = this.x, fy0 = this.y;
         this.jumpsLeft = Math.max(0, this.jumpsLeft - 1);
-        this.y -= sp.hop || 110; this.vx = this.vy = 0; this.grounded = false;
+        { const c = clipTeleport(this, fx0, fy0, fx0, fy0 - (sp.hop || 110)); this.x = c.x; this.y = c.y; }
+        this.vx = this.vy = 0; this.grounded = false;
         this.startSx('bolt', 0, { ph: 'freeze', fz: sp.freeze || 18, left: (sp.strikes || 2) - 1 });
         this.invincibleTimer = Math.max(this.invincibleTimer, 10);
         const tot = (sp.freeze || 18) + 14 + ((sp.strikes || 2) - 1) * ((sp.freeze2 || 14) + 12); this.setMove('SPIRAL', tot); this.specialKind = 'SPIRAL'; this.specialDur = tot;
@@ -1684,7 +1713,7 @@ class Fighter {
         const aim = aimOf(this), fx0 = this.x, fy0 = this.y;
         let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1, reach = Math.min(d, sp.dist2 || 480);
         dx = dx / d * Math.max(reach, 60); dy = dy / d * Math.max(reach, 60);
-        this.x = Math.min(WORLD.width - 20, Math.max(20, this.x + dx)); this.y += dy;
+        { const tx = Math.min(WORLD.width - 20, Math.max(20, this.x + dx)), c = clipTeleport(this, fx0, fy0, tx, this.y + dy); this.x = c.x; this.y = c.y; dx = this.x - fx0; dy = this.y - fy0; }
         if (Math.abs(dx) > 8) this.facing = dx > 0 ? 1 : -1;
         this.vx = dx / reach * 3; this.vy = dy / reach * 3; this.grounded = false;
         this.invincibleTimer = Math.max(this.invincibleTimer, 10);
@@ -1733,6 +1762,7 @@ class Fighter {
             }
         }
         this.x = Math.min(WORLD.width - 20, Math.max(20, nx));
+        { const c = clipTeleport(this, fromX, fromY, this.x, this.y); this.x = c.x; this.y = c.y; }
         this.vy = Math.min(this.vy, 1.5);
         this.vx = d * 2;
         this.invincibleTimer = Math.max(this.invincibleTimer, 8);
@@ -2232,7 +2262,7 @@ class Fighter {
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
         if (this.isHanging) return false;    // ledge: jump only
-        if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this.spiralT = 0; this.endSpiral(); this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
+        if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
@@ -2282,7 +2312,7 @@ class Fighter {
             const v = this._stabVictim;
             if (v && isAlive(v)) { v.vx = 0; v.vy = 0; v.hitstun = Math.max(v.hitstun, 4); v.x += (this.x + this.facing * 40 - v.x) * 0.3; pushOutOfStage(v, v.x, v.y); }
             if (this.stabT === 21 && v) { createParticles(v.x, v.y - 6, '#dc2626', 16); fx('hit', v.x, v.y, 14, this.facing > 0 ? 0 : Math.PI); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true); }
-            if (--this.stabT === 0) { this._stabVictim = null; this.riposteCd = 60; }
+            if (--this.stabT === 0) { this._stabVictim = null; }
         } else if (this.riposteCd > 0) this.riposteCd--;
     }
     /** Ember's cluster bomb: three sticky fire bubbles (middle one on the aim, two 22 degrees either side) */
@@ -2968,7 +2998,7 @@ function aimOf(f) {
         const foe = nearestOf(f, foesOf(f)); return foe ? { x: foe.x, y: foe.y } : { x: cx, y: STAGE.y - 300 };
     }
     const a = f.remoteAim ? f.remoteAim : { x: mouse.worldX, y: mouse.worldY };
-    return f.invertT > 0 ? { x: 2 * f.x - a.x, y: 2 * f.y - a.y } : a;       // inverted: the aim points the other way
+    return a;
 }
 /** who this fighter can hurt: everyone still in the match, except teammates in team matches */
 const foesOf = (f) => fighters.filter(o => o !== f && isAlive(o) && !(S.match && S.match.teams && f.team && o.team === f.team));
@@ -3155,6 +3185,13 @@ function itemInteractions() {
             if (!isAlive(f)) continue;
             if (it.owner && f === it.owner && it.grace > 0) continue;
             if (it.owner && f !== it.owner && S.match && S.match.teams && f.team && f.team === it.owner.team) continue;
+            if (f.riposteT > 0 && it.owner !== f && Math.abs(f.x - it.x) < f.width / 2 + R + 70 && Math.abs(f.y - it.y) < f.height / 2 + R + 50) {      // Bulwark's counter returns thrown items too
+                const prev = it.owner, a = prev ? Math.atan2(prev.y - it.y, prev.x - it.x) : (it.vx >= 0 ? Math.PI : 0), sp2 = Math.min(34, Math.max(10, speed * 2));
+                it.vx = Math.cos(a) * sp2; it.vy = Math.sin(a) * sp2; it.owner = f; it.grace = 0; it.hitCool = 6;
+                f.riposteT = 0; f.riposteAfter = 0; f.riposteCd = 0; f.actionLock = 0; f.activeMove = null;
+                audio.playShield(); S.screenShake = Math.max(S.screenShake, 8); fx('counter', f.x, f.y); createParticles(it.x, it.y, '#e2e8f0', 10);
+                break;
+            }
             const hb = f.activeHitbox;
             if (it.type === 'BALL' && hb && !(it.owner === f)) {                      // the ball counters every attack except a grab
                 if (Math.abs(hb.x - it.x) < hb.w / 2 + it.r && Math.abs(hb.y - it.y) < hb.h / 2 + it.r) {
@@ -3239,7 +3276,7 @@ function bulwarkRiposte(bw, atk) {
         atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 108; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
     } else {
         const d = dx >= 0 ? 1 : -1;
-        atk.clashStunTimer = STUN; atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 20; bw.riposteCd = 60;
+        atk.clashStunTimer = STUN; atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 0; bw.riposteCd = 0;   // a successful counter has no cooldown
     }
 }
 /** a projectile met Bulwark's riposte: homing ones home back to their owner, straight ones go back twice as fast */
@@ -3247,8 +3284,9 @@ function reflectOrb(o, bw) {
     const prev = o.owner; if (!prev) return;
     if (o.homing || o.curve) { o.homing = prev; o.curve = 0; o.homingDelay = 0; o.homingTurn = 0.25; o.spd = o.spd || Math.hypot(o.vx, o.vy) || 10; }
     else { const a = Math.atan2(prev.y - o.y, prev.x - o.x), sp = Math.min(40, (Math.hypot(o.vx, o.vy) || 8) * 2); o.vx = Math.cos(a) * sp; o.vy = Math.sin(a) * sp; o.grav = 0; }
-    o.owner = bw; o.age = 0; o.life = Math.max(o.life, 160); o.reflected = true;
-    bw.riposteT = 0; bw.riposteAfter = 0; bw.riposteCd = 60; bw.actionLock = 16; bw.activeMove = null;
+    o.owner = bw; o.age = 0; o.life = Math.max(o.life || 0, 160); o.reflected = true;
+    bw.riposteT = 0; bw.riposteAfter = 0; bw.riposteCd = 0; bw.actionLock = 0; bw.activeMove = null;      // parried: counter (and every other move) is ready again at once
+    if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); } o.ctrl = null; o.shieldCounter = false; o.cap = null;
     audio.playShield(); S.screenShake = Math.max(S.screenShake, 8); fx('counter', bw.x, bw.y); createParticles(o.x, o.y, '#e2e8f0', 10);
 }
 
@@ -3354,7 +3392,9 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
-    if (defender.invertT > 0 && attacker && attacker !== defender) { hb = { ...hb, damage: (hb.damage || 0) * 1.4, bkb: 0, kbg: 0 }; defender.invertT = 0; }   // hit while scrambled: 1.4x damage, no knockback, the scramble ends
+    if (hb.stun && attacker && attacker !== defender && attacker.char === 'volt' && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
+        hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, damage: hb.damage, bkb: 9, kbg: 0.9, angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
+    }
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll') {   // rolling Ember: takes 90% damage, no knockback, the roll just PAUSES 0.5 s (the roll's timer pauses too) and then carries on
         defender.damage += hb.damage * 0.9; defender.lastHitBy = attacker; defender.lastHitT = 0; defender.sx.pause = 30;
         S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(defender.x, defender.y, '#fb923c', 8); fx('hit', defender.x, defender.y, 10, hb.angle);
@@ -3555,8 +3595,20 @@ function dropOrb(o) { const k = orbs.indexOf(o); if (k >= 0) orbs.splice(k, 1); 
 function updateDrops() {
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i];
-        d.y += d.v;
-        for (const t of foesOf(d.owner)) {                      // anyone in the path gets hit once
+        let up = false;
+        if (d.fly) {                                            // Bulwark's released Up-F sword: rises while slowing, then falls
+            const F = d.fly; F.f++;
+            up = F.f <= F.N;
+            d.y = up ? F.y0 - (F.v0 * F.f - F.v0 * F.f * F.f / (2 * F.N)) : F.yA + 0.5 * F.g * (F.f - F.N) * (F.f - F.N);
+            if (up) for (const t of foesOf(d.owner)) {
+                if (d.hitUp.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
+                if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
+                    d.hitUp.add(t);
+                    if (interaction('SPIRAL', t, true) === 'hit') launch(d.owner, t, { damage: 0, bkb: 6.5, kbg: 0.35, angle: Math.random() < 0.5 ? -0.3 : Math.PI + 0.3, x: d.x, y: d.y });
+                }
+            }
+        } else d.y += d.v;
+        if (!up) for (const t of foesOf(d.owner)) {                      // anyone in the path gets hit once
             if (d.hit.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
             if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                 d.hit.add(t);
@@ -3565,11 +3617,11 @@ function updateDrops() {
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             }
         }
-        if (d.y >= d.yl) {
+        if (d.y >= d.yl && !up) {
             drops.splice(i, 1);
             if (d.surface) {
-                fx('stomp', d.x, d.yl, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
-                createParticles(d.x, d.yl, d.kind === 'rock' ? '#a8a29e' : '#cbd5e1', 8);
+                const sy = d.yl + (d.fly ? 70 : 0); fx('stomp', d.x, sy, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
+                createParticles(d.x, sy, d.kind === 'rock' ? '#a8a29e' : '#cbd5e1', 8);
             }
         }
     }
@@ -3577,6 +3629,12 @@ function updateDrops() {
 
 /** Ember's twin fire pillars: a direct hit deals damage and sets you on fire; standing in the flames only burns */
 /** Volt's lightning trail: whoever touches it is stunned 0.7 s and has inverted controls for 2 s after */
+/** count a Volt stun on this foe; true when it is the 3rd within 10 s (that one must be a knockback, and the count starts over) */
+function zapGate(f) {
+    f.zapN++; f.zapT = 600;
+    if (f.zapN >= 3) { f.zapN = 0; f.zapT = 0; return true; }
+    return false;
+}
 function updateZapTrails() {
     for (let i = zapTrails.length - 1; i >= 0; i--) {
         const z = zapTrails[i];
@@ -3591,7 +3649,11 @@ function updateZapTrails() {
                 const L = Math.sqrt(L2); f.interrupt(); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.lastHitBy = z.owner; f.lastHitT = 0;
                 S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
             }
-            f.interrupt(); f.clashStunTimer = 42; f.vx = 0; f.vy = Math.min(f.vy, 0); f.invertT = 42 + 120; f.lastHitBy = z.owner; f.lastHitT = 0;
+            if (zapGate(f)) {                                              // 3rd stun in 10 s: knocked away like a melee hit instead
+                z.hit.add(f); launch(z.owner, f, { damage: 0, bkb: 9, kbg: 0.9, angle: f.x >= z.owner.x ? -0.6 : Math.PI + 0.6, x: f.x, y: f.y });
+                continue;
+            }
+            f.interrupt(); f.clashStunTimer = 42; f.vx = 0; f.vy = Math.min(f.vy, 0); f.lastHitBy = z.owner; f.lastHitT = 0;
             S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(f.x, f.y, '#60a5fa', 16); fx('hit', f.x, f.y, 12, 0);
         }
     }
@@ -3666,6 +3728,11 @@ function updateOrbs() {
                 if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
                 dropOrb(o); fx('block', o.x, o.y); createParticles(o.x, o.y, '#fb923c', 10); audio.playHit(false); continue;
             }
+        }
+        if (o.owner && !o.stuck && !o.cap) {                        // Bulwark's open counter parries every kind of projectile (cores, rocks, bubbles, rockets, homing balls)
+            const bw = fighters.find(e => e.riposteT > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
+                Math.abs(e.x - o.x) < e.width / 2 + o.r + 70 && Math.abs(e.y - o.y) < e.height / 2 + o.r + 50);
+            if (bw) { reflectOrb(o, bw); continue; }
         }
         // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
         const ok = slowAt(o.x, o.y, o.owner);
@@ -4246,7 +4313,6 @@ function aiWalk(f) {
 
 /** walking / shielding for one fighter from a held-input state ({left,right,shield,drop}) */
 function drive(f, h) {
-    if (f.invertT > 0) h = { ...h, left: h.right, right: h.left };       // scrambled by Volt's lightning trail: left and right are swapped
     const free = f.hitstun === 0 && f.dizzyTimer === 0 && f.clashStunTimer === 0 && !f.grabHolding &&
         !f.isRolling && f.freezeTimer === 0;
     if (free) {

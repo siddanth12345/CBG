@@ -323,7 +323,8 @@ function tickMusic(force) {
             : (S.gameState === 'playing' || S.gameState === 'countdown')
                 ? (S.match
                     ? audio.musicForMap(S.match.map || (S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier')))
-                    : (S.gameMode === 'training' ? 'training' : 'duel'))
+                    : (S.gameMode === 'training' ? 'training'
+                        : audio.musicForMap(S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier'))))
                 : null;
         if (!want) return;
         // retry while paused (browser autoplay) or on scene change

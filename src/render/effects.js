@@ -7,6 +7,7 @@ import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs,
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
 import { getHitboxes } from '../gfx.js';
 import { FireTrail } from './fireTrail.js';
+import { buildSword } from './swordModel.js';
 
 // colours per character style (main, bright)
 const PAL = { core: ['#a78bfa', '#ede9fe'], iron: ['#94a3b8', '#e2e8f0'], wind: ['#6ee7b7', '#ecfdf5'], fire: ['#fb923c', '#fde047'], water: ['#38bdf8', '#e0f2fe'], volt: ['#facc15', '#fef9c3'], dark: ['#7c3aed', '#c4b5fd'], rock: ['#a8a29e', '#d6d3d1'] };
@@ -626,18 +627,19 @@ export class Effects {
                     if (isRock) {
                         obj = new THREE.Mesh(new THREE.DodecahedronGeometry(46, 0), new THREE.MeshStandardMaterial({ color: 0x78716c, flatShading: true, roughness: 1, emissive: 0x3b3531, emissiveIntensity: 0.9 }));
                     } else {
-                        obj = new THREE.Group();
-                        const blade = new THREE.Mesh(new THREE.BoxGeometry(18, 120, 6), new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.7, roughness: 0.25, emissive: 0x475569, emissiveIntensity: 0.6 }));
-                        const tip = new THREE.Mesh(new THREE.ConeGeometry(9, 26, 4), blade.material); tip.rotation.z = Math.PI; tip.rotation.y = Math.PI / 4; tip.position.y = -73;
-                        const guard = new THREE.Mesh(new THREE.BoxGeometry(60, 10, 12), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.6, roughness: 0.4, emissive: 0x334155, emissiveIntensity: 0.6 })); guard.position.y = 66;
-                        const grip = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 34, 8), new THREE.MeshStandardMaterial({ color: 0x1e293b })); grip.position.y = 88;
-                        const pom = new THREE.Mesh(new THREE.SphereGeometry(8, 10, 8), guard.material); pom.position.y = 108;
-                        const gl = new THREE.Mesh(new THREE.BoxGeometry(26, 150, 2), new THREE.MeshBasicMaterial({ color: new THREE.Color('#bae6fd').multiplyScalar(1.5), transparent: true, opacity: 0.25, blending: ADD, depthWrite: false, toneMapped: false })); gl.position.y = 10;
-                        obj.add(blade, tip, guard, grip, pom, gl); obj.rotation.z = (Math.random() - 0.5) * 0.25;
+                        obj = buildSword(); obj.rotation.z = (Math.random() - 0.5) * 0.25;
                     }
                     obj.position.set(pos.x, pos.y, 4); obj.renderOrder = 6; this.scene.add(obj);
                     const y0 = pos.y, y1 = land + (isRock ? 40 : 70);
                     this.timed.push({ obj, t: 0, dur, step: (u) => { obj.position.y = y0 + (y1 - y0) * u * u; if (isRock) { obj.rotation.x += 0.2; obj.rotation.y += 0.15; } },
+                        free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });
+                    break;
+                }
+                case 'swordfly': {       // Bulwark's Up-F sword after he lets go: keeps rising (slowing), then falls like a Shield Rush sword. a = total frames, b = landing y (sim), c = rise frames
+                    const F = Math.max(2, e.a || 30), N = e.c || 16, v0 = 12.15, g = 0.9, land = wy(e.b);
+                    const obj = buildSword(); obj.position.set(pos.x, pos.y, 4); obj.rotation.z = Math.PI; obj.renderOrder = 6; this.scene.add(obj);
+                    const yAt = (f) => f <= N ? (v0 * f - v0 * f * f / (2 * N)) : (v0 * N / 2 - 0.5 * g * (f - N) * (f - N));           // up is positive here (world y is up)
+                    this.timed.push({ obj, t: 0, dur: F / 60, step: (u) => { const f = u * F; obj.position.y = pos.y + yAt(f); obj.rotation.z = f <= N ? Math.PI : Math.max(0, Math.PI * (1 - (f - N) / 6)); },
                         free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });
                     break;
                 }
