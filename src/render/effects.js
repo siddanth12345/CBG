@@ -627,17 +627,17 @@ export class Effects {
                     if (isRock) {
                         obj = new THREE.Mesh(new THREE.DodecahedronGeometry(46, 0), new THREE.MeshStandardMaterial({ color: 0x78716c, flatShading: true, roughness: 1, emissive: 0x3b3531, emissiveIntensity: 0.9 }));
                     } else {
-                        obj = buildSword(); obj.rotation.z = (Math.random() - 0.5) * 0.25;
+                        obj = buildSword(); obj.scale.setScalar(1.5); obj.rotation.z = (Math.random() - 0.5) * 0.25;
                     }
                     obj.position.set(pos.x, pos.y, 4); obj.renderOrder = 6; this.scene.add(obj);
-                    const y0 = pos.y, y1 = land + (isRock ? 40 : 70);
+                    const y0 = pos.y, y1 = land + (isRock ? 40 : 105);
                     this.timed.push({ obj, t: 0, dur, step: (u) => { obj.position.y = y0 + (y1 - y0) * u * u; if (isRock) { obj.rotation.x += 0.2; obj.rotation.y += 0.15; } },
                         free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });
                     break;
                 }
                 case 'swordfly': {       // Bulwark's Up-F sword after he lets go: keeps rising (slowing), then falls like a Shield Rush sword. a = total frames, b = landing y (sim), c = rise frames
                     const F = Math.max(2, e.a || 30), N = e.c || 16, v0 = 12.15, g = 0.9, land = wy(e.b);
-                    const obj = buildSword(); obj.position.set(pos.x, pos.y, 4); obj.rotation.z = Math.PI; obj.renderOrder = 6; this.scene.add(obj);
+                    const obj = buildSword(); obj.scale.setScalar(1.5); obj.position.set(pos.x, pos.y, 4); obj.rotation.z = Math.PI; obj.renderOrder = 6; this.scene.add(obj);
                     const yAt = (f) => f <= N ? (v0 * f - v0 * f * f / (2 * N)) : (v0 * N / 2 - 0.5 * g * (f - N) * (f - N));           // up is positive here (world y is up)
                     this.timed.push({ obj, t: 0, dur: F / 60, step: (u) => { const f = u * F; obj.position.y = pos.y + yAt(f); obj.rotation.z = f <= N ? Math.PI : Math.max(0, Math.PI * (1 - (f - N) / 6)); },
                         free: () => { obj.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); } });

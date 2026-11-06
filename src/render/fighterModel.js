@@ -786,8 +786,8 @@ export class FighterModel {
 
         // ---- Bulwark's Up-F: a floating sword under his feet carries him up
         if (f.swordRide) {
-            if (!this.rideSword) { const g = buildSword(false); g.rotation.z = Math.PI; const h = new THREE.Group(); h.add(g); this.root.add(h); this.rideSword = h; }
-            this.rideSword.visible = true; this.rideSword.position.set(0, -f.height / 2 + 70 + Math.sin(this.t * 14) * 1.5, -14);        // the same sword as the falling ones, tip up, behind him; he stands on its crossguard
+            if (!this.rideSword) { const g = buildSword(false); g.scale.setScalar(1.5); g.rotation.z = Math.PI; const h = new THREE.Group(); h.add(g); this.root.add(h); this.rideSword = h; }
+            this.rideSword.visible = true; this.rideSword.position.set(0, -f.height / 2 + 103 + Math.sin(this.t * 14) * 1.5, -14);        // the same sword as the falling ones, tip up, behind him; he stands on its crossguard
         } else if (this.rideSword) this.rideSword.visible = false;
 
         // ---- pose
