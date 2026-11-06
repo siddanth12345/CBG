@@ -10,7 +10,6 @@ let incoming = [];       // { id, from, to, t, splintered? }
 let version = 0;
 const subs = new Set();
 export const onBorgs = (f) => { subs.add(f); return () => subs.delete(f); };
-export const borgVersion = () => version;
 function bump() { version++; subs.forEach(f => f()); }
 
 let persister = null;

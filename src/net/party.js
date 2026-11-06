@@ -103,4 +103,3 @@ export async function partyGo(kind) {
     for (let i = 0; i < 3; i++) setTimeout(() => Party.t && Party.t.send({ t: 'go', kind, code: Online.code }), i * 300);
     return { ok: true, msg: '' };
 }
-export function followGo(m) { return joinRoom(m.code); }

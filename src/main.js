@@ -17,12 +17,12 @@ import { CharUI } from './charUI.js';
 import { PartyUI } from './net/partyUI.js';
 import { Party, joinParty } from './net/party.js';
 import { LobbyUI } from './net/lobbyUI.js';
-import { Queue, joinQueue } from './net/queue.js';
+import { joinQueue } from './net/queue.js';
 import { ACC, initAccount, setProfileListener, recordResult } from './account.js';
 import { AccountUI, Toasts } from './accountUI.js';
 import { BorgsUI } from './borgsUI.js';
-import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, declineRequest, sendBorgRequest } from './net/inbox.js';
-import { isBorg, isSelf, getRequests, onBorgs } from './friends.js';
+import { Inbox, startInbox, announceSplinter, acceptInvite, acceptRequest, sendBorgRequest } from './net/inbox.js';
+import { isBorg, getRequests, onBorgs } from './friends.js';
 
 const $ = (id) => document.getElementById(id);
 const view = new View($('gameCanvas'));
@@ -274,7 +274,7 @@ function onlineGameOver() {
         if (!resultRecorded) { resultRecorded = true; recordResult(S.winnerRole === 'lobby' ? !!S.iWon : S.winnerRole === S.online); $('requeueBtn').classList.toggle('hidden', !Online.viaQueue || Online.mode === 'lobby'); }
     } else if (S.gameState !== 'gameover') resultRecorded = false;
 }
-$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); const wasQueue = true; leaveRoom(); backToMenu(); lobby.open(); joinQueue(); });
+$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(); });
 
 function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);

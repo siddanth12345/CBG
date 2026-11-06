@@ -152,6 +152,8 @@ export class View {
         if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
         const m = this.inMatch !== false;
         this.bloom.enabled = m && q < 1;
+        const ms = q < 1 ? 4 : 0;                                   // the first step down also drops the 4x MSAA on the post-processing targets (a big fill-rate saving)
+        if (this._ms !== ms) { this._ms = ms; for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { if (t) { t.samples = ms; t.dispose(); } } }
         const sh = m && q < 2;
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
@@ -250,7 +252,7 @@ export class View {
 
     updateAim() {
         if (mouse.touchMode) return;
-        const ndc = new THREE.Vector2((this.clientX / this.w) * 2 - 1, -(this.clientY / this.h) * 2 + 1);
+        const ndc = this._ndc || (this._ndc = new THREE.Vector2()); ndc.set((this.clientX / this.w) * 2 - 1, -(this.clientY / this.h) * 2 + 1);
         this.ray.setFromCamera(ndc, this.camera);
         if (this.ray.ray.intersectPlane(this.plane, this.hit)) {
             mouse.worldX = this.hit.x + CX;

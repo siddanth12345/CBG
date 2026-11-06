@@ -4223,9 +4223,19 @@ export function resetSnapshotState() { lastSent = Array.from({ length: 8 }, () =
 const guestOrbs = new Map();
 const guestItems = new Map();
 const guestFlip = (i) => i < 0 ? -1 : (S.match ? i : 1 - i);   // 1v1: host's p1 is the guest's p2 and vice versa; custom matches use absolute slots
-const INTERP_MS = 100;                                 // the guest shows the world this far in the past: smooth even when packets arrive in bursts
+let interpMs = 90, snapAvg = 33, snapDev = 6, lastSnapAt = 0;   // the guest shows the world this far in the past; it adapts to how steady the packets are (steady link = less delay, bursty = more)
+function trackSnapRate() {
+    const now = performance.now();
+    if (lastSnapAt) {
+        const gap = Math.min(400, now - lastSnapAt);
+        snapAvg += (gap - snapAvg) * 0.08; snapDev += (Math.abs(gap - snapAvg) - snapDev) * 0.08;
+        const want = Math.max(64, Math.min(150, snapAvg * 1.6 + snapDev * 3));
+        interpMs += (want - interpMs) * 0.05;
+    }
+    lastSnapAt = now;
+}
 function guestSmooth() {
-    const rt = performance.now() - INTERP_MS;
+    const rt = performance.now() - interpMs;
     for (const f of (S.match ? fighters : [p1, p2])) {
         if (!f.active) continue;
         f.px = f.x; f.py = f.y;
@@ -4250,6 +4260,7 @@ function guestSmooth() {
     for (const g of items) if (g.st !== 'held' && !g.act && g.st !== 'zone') { g.x += g.vx * 0.5; g.y += g.vy * 0.5; g.rot += (g.spin || 0) * 0.5; }
 }
 export function applySnapshot(s) {
+    trackSnapRate();
     const mine = s.m ? fighters : [p2, p1];               // snapshot index -> local fighter
     s.f.forEach((d, i) => {
         const f = mine[i];

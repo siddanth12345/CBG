@@ -200,7 +200,6 @@ class MqttTransport {
         }
         this.raw(msg);
     }
-    send_(msg) { this.send(msg); }
     close() {
         clearInterval(this.pingT);
         if (this.sch && this.sup) { try { this.sup.removeChannel(this.sch); } catch (e) { /* ignore */ } this.sch = null; }

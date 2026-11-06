@@ -3,7 +3,7 @@
 // animation-driven effects (slash crescents, punch rings, dash ghosts) are spawned by
 // the fighter models through the small API at the bottom of this class.
 import * as THREE from 'three';
-import { S, p1, p2, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX } from '../gameCore.js';
+import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
 import { getHitboxes } from '../gfx.js';
 import { FireTrail } from './fireTrail.js';

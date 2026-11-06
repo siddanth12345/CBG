@@ -7,7 +7,7 @@
 //   grab         drag to aim, release to fire the grab (or throw / use an item); springs back
 //   shield       hold = shield | joystick left/right while shielding = roll
 import { S, mouse, fighters, p1 } from './gameCore.js';
-import { virtual, neutralForced, getNfBtn, getNfToggle, toggleNeutral, neutralLatched } from './controls.js';
+import { virtual, neutralForced, getNfBtn, getNfToggle, toggleNeutral } from './controls.js';
 import { spec } from './specials.js';
 import { getLayout, touchMode, onLayout } from './layout.js';
 

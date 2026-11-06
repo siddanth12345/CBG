@@ -1,5 +1,5 @@
 // The Borgs panel (friends): list with online dots, requests, and "add a borg by exact username".
-import { getBorgs, getRequests, onBorgs, removeBorg, isOnlineName, MAX_BORGS, markSplinteredFrom, removeIncoming } from './friends.js';
+import { getBorgs, getRequests, onBorgs, removeBorg, isOnlineName, MAX_BORGS, removeIncoming } from './friends.js';
 import { ACC, displayName } from './account.js';
 import { sendBorgRequest, acceptRequest, declineRequest, cancelRequest, inviteBorg, inviteToLobby } from './net/inbox.js';
 import { Online } from './net/online.js';
