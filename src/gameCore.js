@@ -473,7 +473,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
-        this.zapN = 0; this.zapT = 0;        // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
+        this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -534,7 +534,7 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
-        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0;
+        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
@@ -591,6 +591,7 @@ class Fighter {
         if (this.armorT > 0) this.armorT--;
         if (this.rockT > 0) this.rockT--;
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
+        if (this.zapImmuneT > 0) this.zapImmuneT--;
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
@@ -3688,19 +3689,20 @@ function updateZapTrails() {
         if (--z.life <= 0 || !z.owner) { zapTrails.splice(i, 1); continue; }
         const dx = z.x2 - z.x1, dy = z.y2 - z.y1, L2 = dx * dx + dy * dy || 1;
         for (const f of foesOf(z.owner)) {
-            if (z.hit.has(f) || f.invincibleTimer > 0 || f.stocks <= 0 || f.out) continue;
+            if (z.hit.has(f) || f.invincibleTimer > 0 || f.zapImmuneT > 0 || f.stocks <= 0 || f.out) continue;
             const tt = Math.max(0, Math.min(1, ((f.x - z.x1) * dx + (f.y - z.y1) * dy) / L2));
             if (Math.hypot(f.x - (z.x1 + dx * tt), f.y - (z.y1 + dy * tt)) > 46 + f.height * 0.25) continue;
             z.hit.add(f);
             if (z.push) {                                                // Lightning Rod trail: only shoves them the way the bolt travelled
-                const L = Math.sqrt(L2); f.interrupt(); f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.lastHitBy = z.owner; f.lastHitT = 0;
+                const L = Math.sqrt(L2); f.interrupt(); f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.zapImmuneT = f.hitstun + 78; f.lastHitBy = z.owner; f.lastHitT = 0;
                 S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
             }
             if (zapGate(f)) {                                              // 3rd stun in 10 s: knocked away like a melee hit instead
                 z.hit.add(f); launch(z.owner, f, { damage: 0, bkb: 9, kbg: 0.9, angle: f.x >= z.owner.x ? -0.6 : Math.PI + 0.6, x: f.x, y: f.y });
+                f.zapImmuneT = Math.max(f.hitstun, 0) + 78;
                 continue;
             }
-            f.interrupt(); f.clashStunTimer = 30; f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = 0; f.vy = Math.min(f.vy, 0); f.lastHitBy = z.owner; f.lastHitT = 0;
+            f.interrupt(); f.clashStunTimer = 30; f.zapImmuneT = 30 + 78; f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = 0; f.vy = Math.min(f.vy, 0); f.lastHitBy = z.owner; f.lastHitT = 0;
             S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(f.x, f.y, '#60a5fa', 16); fx('hit', f.x, f.y, 12, 0);
         }
     }
