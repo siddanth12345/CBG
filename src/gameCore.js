@@ -592,7 +592,16 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.zapImmuneT > 0) this.zapImmuneT--;
-        if (this.swordGroundCd) { if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); } else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30); }      // Sword Lift cancelled early: no Up-F until he is back on the ground
+        if (this.swordGroundCd) { if (this.grounded) {
+                this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18);
+                const fy = this.y + this.height / 2;                                         // landing after an early hop-off: an automatic stomp, then a short pause
+                for (const t of foesOf(this)) {
+                    if (t.stocks <= 0 || t.invincibleTimer > 0 || Math.hypot(t.x - this.x, t.y - fy) > 190 + t.width / 2) continue;
+                    if (interaction('SPIRAL', t, true) === 'hit') launch(this, t, { damage: 6, bkb: 8, kbg: 0.7, angle: -1.2, mirror: true, x: this.x, y: fy });
+                }
+                fx('stomp', this.x, fy, 260, 0, 'iron'); fx('quake', this.x, fy, 380, 0, STYLE_OF[this.char] + '@'); S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+                this.freezeTimer = Math.max(this.freezeTimer, 24); this.vx = 0;
+            } else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30); }      // Sword Lift cancelled early: no Up-F until he is back on the ground
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
