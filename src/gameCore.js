@@ -354,8 +354,12 @@ function counters(defType, atkType) {
     }
 }
 /** 'hit' | 'shield' | 'countered' | 'clash' */
-function interaction(atkType, defender, down = false) {
-    if (defender.riposteT > 0 && !down) return 'riposte';          // Bulwark's open counter window: everything except Down moves
+function interaction(atkType, defender, down = false, atkChar = null) {
+    if (defender.riposteT > 0 && !down) return 'riposte';
+    if (atkChar === 'volt') {                                      // Volt's moves are the weakest in the game: ANY active move (or shield) of the target beats them
+        const vT = defender.isShielding ? 'SHIELD' : (defender.activeMove ? defender.activeMove.type : null);
+        if (vT) return vT === 'SHIELD' ? 'shield' : 'countered';
+    }          // Bulwark's open counter window: everything except Down moves
     // Active Phoenix Dash is countered by grabs, melee, directional specials and Cores.
     // Detached Phoenix rockets are separate projectiles and keep their own shield rules.
     if (defender.char === 'ember' && defender.sx && defender.sx.k === 'rocket' &&
@@ -3399,8 +3403,11 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
-    if (hb.stun && attacker && attacker !== defender && attacker.char === 'volt' && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
-        hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, damage: hb.damage, bkb: 9, kbg: 0.9, angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
+    if (attacker && attacker !== defender && attacker.char === 'volt') {
+        if (hb.stun && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
+            hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, damage: hb.damage, bkb: 9, kbg: 0.9, angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
+        } else if (hb.stun) hb = { ...hb, stun: 30 };                 // every Volt stun lasts 0.5 s
+        defender.invincibleTimer = Math.max(defender.invincibleTimer, 36);   // 0.6 s of i-frames for anyone Volt hits
     }
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll') {   // rolling Ember: takes 90% damage, no knockback, the roll just PAUSES 0.5 s (the roll's timer pauses too) and then carries on
         defender.damage += hb.damage * 0.9; defender.lastHitBy = attacker; defender.lastHitT = 0; defender.sx.pause = 30;
@@ -3639,6 +3646,7 @@ function updateDrops() {
                 if (!caught && Math.hypot(t.x - d.x, t.y - d.y) > 230 + t.width / 2) continue;
                 if (!caught && interaction('SPIRAL', t, true) !== 'hit') continue;
                 launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: d.y });
+                if (caught) t.invincibleTimer = Math.max(t.invincibleTimer, t.hitstun + 2);
             }
             fx('quake', d.x, d.y, 460, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true);
             continue;
@@ -3654,6 +3662,7 @@ function updateDrops() {
                     if (caught) { if (t.y + t.height / 2 > sy) t.y = sy - t.height / 2; t.px = t.x; t.py = t.y; }
                     else if (interaction('SPIRAL', t, true) !== 'hit') continue;
                     launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: sy });
+                    if (caught) t.invincibleTimer = Math.max(t.invincibleTimer, t.hitstun + 2);      // speared then launched: untouchable until they are out of the stun
                 }
                 fx('quake', d.x, sy, R * 2, 0, STYLE_OF[d.owner.char] + '@'); S.screenShake = Math.max(S.screenShake, 14);
             }
@@ -3684,14 +3693,14 @@ function updateZapTrails() {
             if (Math.hypot(f.x - (z.x1 + dx * tt), f.y - (z.y1 + dy * tt)) > 46 + f.height * 0.25) continue;
             z.hit.add(f);
             if (z.push) {                                                // Lightning Rod trail: only shoves them the way the bolt travelled
-                const L = Math.sqrt(L2); f.interrupt(); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.lastHitBy = z.owner; f.lastHitT = 0;
+                const L = Math.sqrt(L2); f.interrupt(); f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.lastHitBy = z.owner; f.lastHitT = 0;
                 S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
             }
             if (zapGate(f)) {                                              // 3rd stun in 10 s: knocked away like a melee hit instead
                 z.hit.add(f); launch(z.owner, f, { damage: 0, bkb: 9, kbg: 0.9, angle: f.x >= z.owner.x ? -0.6 : Math.PI + 0.6, x: f.x, y: f.y });
                 continue;
             }
-            f.interrupt(); f.clashStunTimer = 42; f.vx = 0; f.vy = Math.min(f.vy, 0); f.lastHitBy = z.owner; f.lastHitT = 0;
+            f.interrupt(); f.clashStunTimer = 30; f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = 0; f.vy = Math.min(f.vy, 0); f.lastHitBy = z.owner; f.lastHitT = 0;
             S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(f.x, f.y, '#60a5fa', 16); fx('hit', f.x, f.y, 12, 0);
         }
     }
@@ -3993,7 +4002,7 @@ function checkCombatCollisions(attacker, defender) {
     const hbBottom = hb.y + hb.h / 2;
 
     if (hbLeft < defRight && hbRight > defLeft && hbTop < defBottom && hbBottom > defTop) {
-        const res = interaction(hb.type || 'J', defender, ((hb.type || 'J') === 'J' && attacker.attackKind === 'DOWN') || hb.type === 'HEADBUTT');
+        const res = interaction(hb.type || 'J', defender, ((hb.type || 'J') === 'J' && attacker.attackKind === 'DOWN') || hb.type === 'HEADBUTT', attacker.char);
         if (hb.multi) {                                      // sword spin: hits everyone around you once, the swing carries on
             const set = attacker.swingHitSet || (attacker.swingHitSet = new Set());
             if (set.has(defender)) return;
