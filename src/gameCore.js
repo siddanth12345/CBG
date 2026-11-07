@@ -473,7 +473,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
-        this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
+        this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -534,7 +534,7 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
-        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0;
+        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
@@ -592,6 +592,7 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.zapImmuneT > 0) this.zapImmuneT--;
+        if (this.swordGroundCd) { if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); } else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30); }      // Sword Lift cancelled early: no Up-F until he is back on the ground
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
@@ -1407,7 +1408,8 @@ class Fighter {
 
     /** Bulwark lets go of his Up-F sword: it keeps rising a moment (knocking foes aside), then falls like a Shield Rush sword */
     launchSwordFly() {
-        const v0 = 12.15, N = 16, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
+        const rem = Math.max(0, this._swordRemain || 0); this._swordRemain = 0;              // hopped off early: the sword still climbs the rest of the way up before it drops
+        const v0 = 12.15, N = 16 + 2 * rem, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
         const yA = y0 - v0 * N / 2;
         let yl = Math.min(BLAST_ZONES.bottom, STAGE.y + 40), surface = false;
         if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > yA && STAGE.y < yl) { yl = STAGE.y; surface = true; }
@@ -2274,7 +2276,7 @@ class Fighter {
     /** The "J" attack (now on right click / the aim-matrix attack). The hitbox follows the animation. */
     attack(aimDirection, hold = false) {
         if (this.isHanging) return false;    // ledge: jump only
-        if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
+        if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this._swordRemain = this.spiralT; this.swordGroundCd = true; this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
