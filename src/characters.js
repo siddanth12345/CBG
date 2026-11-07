@@ -58,12 +58,14 @@ export const CHARS = {
 
 // knockback taken scales with speed: the slowest walker (Terra) takes 0.6x, the fastest (Zephyr) 1.5x, proportional in between.
 // jumps in the air: 3 minimum, 5 maximum; slow tanks recover worst, the fastest has the most.
+const BAL_KB = { terra: 1.12, ember: 0.94, umbra: 0.94, bulwark: 1.04 };
 const JUMPS = { luminent: 3, bulwark: 3, zephyr: 5, ember: 4, tide: 4, volt: 4, umbra: 4, terra: 3 };
 for (const c of Object.values(CHARS)) {
     const w = c.walk;
     c.kb = Math.round((w < 1 ? 1 - 0.4 * (1 - w) / 0.38 : 1 + 0.5 * (w - 1) / 0.35) * 1000) / 1000;
     // light/speedy: 1.15× weight → take less knockback
     if (c.id === 'zephyr' || c.id === 'volt' || c.id === 'umbra') c.kb = Math.round(c.kb / 1.15 * 1000) / 1000;
+    c.kb = Math.round(c.kb * (BAL_KB[c.id] || 1) * 1000) / 1000;      // balance pass from bot round-robins: Terra was winning far too much, Ember/Umbra far too little
     c.jumps = JUMPS[c.id];
     const sp = SP[c.id];
     c.specials = [['Hold F', sp.N], ['Side F', sp.S], ['Up F', sp.U], ['Down F (ground)', sp.DG], ['Down F (air)', sp.DA]].map(([k, v]) => ({ key: k, name: v.name, desc: v.desc }));

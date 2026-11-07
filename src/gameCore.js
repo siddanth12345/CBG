@@ -473,7 +473,7 @@ class Fighter {
         this.landFlipT = 0;                  // landing recovery of the suplex backflip
         this.spiralT = 0;
         this.rockT = 0;
-        this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
+        this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -534,7 +534,7 @@ class Fighter {
         this.grabTimer = 0; this.gripT = 0; this.gripMode = false; this.throwKind = 'side'; this.throwU = 0; this.bombPrimed = false; this.bombShots = 0; this.bombLockT = 0; this.bombWas = 0; this.recoilT = 0; this.recoilX = 0; this.recoilY = 0; this.bombN = 0; this.bombT = 0; this.bombBy = null; this.tickFreezeT = 0;
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
-        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0;
+        this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
         this.invincibleTimer = 120; this.ghostT = 0;
@@ -592,6 +592,8 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.zapImmuneT > 0) this.zapImmuneT--;
+        if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
+        if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
             if (!this.grounded) this._airT = (this._airT || 0) + 1;
             else { if (this._airT >= 10 && !this.hitstun && !this.clashStunTimer && !this.isHanging && !this.swordGroundCd && this.stocks > 0 && !this.out) this.landStomp(false); this._airT = 0; }
@@ -3424,6 +3426,18 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
+    if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
+    if (attacker && attacker !== defender) {                          // COMBO LIMIT (everyone): hits inside a 1.5 s window stack; from the 4th the knockback grows,
+        if (defender.comboT <= 0) defender.comboN = 0;                // from the 5th any stun turns into knockback, and the 6th is a big finisher that breaks the combo
+        if (defender.comboT <= 78 || defender.comboN === 0) { defender.comboN++; defender.comboT = 90; }       // one move's multi-hit counts once
+        const n = defender.comboN;
+        if (n >= 4) {
+            const k = n - 3;
+            hb = { ...hb, bkb: (hb.bkb || 0) + 2.2 * k, kbg: (hb.kbg || 0) * (1 + 0.3 * k) };
+            if (n >= 5 && hb.stun) hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, bkb: Math.max(hb.bkb, 9), kbg: Math.max(hb.kbg, 0.9), angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
+            if (n >= 6) { hb = { ...hb, bkb: Math.max(hb.bkb, 10.5), kbg: Math.max(hb.kbg, 1) }; defender.comboN = 0; defender.comboT = 0; defender.invincibleTimer = Math.max(defender.invincibleTimer, 40); }
+        }
+    }
     if (attacker && attacker !== defender && attacker.char === 'volt') {
         if (hb.stun && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
             hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, damage: hb.damage, bkb: 9, kbg: 0.9, angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
@@ -3698,6 +3712,7 @@ function updateDrops() {
 /** Ember's twin fire pillars: a direct hit deals damage and sets you on fire; standing in the flames only burns */
 /** Volt's lightning trail: whoever touches it is stunned 0.7 s and has inverted controls for 2 s after */
 /** count a Volt stun on this foe; true when it is the 3rd within 10 s (that one must be a knockback, and the count starts over) */
+const DMG_MULT = { terra: 0.85, bulwark: 0.95, umbra: 1.1, ember: 1.08, zephyr: 1.1, volt: 1.12 };      // outgoing damage tuning per character
 function zapGate(f) {
     f.zapN++; f.zapT = 600;
     if (f.zapN >= 3) { f.zapN = 0; f.zapT = 0; return true; }
