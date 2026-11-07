@@ -592,16 +592,14 @@ class Fighter {
         if (this.rockT > 0) this.rockT--;
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.zapImmuneT > 0) this.zapImmuneT--;
-        if (this.swordGroundCd) { if (this.grounded) {
-                this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18);
-                const fy = this.y + this.height / 2;                                         // landing after an early hop-off: an automatic stomp, then a short pause
-                for (const t of foesOf(this)) {
-                    if (t.stocks <= 0 || t.invincibleTimer > 0 || Math.hypot(t.x - this.x, t.y - fy) > 190 + t.width / 2) continue;
-                    if (interaction('SPIRAL', t, true) === 'hit') launch(this, t, { damage: 6, bkb: 8, kbg: 0.7, angle: -1.2, mirror: true, x: this.x, y: fy });
-                }
-                fx('stomp', this.x, fy, 260, 0, 'iron'); fx('quake', this.x, fy, 380, 0, STYLE_OF[this.char] + '@'); S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
-                this.freezeTimer = Math.max(this.freezeTimer, 24); this.vx = 0;
-            } else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30); }      // Sword Lift cancelled early: no Up-F until he is back on the ground
+        if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
+            if (!this.grounded) this._airT = (this._airT || 0) + 1;
+            else { if (this._airT >= 10 && !this.hitstun && !this.clashStunTimer && !this.isHanging && !this.swordGroundCd && this.stocks > 0 && !this.out) this.landStomp(false); this._airT = 0; }
+        }
+        if (this.swordGroundCd) {      // Sword Lift cancelled early: no Up-F until he is back on the ground, where he stomps and pauses
+            if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); this.landStomp(true); this._airT = 0; }
+            else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30);
+        }
         if (this.char === 'bulwark') this.tickRiposte();
         if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
@@ -1416,6 +1414,17 @@ class Fighter {
     }
 
     /** Bulwark lets go of his Up-F sword: it keeps rising a moment (knocking foes aside), then falls like a Shield Rush sword */
+    /** Bulwark lands: a small stomp (3 damage, 0.3x of the old knockback, half the reach). pause = the longer freeze after hopping off the sword early */
+    landStomp(pause) {
+        const fy = this.y + this.height / 2;
+        for (const t of foesOf(this)) {
+            if (t.stocks <= 0 || t.invincibleTimer > 0 || Math.hypot(t.x - this.x, t.y - fy) > 95 + t.width / 2) continue;
+            if (interaction('SPIRAL', t, true) === 'hit') launch(this, t, { damage: 3, bkb: 2.4, kbg: 0.21, angle: -1.2, mirror: true, x: this.x, y: fy });
+        }
+        fx('stomp', this.x, fy, 130, 0, 'iron'); S.screenShake = Math.max(S.screenShake, pause ? 8 : 4); audio.playHit(false);
+        if (pause) { this.freezeTimer = Math.max(this.freezeTimer, 24); this.vx = 0; }
+    }
+
     launchSwordFly() {
         const rem = Math.max(0, this._swordRemain || 0); this._swordRemain = 0;              // hopped off early: the sword still climbs the rest of the way up before it drops
         const v0 = 12.15, N = 16 + 2 * rem, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
