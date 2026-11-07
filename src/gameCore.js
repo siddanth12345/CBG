@@ -798,6 +798,7 @@ class Fighter {
             if (this.grabTimer <= 0) {
                 const target = this.grabHolding;
                 this.grabHolding = null;
+                if (this.char === 'bulwark') this.clashStunTimer = Math.max(this.clashStunTimer, 40);      // Bulwark is stunned for 0.67 s after a grab throw (no more endless chains)
                 target.grabbedBy = null;
 
                 let dx = 0;
@@ -1391,7 +1392,7 @@ class Fighter {
     /** Bulwark's swords / Terra's rocks: they rain down on the path just travelled and land a moment later */
     dropAt(px, dr) {
         const y0 = this.y - 520, v = dr.speed || 26;
-        let yl = BLAST_ZONES.bottom, surface = false;                       // they keep falling until a stage / platform stops them, or they leave through the kill zone
+        let yl = Math.min(BLAST_ZONES.bottom, STAGE.y + 40), surface = false;                       // they keep falling until a stage / platform stops them, or they leave through the kill zone
         if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > y0 && STAGE.y < yl) { yl = STAGE.y; surface = true; }
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > y0 && pl.y < yl) { yl = pl.y; surface = true; }
         const frames = Math.max(2, Math.ceil((yl - y0) / v));
@@ -1403,7 +1404,7 @@ class Fighter {
     launchSwordFly() {
         const v0 = 12.15, N = 16, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
         const yA = y0 - v0 * N / 2;
-        let yl = BLAST_ZONES.bottom, surface = false;
+        let yl = Math.min(BLAST_ZONES.bottom, STAGE.y + 40), surface = false;
         if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > yA && STAGE.y < yl) { yl = STAGE.y; surface = true; }
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > yA && pl.y < yl) { yl = pl.y; surface = true; }
         const stop = yl - (surface ? SWORD_OFF : 0);
@@ -1431,6 +1432,7 @@ class Fighter {
         this.activeHitbox = { x: this.x, y: this.y + this.height / 2 - 30, w, h: 64, type: 'HEADBUTT', ttl: 8, ...hit };
         this.activeMove = { type: 'HEADBUTT', t: 10 };
         this.specialKind = null; this.specialDur = 0;
+        if (this.char === 'bulwark') this.clashStunTimer = Math.max(this.clashStunTimer, 36);       // Down air: 0.6 s stun on landing
         this.freezeTimer = lk(this, sp.lock !== undefined ? sp.lock : FREEZE);
         if (sp.vx) { this.vy = -8; this.grounded = false; this.freezeTimer = Math.min(this.freezeTimer, 8); }   // the diagonal kick bounces back up
         if (hit.multi) this.swingHitSet = new Set();
@@ -1719,7 +1721,7 @@ class Fighter {
         dx = dx / d * Math.max(reach, 60); dy = dy / d * Math.max(reach, 60);
         { const tx = Math.min(WORLD.width - 20, Math.max(20, this.x + dx)), c = clipTeleport(this, fx0, fy0, tx, this.y + dy); this.x = c.x; this.y = c.y; dx = this.x - fx0; dy = this.y - fy0; }
         if (Math.abs(dx) > 8) this.facing = dx > 0 ? 1 : -1;
-        this.vx = dx / reach * 3; this.vy = dy / reach * 3; this.grounded = false;
+        { const len = Math.hypot(dx, dy) || 1; this.vx = dx / len * 3; this.vy = dy / len * 3; } this.grounded = false;
         this.invincibleTimer = Math.max(this.invincibleTimer, 10);
         this.swingHitSet = new Set();
         this.activeHitbox = { x: (fx0 + this.x) / 2, y: (fy0 + this.y) / 2, w: Math.abs(this.x - fx0) + sp.w, h: Math.abs(this.y - fy0) + sp.w, type: 'SPIRAL', ttl: 8, multi: true,
@@ -1889,6 +1891,7 @@ class Fighter {
         d.x = this.x - this.facing * 34;
         d.y = this.y;
         this.vx = 0; this.vy = 0;
+        if (this.char === 'bulwark') this.clashStunTimer = Math.max(this.clashStunTimer, 45);       // ...and 0.75 s after the Suplex slam
         this.suplexAng = 0; this.landFlipT = 12;               // the backflip finishes with a quick landing roll
         fx('stomp', this.x, this.y + this.height / 2, STAGE.width / 8, 0, '@');
         S.screenShake = Math.max(S.screenShake, 16);
@@ -3627,6 +3630,18 @@ function updateDrops() {
         if (d.caught && d.caught.length) for (const t of d.caught) {                // caught foes ride the sword up and then down
             if (!isAlive(t)) continue;
             t.x += (d.x - t.x) * 0.6; t.y = d.y + (up ? 0 : d.h * 0.22); t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y;
+        }
+        if (d.fly && !d.surface && !up && d.y >= STAGE.y + 40) {                          // fell past the stage level with nothing to land on: it bursts right there
+            drops.splice(i, 1);
+            for (const t of foesOf(d.owner)) {
+                const caught = d.caught.includes(t);
+                if (t.stocks <= 0 || (t.invincibleTimer > 0 && !caught)) continue;
+                if (!caught && Math.hypot(t.x - d.x, t.y - d.y) > 230 + t.width / 2) continue;
+                if (!caught && interaction('SPIRAL', t, true) !== 'hit') continue;
+                launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: d.y });
+            }
+            fx('quake', d.x, d.y, 460, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true);
+            continue;
         }
         if (d.y >= d.yl && !up) {
             drops.splice(i, 1);
