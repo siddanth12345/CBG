@@ -574,6 +574,7 @@ class Fighter {
 
     /** being hit / countered cancels whatever the fighter was doing */
     interrupt() {
+        this.releaseGrabHold();
         this.fActive = false; this.chargeFrames = 0; this.aiChargeGoal = 0;
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
@@ -764,6 +765,8 @@ class Fighter {
             return;
         }
 
+        if (this.grabbedBy && (!isAlive(this.grabbedBy) || (this.grabbedBy.grabHolding !== this && this.grabbedBy.grabVictim !== this) || this.grabbedBy.grabbedBy)) { this.grabbedBy = null; this.hitstun = Math.min(this.hitstun, 10); }      // never stay stuck to a grabber who let go, died or was grabbed himself
+        if (this.grabHolding && (!isAlive(this.grabHolding) || this.grabHolding.grabbedBy !== this || this.grabbedBy)) this.releaseGrabHold();
         if (this.grabbedBy) {
             this.vx = 0;
             this.vy = 0;
@@ -1196,7 +1199,7 @@ class Fighter {
                     if (this.x + hw > STAGE.x && this.x - hw < STAGE.x + STAGE.width && this.y + hh > STAGE.y && this.y - hh < STAGE.y + STAGE.height) { this.y = STAGE.y - hh; this.px = this.x; this.py = this.y; this.grounded = false; }
                     this.cloakT = 6;
                 }
-                const caught = x.caught ? [...x.caught].filter(f => isAlive(f) && Math.hypot(f.x - this.x, f.y - this.y) < 200) : [];
+                const caught = x.caught ? [...x.caught].filter(f => isAlive(f) && !onSword(f) && Math.hypot(f.x - this.x, f.y - this.y) < 200) : [];
                 if (caught.length === 1 && sp.drill) {                      // one foe caught: grab them by the leg and fling them away (an explosion at the end of the throw)
                     const v = caught[0];
                     v.interrupt(); v.isShielding = false; v.hitstun = 40; v.vx = v.vy = 0;
@@ -1897,6 +1900,11 @@ class Fighter {
         this.activeMove = null;
         audio.playGrab();
         fx('grab', d.x, d.y);
+    }
+    /** let go of anyone we are holding (called when the grabber is hit, interrupted or grabbed himself, so the victim is never left stuck to him) */
+    releaseGrabHold() {
+        const t = this.grabHolding;
+        if (t) { this.grabHolding = null; if (t.grabbedBy === this) { t.grabbedBy = null; t.hitstun = Math.max(0, Math.min(t.hitstun, 10)); } }
     }
     releaseSuplexVictim() {
         const d = this.grabVictim;
@@ -3134,6 +3142,8 @@ function clockSlowFor(f) {
     }
     return 1;
 }
+/** clinging to a Bulwark sword (riding up on it or dragged down by it): can't be grabbed */
+function onSword(t) { return fighters.some(f => f._carry && f._carry.includes(t)) || drops.some(d => d.caught && d.caught.includes(t)); }
 function slowAt(x, y) {
     for (const it of items) {
         if (it.type !== 'CLOCK' || !it.act || Math.hypot(it.x - x, it.y - y) >= clockR(it)) continue;
@@ -4085,7 +4095,7 @@ function checkCombatCollisions(attacker, defender) {
     }
 
     // ---- grab: beats a shield, loses to every other active move (except headbutt)
-    if (attacker.isGrabDashing && !attacker.grabHolding && defender.invincibleTimer <= 0) {
+    if (attacker.isGrabDashing && !attacker.grabHolding && defender.invincibleTimer <= 0 && !onSword(defender)) {
         const dx = defender.x - attacker.x;
         const dy = defender.y - attacker.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -4165,13 +4175,13 @@ function checkCombatCollisions(attacker, defender) {
     }
 }
 /** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who is facing away (or is in the air / mid-attack) is a backstab: +40% damage, +20% knockback,
- *  and a successful backstab makes him 1.7x faster and invisible for 3 s. */
+ *  and a successful backstab makes him 1.7x faster and invisible for 5 s. */
 function umbraEdge(att, def, hb) {
     if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
     const behind = (def.facing || 1) * (att.x - def.x) < 0;
     if (!behind) return hb;
     if (att.cloakT > 0) att._boostWait = true;                 // a backstab while already invisible: refresh the invisibility, and the NEXT hit deals 1.5x damage
-    att._shadowT = 180; att.cloakT = 180;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
+    att._shadowT = 300; att.cloakT = 300;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
     return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
