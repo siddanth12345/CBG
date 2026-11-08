@@ -184,7 +184,7 @@ export class ItemsView {
             if (!c) { b.bubble.visible = false; return; }
             b.bubble.visible = true;
             b.bubble.position.set(wx(c.x), wy(c.y), -20 - i);
-            b.bubble.scale.setScalar(CLOCK_RADIUS);
+            b.bubble.scale.setScalar(c.st === 'held' ? CLOCK_RADIUS / 2 : CLOCK_RADIUS);
             b.ticks.rotation.z = -t * 0.05;
             b.handG.rotation.z = -t * 0.35;
         });

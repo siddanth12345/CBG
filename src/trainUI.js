@@ -1,5 +1,6 @@
 // Training menu: Configure / Characters / Bots, with saved preferences (up to 10).
-import { S, p1, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs } from './gameCore.js';
+import { S, p1, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, spawnTrainItem } from './gameCore.js';
+import { ITEM_TYPES, ITEM_INFO } from './items.js';
 import { CHAR_IDS, CHARS, charOf, getMyChar, setMyChar } from './characters.js';
 import { Party } from './net/party.js';
 
@@ -98,6 +99,7 @@ export class TrainUI {
         if (b.dataset.close !== undefined) { this.close(); return; }
         if (b.dataset.tab) { this.tab = b.dataset.tab; this.render(); return; }
         const a = b.dataset.a;
+        if (a === 'item') { spawnTrainItem(b.dataset.id); return; }
         if (a === 'reset') {
             const cur = snap();
             Object.assign(ensureTrain(), { ...DEFAULT_TRAIN, char: cur.char, botChar: cur.botChar, botType: 'static' });
@@ -191,6 +193,7 @@ export class TrainUI {
                 <div class="lm-setrow"><span>Jumps (blank = character default)</span><input data-k="jumps" type="number" min="1" max="10" placeholder="default" value="${t.jumps == null ? '' : t.jumps}"></div>
                 <div class="lm-setrow"><span>Air F specials</span><input data-k="airF" type="number" min="0" max="6" value="${t.airF}"></div>
                 <div class="lm-setrow"><span>Walk speed (×)</span><input data-k="walk" type="number" min="0.4" max="2" step="0.05" value="${t.walk}"></div>
+                <div class="lm-setrow" style="flex-wrap:wrap;gap:6px"><span>Spawn an item</span>${ITEM_TYPES.map(i => `<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="${i}" title="${esc(ITEM_INFO[i].name)}">${ITEM_INFO[i].icon} ${esc(ITEM_INFO[i].name)}</button>`).join('')}<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="CLEAR">Clear items</button></div>
                 <p class="lm-note">30 frames ≈ 0.5 s. Default lock is 36 (~0.6 s).</p>
                 <div class="lm-foot2" style="margin-top:10px">
                     <button class="lm-btn lm-btn-ghost" data-a="reset">Reset to default</button>

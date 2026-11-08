@@ -88,6 +88,7 @@ export class SoundEngine {
         const src = BGM[key];
         if (!src) return;
         // already playing this track
+        if (this._musicKey === key && (this._bufSrc || this._bufPending)) return;
         if (this._musicKey === key && this._music && !this._music.paused) return;
         // same track paused (autoplay block) → just try play again
         if (this._musicKey === key && this._music) {
@@ -97,6 +98,25 @@ export class SoundEngine {
         }
         this.stopMusic();
         this._musicKey = key;
+        if (this._ctx && this._ctx.state !== 'closed') { this._bufPending = true; this._playBuffer(key, src, loop); return; }     // decoded + looped by Web Audio: gapless and off the main thread (no stutter)
+        this._playElement(key, src, loop);
+    }
+    async _playBuffer(key, src, loop) {
+        const ctx = this._ctx;
+        try {
+            let buf = (this._bufs || (this._bufs = new Map())).get(key);
+            if (!buf) { const r = await fetch(src); if (!r.ok) throw new Error('http'); buf = await ctx.decodeAudioData(await r.arrayBuffer()); this._bufs.set(key, buf); }
+            if (this._musicKey !== key || !this._bufPending) return;
+            if (!this._musicGain) { this._musicGain = ctx.createGain(); this._musicGain.connect(ctx.destination); }
+            this._musicGain.gain.value = this._vol.music;
+            const s = ctx.createBufferSource(); s.buffer = buf; s.loop = loop; s.connect(this._musicGain); s.start(0);
+            this._bufSrc = s; this._bufPending = false;
+        } catch (e) {
+            this._bufPending = false;
+            if (this._musicKey === key) this._playElement(key, src, loop);          // fetch blocked (preview sandbox) or decode failed: plain audio element
+        }
+    }
+    _playElement(key, src, loop) {
         const a = new Audio(src);
         a.loop = loop;
         a.volume = this._vol.music;
@@ -109,6 +129,8 @@ export class SoundEngine {
         this._hookMusic(a);
     }
     stopMusic() {
+        this._bufPending = false;
+        if (this._bufSrc) { try { this._bufSrc.stop(); this._bufSrc.disconnect(); } catch (e) { /* */ } this._bufSrc = null; }
         if (this._music) {
             try { this._music.pause(); this._music.removeAttribute('src'); this._music.load(); } catch (e) { /* */ }
             this._music = null;

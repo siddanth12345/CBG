@@ -477,7 +477,8 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
-        this.backT = 0; this._shadowT = 0;   // backT: lying on the back after Bulwark's stab (frames left)
+        this.backT = 0; this._shadowT = 0; this.cloakT = 0;   // cloakT: Umbra is invisible to everyone but himself
+           // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
@@ -596,6 +597,7 @@ class Fighter {
         if (this.zapImmuneT > 0) this.zapImmuneT--;
         if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
         if (this._shadowT > 0) this._shadowT--;
+        if (this.cloakT > 0) this.cloakT--;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
@@ -920,8 +922,8 @@ class Fighter {
         this.x += this.vx;
         this.y += this.vy;
 
-        this.checkStageCollision();
-        this.checkLedgeMagnet();
+        if (!(this.sx && this.sx.k === 'rocket' && spec(this.char, 'U').ghost)) { this.checkStageCollision();       // Umbra's Shadow Flight passes through the stage
+        this.checkLedgeMagnet(); }
 
         if (this.diving && this.grounded) this.diveImpact();
 
@@ -1138,7 +1140,7 @@ class Fighter {
                 return;
             }
             this.activeMove = { type: 'SPIRAL', t: 3 };
-            if (sp.ghost) this.invincibleTimer = Math.max(this.invincibleTimer, 3);        // Umbra's Shadow Flight: untouchable, harmless
+            if (sp.ghost) { this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.cloakT = Math.max(this.cloakT, 3); }        // Umbra's Shadow Flight: an invisible shadow, untouchable, harmless, passes through walls
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
@@ -1150,8 +1152,7 @@ class Fighter {
                 this.x += sx; this.y += sy;
                 this.px = lx; this.py = ly;
                 this.vx = sx; this.vy = sy;
-                this.checkStageCollision(false);
-                if (this.grounded) break;
+                if (!sp.ghost) { this.checkStageCollision(false); if (this.grounded) break; }
             }
             this.vx = this.vy = 0;
             this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
@@ -1182,8 +1183,13 @@ class Fighter {
                     }
                 }
             }
-            fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
+            if (!sp.ghost) fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
             if (x.t >= sp.frames) {
+                if (sp.ghost) {                                     // ended inside the stage: surface on top of it
+                    const hw = this.width / 2, hh = this.height / 2;
+                    if (this.x + hw > STAGE.x && this.x - hw < STAGE.x + STAGE.width && this.y + hh > STAGE.y && this.y - hh < STAGE.y + STAGE.height) { this.y = STAGE.y - hh; this.px = this.x; this.py = this.y; this.grounded = false; }
+                    this.cloakT = 6;
+                }
                 const caught = x.caught ? [...x.caught].filter(f => isAlive(f) && Math.hypot(f.x - this.x, f.y - this.y) < 200) : [];
                 if (caught.length === 1 && sp.drill) {                      // one foe caught: grab them by the leg and fling them away (an explosion at the end of the throw)
                     const v = caught[0];
@@ -3075,7 +3081,9 @@ const nearestOf = (f, list) => list.reduce((b, o) => (!b || Math.hypot(o.x - f.x
 export const items = [];
 let itemSerial = 0;
 const ITEM_R = { BALL: 24, STRAWBERRY: 22, BALLOON: 26, FIRESTICK: 22, CLOCK: 26 };
-const CLOCK_RADIUS = 760;               // diameter 1520 = 0.4 x the ORIGINAL 3800-wide map (it does not grow with the big arena)
+const CLOCK_RADIUS = 760, CLOCK_HELD_RADIUS = 380;   // thrown: full size; carried: half size and it goes with its holder
+const clockR = (it) => it.st === 'held' ? CLOCK_HELD_RADIUS : CLOCK_RADIUS;
+//                // diameter 1520 = 0.4 x the ORIGINAL 3800-wide map (it does not grow with the big arena)
 const CLOCK_SLOW = 0.3;
 const CLOCK_ARM = 60;                   // 1 s after the throw the bubble starts
 const CLOCK_LIFE = 900;                 // despawns 15 s after being thrown
@@ -3095,12 +3103,24 @@ function spawnItem(type) {
     fx('pickup', x, y);
 }
 
-/** 0.3 inside an active clock bubble, 1 elsewhere */
-function slowAt(x, y, owner) {
+/** the fighter this screen belongs to (null when nobody: showcase / demo) */
+export const viewerFighter = () => S.demo ? null : S.match ? fighters[S.mySlot] : p1;
+/** what a bot sees of a foe: a cloaked Umbra is invisible. Hard bots gamble on a spot near him (re-rolled every half second); the others only know where he vanished. */
+function aiSeen(bot, foe) {
+    if (!foe || !(foe.cloakT > 0)) { if (bot) bot._lost = null; return foe; }
+    const g = bot._lost && bot._lost.foe === foe ? bot._lost : (bot._lost = { foe, x: foe.x, y: foe.y, t: 0 });
+    if (bot.level === 'hard' || (S.gameMode === 'training' && S.train && S.train.botType === 'hard')) {
+        if (g.t-- <= 0) { g.t = 30; const r = Math.random(), a = Math.random() * Math.PI * 2, d = r < 0.3 ? 40 + Math.random() * 120 : 160 + Math.random() * 420; g.x = foe.x + Math.cos(a) * d; g.y = foe.y + Math.sin(a) * d * 0.5; }
+    }
+    const px = Object.create(foe); px.x = g.x; px.y = g.y; px.vx = 0; px.vy = 0; px.cloakT = 0;
+    return px;
+}
+export function spawnTrainItem(type) { if (type === 'CLEAR') { for (const it of items) { if (it.holder) { it.holder.heldItem = null; it.holder.heldId = 0; } it.st = 'dead'; } return; } if (ITEM_R[type]) { spawnItem(type); const it = items[items.length - 1]; it.x = p1.x + p1.facing * 160; it.y = p1.y - 120; it.py = it.y; } }
+
+/** 0.3 inside any active clock bubble (a held clock's half-size bubble follows its holder), 1 elsewhere. Slows EVERY projectile and item; fighters are never slowed. */
+function slowAt(x, y) {
     for (const it of items) {
-        if (it.type !== 'CLOCK' || !it.act || Math.hypot(it.x - x, it.y - y) >= CLOCK_RADIUS) continue;
-        const c = it.owner;                                          // whoever threw the clock last (catching it before it starts keeps that thrower)
-        if (owner && c && (owner === c || (S.match && S.match.teams && owner.team && owner.team === c.team))) continue;   // the thrower and their team are not slowed
+        if (it.type !== 'CLOCK' || !it.act || Math.hypot(it.x - x, it.y - y) >= clockR(it)) continue;
         return CLOCK_SLOW;
     }
     return 1;
@@ -3123,8 +3143,8 @@ function pickUp(f, it) {
         if (!f.balloon) { f.balloon = true; f.maxJumps += 3; f.jumpsLeft += 3; }          // adds 3 jumps on top of the character's own
         fx('pickup', f.x, f.y - 30); audio.playGrab(); it.st = 'dead'; return true;
     }
-    if (f.heldItem) return false;
-    it.st = 'held'; it.holder = f; it.hold = f.slot; it.armed = false; it.tT = 0; it.vx = it.vy = 0; it.grace = 0;
+    if (f.heldItem || it.used) return false;
+    it.st = 'held'; it.holder = f; it.hold = f.slot; it.armed = false; it.tT = 0; it.vx = it.vy = 0; it.grace = 0; it.owner = f; if (it.type === 'CLOCK') it.act = true;     // a held clock is the holder's: its (half-size) bubble goes with them
     f.heldItem = it; f.heldId = it.id;
     f.isGrabDashing = false; f.suplexPending = false; f.vx *= 0.2; f.vy *= 0.2;
     fx('pickup', it.x, it.y); audio.playGrab();
@@ -3136,11 +3156,11 @@ function throwHeldItem(f, tx, ty) {
     let dx = tx - f.x, dy = ty - f.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
     if (Math.abs(dx) > 0.15) f.facing = dx > 0 ? 1 : -1;
     const sp = it.type === 'CLOCK' ? 15 : it.type === 'FIRESTICK' ? 17 : 19;
-    it.st = 'thrown'; it.holder = null; it.hold = -1; it.owner = f; it.grace = 16; it.hitCool = 0; it.rest = 0;
+    it.st = 'thrown'; it.holder = null; it.hold = -1; it.owner = f; if (it.type === 'CLOCK') it.act = false; it.grace = 16; it.hitCool = 0; it.rest = 0;
     it.x = f.x + dx * 40; it.y = f.y + dy * 40 - 4; it.py = it.y; it.vx = dx * sp; it.vy = dy * sp;
     it.spin = (dx >= 0 ? 1 : -1) * (it.type === 'FIRESTICK' ? 0.5 : it.type === 'BALL' ? 0.3 : 0.15);
     if (it.type === 'BALL') it.throws++;
-    if (it.type === 'CLOCK') { it.armed = true; it.tT = 0; }
+    if (it.type === 'CLOCK') { it.armed = true; it.tT = 0; it.used = true; }       // once thrown, nobody can pick it up again
     f.heldItem = null; f.heldId = 0;
     f.actionLock = Math.max(f.actionLock, 18); f.throwFxT = 14;
     audio.playThrow();
@@ -3178,17 +3198,17 @@ function updateItems() {
         it.age++;
         if (it.st === 'held') {
             const h = it.holder;
-            if (!h || !isAlive(h) || h.heldItem !== it) { it.st = 'idle'; it.holder = null; it.hold = -1; it.vx = 0; it.vy = 0; continue; }
+            if (!h || !isAlive(h) || h.heldItem !== it) { it.st = 'idle'; it.holder = null; it.hold = -1; it.vx = 0; it.vy = 0; if (it.type === 'CLOCK') it.act = false; continue; }
             it.x = h.x + h.facing * 30; it.y = h.y - 2; it.py = it.y;
             continue;
         }
         if (it.type === 'CLOCK' && it.armed) {                       // the thrown clock: bubble after 1 s, gone after 15 s
             it.tT++;
-            if (!it.act && it.tT >= CLOCK_ARM) { it.act = true; it.st = 'zone'; it.vx = 0; it.vy = 0; fx('bubble', it.x, it.y, CLOCK_RADIUS); audio.playShield(); }
+            if (!it.act && it.tT >= CLOCK_ARM) { it.act = true; it.st = 'zone'; it.vx = 0; it.vy = 0; fx('bubble', it.x, it.y, CLOCK_RADIUS); audio.playShield(); }       // thrown: normal size again, can't be picked up
             if (it.tT >= CLOCK_LIFE) { it.st = 'dead'; continue; }
         }
         if (it.st === 'zone') continue;                              // frozen where it started the bubble
-        const k = it.type === 'CLOCK' ? 1 : slowAt(it.x, it.y, it.owner);
+        const k = it.type === 'CLOCK' ? 1 : slowAt(it.x, it.y);
         it.py = it.y;
         if (it.grace > 0) it.grace--;
         const thrown = it.st === 'thrown';
@@ -3234,7 +3254,7 @@ function itemInteractions() {
     for (const f of fighters) {
         if (!isAlive(f) || !f.isGrabDashing || f.suplexPending) continue;
         for (const it of items) {
-            if ((it.st !== 'idle' && it.st !== 'thrown') || (it.st === 'thrown' && (it.type !== 'BALL' || (it.owner === f && it.grace > 0)))) continue;
+            if ((it.st !== 'idle' && it.st !== 'thrown') || it.used || (it.st === 'thrown' && (it.type !== 'BALL' || (it.owner === f && it.grace > 0)))) continue;
             if (Math.hypot(it.x - f.x, it.y - f.y) < 72 + it.r) { if (pickUp(f, it)) break; }
         }
     }
@@ -3881,7 +3901,8 @@ function updateOrbs() {
             if (bw) { reflectOrb(o, bw); continue; }
         }
         // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
-        const ok = slowAt(o.x, o.y, o.owner);
+        const ok = slowAt(o.x, o.y);
+        if (ok < 1) o._wasSlow = true; else if (o._wasSlow) { o._wasSlow = false; o.vx *= 2; o.vy *= 2; if (o.spd) o.spd *= 2; fx('block', o.x, o.y); }     // a projectile leaving the bubble comes out 2x faster
         o.age = (o.age || 0) + 1;
         if (o.kind === 'bomb') { updateBomb(o, ok); continue; }
         if (o.curve) {                                            // Void Orb bends toward the nearest foe
@@ -4124,12 +4145,12 @@ function checkCombatCollisions(attacker, defender) {
     }
 }
 /** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who is facing away (or is in the air / mid-attack) is a backstab: +40% damage, +20% knockback,
- *  and a successful backstab makes him 3x faster for 3 s. */
+ *  and a successful backstab makes him 1.7x faster and invisible for 3 s. */
 function umbraEdge(att, def, hb) {
     if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
     const behind = (def.facing || 1) * (att.x - def.x) < 0;
     if (!behind) return hb;
-    att._shadowT = 180;                                        // successful backstab: 3x speed for 3 s, with a flash
+    att._shadowT = 180; att.cloakT = 180;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
     return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
@@ -4479,7 +4500,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 3 : 1);   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1);   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -4686,6 +4707,7 @@ export function applySnapshot(s) {
         Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: o.h, r: ITEM_R[o.t] });
     }
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
+    for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
     if (s.tl) S.timeLeft = s.tl;
     S.screenShake = Math.max(S.screenShake, s.sh || 0);
     // game state
@@ -4731,7 +4753,7 @@ export function step() {
         flushBuffered();
         for (const f of live) {
             if (!f._upd) continue;
-            if (f.isAI) { const foe = nearestOf(f, foesOf(f)); if (foe) f.updateAI(foe); aiWalk(f); f.update(); continue; }
+            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); if (foe) f.updateAI(aiSeen(f, foe)); aiWalk(f); f.update(); continue; }
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
@@ -4751,7 +4773,7 @@ export function step() {
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
             const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
-            if (!staticBot) { p2.updateAI(p1); aiWalk(p2); }
+            if (!staticBot) { p2.updateAI(aiSeen(p2, p1)); aiWalk(p2); }
         }
         p2.update();
 
@@ -4814,4 +4836,4 @@ export {
     Fighter, AIBot, updateAimMatrix, renderHUD, startMatchSequence, endGame, gameOverModal,
     CHARGE_MAX, triggerDramaticZoom, launch,
 };
-export { bulwarkRiposte, umbraEdge };
+export { bulwarkRiposte, umbraEdge, pickUp, throwHeldItem, slowAt };

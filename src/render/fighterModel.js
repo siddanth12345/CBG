@@ -7,13 +7,13 @@
 // is authored once, facing forward.
 import { charOf } from '../characters.js';
 import * as THREE from 'three';
-import { S } from '../gameCore.js';
+import { S, viewerFighter } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { Trail } from './trail.js';
 import { buildSword } from './swordModel.js';
 
 const BLADE_LEN = 40;
-const WHITE = new THREE.Color(0xffffff);
+const WHITE = new THREE.Color(0xffffff), YELLOW = new THREE.Color(0xfacc15);
 const ATTACK_FRAMES = 18;
 
 // ----------------------------------------------------------------- poses
@@ -791,7 +791,9 @@ export class FighterModel {
         this.root.position.copy(pos);
 
         // loser of a finished match is gone (blown out of the arena)
-        const hidden = (S.gameState === 'gameover' && f.stocks <= 0) || f.active === false || f.out === true;
+        const cloaked = f.cloakT > 0, mineCloak = cloaked && f === viewerFighter();        // a cloaked Umbra: nobody but he can see himself (glowing yellow)
+        this.mineCloak = mineCloak;
+        const hidden = (S.gameState === 'gameover' && f.stocks <= 0) || f.active === false || f.out === true || (cloaked && !mineCloak);
         this.root.visible = !hidden;
         if (hidden) { this.#hideExtras(); return; }
 
@@ -944,6 +946,7 @@ export class FighterModel {
             t.m.color.copy(t.base).lerp(t.grey, this.greyAmt);
             t.m.emissive.copy(t.emis).multiplyScalar(1 - this.greyAmt * 0.85);
             if (wa > 0.005) { t.m.color.lerp(WHITE, wa); t.m.emissive.lerp(WHITE, wa * 0.55); }
+            if (this.mineCloak) { t.m.color.lerp(YELLOW, 0.75); t.m.emissive.copy(YELLOW).multiplyScalar(1.1); }
         }
         // fully charged: a glisten in the fighter's colour
         if (f.attackHeld && f.meleeCharge >= 102 && this.fx) {
