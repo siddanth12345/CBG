@@ -84,9 +84,10 @@ export const BRIEF = {
         N: ['Bastion Core', 'Hold F for a slow, huge orb. A full charge hits very hard (up to 22).'],
         S: ['Shield Rush', 'Tap side F for an armoured charge. Swords fall along the path you ran.'],
         U: ['Sword Lift', 'Tap up F to ride up on a floating sword as high as Zephyr rises. Foes above you are speared and carried up. Melee hops you off early; the sword flies on, then falls dragging them down and bursts on landing. 0.3 s recovery.'],
-        M: ['Riposte', 'Neutral melee is a sword uppercut counter: 0.7 s open window, 0.7 s aftermath if nothing comes, 1 s cooldown (none after a successful counter). Counters everything except down moves. Every projectile (cores, rocks, bubbles, rockets, items) flies back (homing ones home to their owner, straight ones 2x faster); up close it ends in a stab: 1.8 s stun and bleeding.'],
-        DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft.'],
-        DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft.'],
+        M: ['Riposte', 'Neutral melee is a sword uppercut counter: 0.7 s open window, 0.7 s aftermath if nothing comes, 1 s cooldown (none after a successful counter). A successful counter up close is a 0.8 s stab-and-pull (1 s of i-frames for both, 1.8 s stun, bleeding); a counter meeting a DOWN move clashes and stuns both of you like a grab clash. Every projectile (cores, rocks, bubbles, rockets, items) flies back (homing ones home to their owner, straight ones 2x faster); up close it ends in a stab: 1.8 s stun and bleeding.'],
+        DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft. Bulwark is stunned 0.75 s after the Suplex slam, and 0.67 s after a grab throw.'],
+        DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft. He is stunned 0.6 s when he lands.'],
+        L: ['Landing stomp', 'Every time Bulwark lands from the air he stomps: 3 damage, light knockback, a small radius, and 0.3 s of get-up animation.'],
     },
     zephyr: {
         N: ['Gale Burst', 'Hold F for a close wind blast. It shoves everyone around you away. No projectile.'],
@@ -111,9 +112,9 @@ export const BRIEF = {
     },
     volt: {
         N: ['Enlightened', 'Hold F, then release to hang in the air and steer a lightning ball (mouse or joystick). It explodes when it hits, ends, or you get hit.'],
-        S: ['Thunder Dash', 'Tap side F to teleport a long way and stun whoever you land on.'],
-        U: ['Lightning Rod', 'Tap up F to vanish and zap upward along your aim. It stuns. No knockback.'],
-        DG: ['Shock Slam', 'On the ground, down F stomps and stuns everyone nearby.'],
+        S: ['Thunder Dash', 'Tap side F to teleport a long way (it stops at walls). The path stays as a blue zigzag trail that stuns touchers 0.5 s; after that, trails ignore them for 1.3 s.'],
+        U: ['Lightning Rod', 'Tap up F: a short hop, a 0.3 s hang, then two teleports toward your aim (3 dashes). Each leaves lightning that only shoves foes the way the bolt went.'],
+        DG: ['Shock Slam', 'On the ground, down F stomps and stuns everyone nearby for 0.5 s. Every Volt move has a 0.6 s delay before the next, anyone he hits gets 0.6 s of i-frames, a 3rd stun inside 10 s becomes a knockback, and any active move or shield beats his attacks.'],
         DA: ['Bolt Dive', 'In the air, down F is a very fast dive with a stunning hit.'],
     },
     umbra: {
@@ -122,6 +123,7 @@ export const BRIEF = {
         U: ['Smoke Vanish', 'Tap up F to vanish, become untouchable, and reappear high up. No attack.'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
+        M: ['Shadow Edge', 'Passive. Melee hits on a foe who is facing away are backstabs: +40% damage, +20% knockback. Every melee hit also quickens Umbra (+35% speed for 0.7 s).'],
     },
     terra: {
         N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],
@@ -132,7 +134,7 @@ export const BRIEF = {
     },
 };
 export const brief = (id) => BRIEF[id] || BRIEF.luminent;
-const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA'], ['Neutral melee', 'M']];
+const SLOT_LABEL = [['Hold F', 'N'], ['Side F', 'S'], ['Up F', 'U'], ['Down F (ground)', 'DG'], ['Down F (air)', 'DA'], ['Neutral melee', 'M'], ['Landing', 'L']];
 for (const c of Object.values(CHARS)) {
     const b = BRIEF[c.id];
     if (!b) continue;

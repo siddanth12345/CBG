@@ -5,6 +5,7 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
+import { tickExtras } from './hudExtras.js';
 import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
@@ -355,7 +356,7 @@ function counters(defType, atkType) {
 }
 /** 'hit' | 'shield' | 'countered' | 'clash' */
 function interaction(atkType, defender, down = false, atkChar = null) {
-    if (defender.riposteT > 0 && !down) return 'riposte';
+    if (defender.riposteT > 0) return down ? 'downclash' : 'riposte';          // a counter beats everything but down moves, which clash and stun both
     if (atkChar === 'volt') {                                      // Volt's moves are the weakest in the game: ANY active move (or shield) of the target beats them
         const vT = defender.isShielding ? 'SHIELD' : (defender.activeMove ? defender.activeMove.type : null);
         if (vT) return vT === 'SHIELD' ? 'shield' : 'countered';
@@ -593,6 +594,7 @@ class Fighter {
         if (this.zapT > 0 && --this.zapT === 0) this.zapN = 0;
         if (this.zapImmuneT > 0) this.zapImmuneT--;
         if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
+        if (this._shadowT > 0) this._shadowT--;
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
             if (!this.grounded) this._airT = (this._airT || 0) + 1;
@@ -1015,7 +1017,7 @@ class Fighter {
                     if (this._carry.includes(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
                     if (Math.abs(t.x - this.x) < 80 + t.width / 2 && t.y < this.y + 10 && this.y - t.y < 190 && interaction('SPIRAL', t, true) === 'hit') {
                         t.interrupt(); t.lastHitBy = this; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); this._carry.push(t);
-                        S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2);
+                        S.screenShake = Math.max(S.screenShake, 6); audio.playSpear(); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2);
                     }
                 }
                 for (const t of this._carry) if (isAlive(t)) { t.x += (this.x - t.x) * 0.5; t.y = this.y - this.height / 2 - 64; t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y; }
@@ -1423,8 +1425,8 @@ class Fighter {
             if (t.stocks <= 0 || t.invincibleTimer > 0 || Math.hypot(t.x - this.x, t.y - fy) > 95 + t.width / 2) continue;
             if (interaction('SPIRAL', t, true) === 'hit') launch(this, t, { damage: 3, bkb: 2.4, kbg: 0.21, angle: -1.2, mirror: true, x: this.x, y: fy });
         }
-        fx('stomp', this.x, fy, 130, 0, 'iron'); S.screenShake = Math.max(S.screenShake, pause ? 8 : 4); audio.playHit(false);
-        if (pause) { this.freezeTimer = Math.max(this.freezeTimer, 24); this.vx = 0; }
+        fx('stomp', this.x, fy, 130, 0, 'iron'); S.screenShake = Math.max(S.screenShake, pause ? 8 : 4); audio.playStomp();
+        this.freezeTimer = Math.max(this.freezeTimer, 18); this.vx = 0;           // 0.3 s of the same get-up animation as his Down-air stomp
     }
 
     launchSwordFly() {
@@ -1730,6 +1732,7 @@ class Fighter {
     /** Volt's Lightning Rod: vanish and strike upward instantly, zapping and stunning everything along the bolt */
     /** Volt's Lightning Rod: blink a short way up, hang in the air for 0.3 s (the aim can still move), then strike to wherever the aim points */
     startBolt(sp) {
+        if (this.char === 'volt') audio.playZap();
         const fx0 = this.x, fy0 = this.y;
         this.jumpsLeft = Math.max(0, this.jumpsLeft - 1);
         { const c = clipTeleport(this, fx0, fy0, fx0, fy0 - (sp.hop || 110)); this.x = c.x; this.y = c.y; }
@@ -1743,6 +1746,7 @@ class Fighter {
     }
     /** the strike itself: instantly to the aim point (limited reach), zapping and stunning everything along the path */
     boltStrike(sp) {
+        if (this.char === 'volt') audio.playZap();
         const aim = aimOf(this), fx0 = this.x, fy0 = this.y;
         let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1, reach = Math.min(d, sp.dist2 || 480);
         dx = dx / d * Math.max(reach, 60); dy = dy / d * Math.max(reach, 60);
@@ -1783,6 +1787,7 @@ class Fighter {
     }
 
     startBlink(d, sp = spec(this.char, 'S')) {
+        if (this.char === 'volt') audio.playZap();
         this.facing = d;
         if (sp.windup && !this._wound) { this.sx = { k: 'wind', t: 0, c: 0, tx: null, ty: null, d }; this.vx = 0; audio.playDash(); return; }
         const fromX = this.x, fromY = this.y;
@@ -2036,8 +2041,8 @@ class Fighter {
         const my = this.y - (this.py !== undefined ? this.py : this.y);
         const vx0 = Math.abs(this.vx) > 0.01 ? this.vx : mx;
         const vy0 = Math.abs(this.vy) > 0.01 ? this.vy : my;
-        const BOUNCE = this.bounceReflectT > 0 ? 0.82 : 0.62;
-        const TANGENT = this.bounceReflectT > 0 ? 0.98 : 0.9, MIN_BOUNCE = 3.2;
+        const BOUNCE = 1.0;                                       // a ragdolled fighter's velocity is reflected straight back off the stage
+        const TANGENT = 1.0, MIN_BOUNCE = 3.2;
         const platLeft = STAGE.x;
         const platRight = STAGE.x + STAGE.width;
         const platTop = STAGE.y;
@@ -3305,9 +3310,11 @@ function finishTimer() {
 //  Combat resolution
 // ============================================================================
 /** the attacker's move was stopped (shield / counter / clash): effects + punishment */
+const STUN_IFRAMES = 84;                                    // grab stun / counter stun: 1.4 s of i-frames from the moment the stun starts
 function counterStun(attacker, defender) {
     attacker.interrupt();
     attacker.clashStunTimer = STUN;                         // 0.5 s
+    attacker.invincibleTimer = Math.max(attacker.invincibleTimer, STUN_IFRAMES);
     attacker.vx = (attacker.x < defender.x ? -1 : 1) * 5;
     attacker.vy = -4;
 }
@@ -3319,12 +3326,13 @@ function bulwarkRiposte(bw, atk) {
     audio.playHit(true); S.screenShake = Math.max(S.screenShake, 12);
     fx('burn', (bw.x + atk.x) / 2, (bw.y + atk.y) / 2, 0, 0, 'blood'); dripBlood((bw.x + atk.x) / 2, (bw.y + atk.y) / 2);
     atk.interrupt();
-    if (close) {
-        bw.stabT = 42; bw.actionLock = 42; bw._stabVictim = atk; bw.activeMove = null;
+    if (close) { audio.playStab();
+        bw.stabT = 48; bw.actionLock = 48; bw._stabVictim = atk; bw.activeMove = null;                   // the stab-and-pull animation takes 0.8 s; both are untouchable for 1 s
+        bw.invincibleTimer = Math.max(bw.invincibleTimer, 60); atk.invincibleTimer = Math.max(atk.invincibleTimer, 60);
         atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 150; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
     } else {
         const d = dx >= 0 ? 1 : -1;
-        atk.clashStunTimer = STUN; atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 0; bw.riposteCd = 0;   // a successful counter has no cooldown
+        atk.clashStunTimer = STUN; atk.invincibleTimer = Math.max(atk.invincibleTimer, STUN_IFRAMES); atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 0; bw.riposteCd = 0;   // a successful counter has no cooldown
     }
 }
 /** a projectile met Bulwark's riposte: homing ones home back to their owner, straight ones go back twice as fast */
@@ -3335,11 +3343,17 @@ function reflectOrb(o, bw) {
     o.owner = bw; o.age = 0; o.life = Math.max(o.life || 0, 160); o.reflected = true;
     bw.riposteT = 0; bw.riposteAfter = 0; bw.riposteCd = 0; bw.actionLock = 0; bw.activeMove = null;      // parried: counter (and every other move) is ready again at once
     if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); } o.ctrl = null; o.shieldCounter = false; o.cap = null;
-    audio.playShield(); S.screenShake = Math.max(S.screenShake, 8); fx('counter', bw.x, bw.y); createParticles(o.x, o.y, '#e2e8f0', 10);
+    audio.playParry(); S.screenShake = Math.max(S.screenShake, 8); fx('counter', bw.x, bw.y); createParticles(o.x, o.y, '#e2e8f0', 10);
 }
 
 function handleBlocked(res, attacker, defender) {
     if (res === 'riposte') { bulwarkRiposte(defender, attacker); return; }
+    if (res === 'downclash') {                                  // Bulwark's counter meets a down move: both are stunned exactly like a grab clash
+        audio.playShield(); S.screenShake = Math.max(S.screenShake, 12);
+        const mx = (attacker.x + defender.x) / 2, my = (attacker.y + defender.y) / 2; createParticles(mx, my, '#e2e8f0', 16); fx('block', mx, my);
+        for (const f of [attacker, defender]) { f.interrupt(); f.vx = f.vy = 0; f.clashStunTimer = 120; f.invincibleTimer = Math.max(f.invincibleTimer, STUN_IFRAMES); }
+        defender.riposteT = 0; defender.riposteAfter = 0; return;
+    }
     if (res === 'shield') {
         audio.playShield();
         defender.shieldHealth = Math.max(0, defender.shieldHealth - 10);
@@ -3496,6 +3510,12 @@ function launch(attacker, defender, hb) {
     }
     defender.interrupt();
     defender.damage += hb.damage;
+    if (S.gameMode === 'training' && attacker && attacker !== defender) {                // numbers for the training readout
+        const mv = (attacker.specialKind || attacker.attackKind || hb.type || 'hit'), key = attacker.char + ' ' + mv;
+        S.lastHit = { char: attacker.char, move: mv, dmg: hb.damage, combo: defender.comboN, def: defender, stunMax: 0, age: 0 };
+        S.moveStats = S.moveStats || {}; const ms = S.moveStats[key] || (S.moveStats[key] = { n: 0, dmg: 0, stun: 0 });
+        ms.n++; ms.dmg += hb.damage; S.lastHit.stat = ms;
+    }
     if (hb.burn) { defender.burnT = hb.burn.t; defender.burnDmg = hb.burn.dmg; defender.burnBy = attacker; }
     defender.lastHitBy = attacker; defender.lastHitT = 0;
     if (defender.heldItem && defender.heldItem.type === 'FIRESTICK') burnStick(defender);      // getting hit shortens the firestick
@@ -3660,6 +3680,15 @@ function dropOrb(o) { const k = orbs.indexOf(o); if (k >= 0) orbs.splice(k, 1); 
 function updateDrops() {
     for (let i = drops.length - 1; i >= 0; i--) {
         const d = drops[i];
+        if (d.owner && !d.parried) {                                            // Bulwark's open counter also catches falling swords and rocks: the drop breaks and its owner is stunned
+            const bw = fighters.find(e => e.riposteT > 0 && isAlive(e) && e !== d.owner && foesOf(e).includes(d.owner) &&
+                Math.abs(e.x - d.x) < e.width / 2 + d.w / 2 + 60 && Math.abs(e.y - d.y) < e.height / 2 + d.h / 2 + 60);
+            if (bw) {
+                drops.splice(i, 1); bw.riposteT = 0; bw.riposteAfter = 0; bw.riposteCd = 0; bw.actionLock = 0; bw.activeMove = null;
+                audio.playParry(); S.screenShake = Math.max(S.screenShake, 10); fx('counter', d.x, d.y); createParticles(d.x, d.y, d.kind === 'rock' ? '#a8a29e' : '#e2e8f0', 14);
+                counterStun(d.owner, bw); continue;
+            }
+        }
         let up = false;
         if (d.fly) {                                            // Bulwark's released Up-F sword: rises while slowing, then falls
             const F = d.fly; F.f++;
@@ -3669,7 +3698,7 @@ function updateDrops() {
                 if (d.hitUp.has(t) || t.invincibleTimer > 0 || t.stocks <= 0) continue;
                 if (Math.abs(t.x - d.x) < d.w / 2 + t.width / 2 && Math.abs(t.y - d.y) < d.h / 2 + t.height / 2) {
                     d.hitUp.add(t);
-                    if (interaction('SPIRAL', t, true) === 'hit') { t.interrupt(); t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2); }      // speared on the way up: it carries them along
+                    if (interaction('SPIRAL', t, true) === 'hit') { t.interrupt(); t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t); S.screenShake = Math.max(S.screenShake, 6); audio.playSpear(); createParticles(t.x, t.y, '#e2e8f0', 10); fx('hit', t.x, t.y, 10, -Math.PI / 2); }      // speared on the way up: it carries them along
                 }
             }
         } else d.y += d.v;
@@ -3680,7 +3709,7 @@ function updateDrops() {
                 const res = interaction('SPIRAL', t, true);
                 if (res === 'hit' && d.fly) {            // the Up-F sword spears them and drags them down with it
                     t.interrupt(); t.damage += d.dmg; t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t);
-                    S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true); createParticles(t.x, t.y, '#e2e8f0', 12); fx('hit', t.x, t.y, 12, Math.PI / 2);
+                    S.screenShake = Math.max(S.screenShake, 8); audio.playSpear(); createParticles(t.x, t.y, '#e2e8f0', 12); fx('hit', t.x, t.y, 12, Math.PI / 2);
                 } else if (res === 'hit') launch(d.owner, t, { damage: d.dmg, bkb: d.bkb, kbg: d.kbg, angle: -1.25, mirror: true, x: d.x, y: d.y });
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             }
@@ -3699,7 +3728,7 @@ function updateDrops() {
                 launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: d.y });
                 if (caught) t.invincibleTimer = Math.max(t.invincibleTimer, t.hitstun + 2);
             }
-            fx('quake', d.x, d.y, 460, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true);
+            fx('quake', d.x, d.y, 460, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playBurst();
             continue;
         }
         if (d.y >= d.yl && !up) {
@@ -3715,7 +3744,7 @@ function updateDrops() {
                     launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: sy });
                     if (caught) t.invincibleTimer = Math.max(t.invincibleTimer, t.hitstun + 2);      // speared then launched: untouchable until they are out of the stun
                 }
-                fx('quake', d.x, sy, R * 2, 0, STYLE_OF[d.owner.char] + '@'); S.screenShake = Math.max(S.screenShake, 14);
+                fx('quake', d.x, sy, R * 2, 0, STYLE_OF[d.owner.char] + '@'); S.screenShake = Math.max(S.screenShake, 14); audio.playBurst();
             }
             if (d.surface) {
                 const sy = d.yl + (d.off || 0); fx('stomp', d.x, sy, d.w * 1.4, 0, d.kind === 'rock' ? 'rock' : 'iron'); S.screenShake = Math.max(S.screenShake, 4); audio.playHit(false);
@@ -3970,8 +3999,8 @@ function checkCombatCollisions(attacker, defender) {
             defender.vx = 0;
             defender.vy = 0;
 
-            attacker.clashStunTimer = 120;
-            defender.clashStunTimer = 120;
+            attacker.clashStunTimer = 120; attacker.invincibleTimer = Math.max(attacker.invincibleTimer, STUN_IFRAMES);
+            defender.clashStunTimer = 120; defender.invincibleTimer = Math.max(defender.invincibleTimer, STUN_IFRAMES);
 
             attacker.isGrabDashing = false;
             defender.isGrabDashing = false;
@@ -4068,7 +4097,7 @@ function checkCombatCollisions(attacker, defender) {
             if (set.has(defender)) return;
             set.add(defender);
             if (res !== 'hit') { handleBlocked(res, attacker, defender); return; }
-            launch(attacker, defender, hb);
+            launch(attacker, defender, umbraEdge(attacker, defender, hb));
             balloonPop(attacker, defender, hb);
             if (hb.fire) burnStick(attacker);
             return;
@@ -4079,10 +4108,18 @@ function checkCombatCollisions(attacker, defender) {
             handleBlocked(res, attacker, defender);
             return;
         }
-        launch(attacker, defender, hb);
+        launch(attacker, defender, umbraEdge(attacker, defender, hb));
         balloonPop(attacker, defender, hb);
         if (hb.fire) burnStick(attacker);
     }
+}
+/** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who is facing away (or is in the air / mid-attack) is a backstab: +40% damage, +20% knockback,
+ *  and every melee hit makes Umbra's shadow quicken him (speed boost for 0.7 s). */
+function umbraEdge(att, def, hb) {
+    if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
+    const behind = (def.facing || 1) * (att.x - def.x) < 0;
+    att._shadowT = 42;
+    return behind ? { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 } : hb;
 }
 
 let fBadge = null;
@@ -4166,6 +4203,7 @@ function renderHUD() {
     }
 
     hudText('p2Damage', String(Math.floor(p2.damage)));
+    tickExtras(S, fighters, me);
     hudClass('p2Damage', dmgClass(p2.damage));
     hudPips('p2Stocks', Math.max(0, S.gameMode === 'training' ? 3 : p2.stocks), 'w-3.5 h-3.5 rounded-full bg-rose-500 border border-rose-300 shadow-md shadow-rose-500/50');
 }
@@ -4428,7 +4466,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.7 : 1);   // training walk mult for p1; bleeding slows movement by 30%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.7 : 1) * (f._shadowT > 0 ? 1.35 : 1);   // training walk mult for p1; bleeding slows movement by 30%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }

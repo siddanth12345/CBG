@@ -219,6 +219,35 @@ export class SoundEngine {
         if (this._sample('homing', 0.95)) return;
         this._tone({ type: 'sawtooth', f0: 300, f1: 1800, dur: 0.4, vol: 0.2, filter: 4000 });
     }
+    // ---- sounds for the newer moves (synthesised: no sample files needed)
+    playSpear() {                                   // sword goes through someone: metal ring + wet thud
+        this._tone({ type: 'sawtooth', f0: 900, f1: 260, dur: 0.14, vol: 0.2, filter: 3400 });
+        this._tone({ type: 'square', f0: 120, f1: 50, dur: 0.18, vol: 0.26, filter: 700 });
+        this._noise(0.1, 0.16, 2600);
+    }
+    playBurst() {                                   // sword lands: big low boom with a crack on top
+        this._tone({ type: 'sine', f0: 95, f1: 28, dur: 0.5, vol: 0.4, filter: 500 });
+        this._tone({ type: 'sawtooth', f0: 240, f1: 60, dur: 0.3, vol: 0.28, filter: 1400 });
+        this._noise(0.35, 0.3, 1100);
+    }
+    playZap() {                                     // Volt teleports: electric chirp
+        this._tone({ type: 'sawtooth', f0: 2400, f1: 380, dur: 0.12, vol: 0.18, filter: 5200 });
+        this._tone({ type: 'square', f0: 1200, f1: 2600, dur: 0.06, vol: 0.12, filter: 5200 });
+        this._noise(0.09, 0.14, 4200);
+    }
+    playStomp() {                                   // Bulwark lands
+        this._tone({ type: 'sine', f0: 110, f1: 45, dur: 0.22, vol: 0.34, filter: 500 });
+        this._noise(0.1, 0.18, 800);
+    }
+    playParry() {                                   // counter connects: bright metal clang
+        this._tone({ type: 'triangle', f0: 1500, f1: 980, dur: 0.22, vol: 0.2, filter: 6000 });
+        this._tone({ type: 'square', f0: 760, f1: 520, dur: 0.1, vol: 0.14, filter: 3800 });
+        this._noise(0.05, 0.14, 5000);
+    }
+    playStab() {                                    // the counter's stab-and-pull
+        this._tone({ type: 'sawtooth', f0: 600, f1: 160, dur: 0.16, vol: 0.2, filter: 2600 });
+        this._noise(0.14, 0.18, 1500);
+    }
     playKO() {
         if (this._sample('ko', 1)) return;
         this._tone({ type: 'sawtooth', f0: 180, f1: 35, dur: 0.55, vol: 0.35, filter: 1000 });

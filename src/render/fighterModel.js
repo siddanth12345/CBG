@@ -616,7 +616,7 @@ export class FighterModel {
             p.lean = -6 + 14 * th; p.fwd = 5 * th; p.rK = 24; p.lK = 18; p.rHx = 14 * th; p.lHx = -10 * th; p.aura = 0.8 * (1 - u);
             return p;
         }
-        if (f.charging) {                              // cupping a growing orb
+        if (f.charging || f.chargeFrames > 0) {         // cupping a growing orb: every other animation (walking, bobbing) stops
             const c = clamp01(f.chargeFrames / 63);
             const sh = Math.sin(t * 40) * 2 * c;
             p.dy = -3 - 2 * c; p.rSx = 84; p.lSx = 84; p.rE = 70; p.lE = 70; p.rSz = 14 - 8 * c; p.lSz = 14 - 8 * c;
@@ -666,14 +666,14 @@ export class FighterModel {
             return p;
         }
         if (speedX > 1.4) {
-            const rate = 13 + 6 * Math.min(1, speedX / 8.5);
+            const rate = 15 + 7 * Math.min(1, speedX / 8.5);
             this.runPhase += dt * rate;
             const ph = this.runPhase;
             const sR = Math.sin(ph), sL = Math.sin(ph + Math.PI);
-            p.lean = 14; p.dy = -Math.abs(Math.cos(ph)) * 1.8 - 1;
-            p.rHx = sR * 52; p.lHx = sL * 52; p.rK = 12 + Math.max(0, Math.cos(ph)) * 70; p.lK = 12 + Math.max(0, Math.cos(ph + Math.PI)) * 70;
-            p.rSx = -sR * 48 + 6; p.lSx = -sL * 48 + 6; p.rE = 78 + sR * 12; p.lE = 78 + sL * 12; p.rSz = 8; p.lSz = 8;
-            p.torsoY = sR * 9; p.headX = -6;
+            p.lean = 19; p.dy = -Math.abs(Math.cos(ph)) * 3.4 - 1.5;
+            p.rHx = sR * 70; p.lHx = sL * 70; p.rK = 14 + Math.max(0, Math.cos(ph)) * 96; p.lK = 14 + Math.max(0, Math.cos(ph + Math.PI)) * 96;
+            p.rSx = -sR * 66 + 6; p.lSx = -sL * 66 + 6; p.rE = 82 + sR * 18; p.lE = 82 + sL * 18; p.rSz = 8; p.lSz = 8;
+            p.torsoY = sR * 13; p.headX = -9;
             return p;
         }
         // idle
@@ -696,7 +696,7 @@ export class FighterModel {
         const rip = f.char === 'bulwark' && (f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0);      // the riposte reuses the uppercut pose: ready -> thrust -> recover
         if (!rip && (f.attackTimer <= 0 || !f.attackKind)) return null;
         if (f.isRolling || f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.isHanging || f.grabbedBy) return null;
-        const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? 0.16 + 0.32 * (1 - f.stabT / 42) : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
+        const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? (() => { const q = 1 - f.stabT / 48; return q < 0.3 ? 0.16 + 0.3 * smooth(q / 0.3) : q < 0.58 ? 0.46 + 0.02 * (q - 0.3) / 0.28 : 0.48 - 0.16 * smooth((q - 0.58) / 0.42); })() : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
                       : clamp01((ATTACK_FRAMES - 1 - f.attackTimer + alpha) / ATTACK_FRAMES);
         const w = smooth(u / 0.1) * (1 - smooth(seg(u, 0.72, 1)));
         const k = rip ? 'UP' : f.attackKind;
@@ -727,6 +727,12 @@ export class FighterModel {
             o.rK = 70 * crouch + 8; o.lK = 62 * crouch + 8; o.rHx = 34 * crouch - 12 * rise; o.lHx = 18 * crouch - 6 * rise;
             o.torsoY = -24 * crouch + 18 * sw * (1 - rec); o.headX = -20 * sw;
             o.blade = smooth(seg(u, 0.06, 0.2)) * (1 - smooth(seg(u, 0.78, 0.98)));
+            if (f.stabT > 0) {                                  // the counter's stab: a hard lunge into the chest, a long hold, then a slow heave to pull the sword out (0.8 s)
+                const q = 1 - f.stabT / 48, th = smooth(seg(q, 0, 0.3)), pull = smooth(seg(q, 0.58, 1)), hold = th * (1 - pull);
+                o.fwd = 18 * hold; o.lean = 26 * th - 38 * pull; o.dy = -12 * hold + 6 * pull; o.torsoY = 14 * th - 20 * pull; o.headX = -38 * hold + 14 * pull;
+                o.rSx = lerp(o.rSx, 130, hold); o.lSx = lerp(o.lSx, 110, hold); o.rK = 40 * hold + 20 * pull; o.lK = 30 * hold; o.aura = 1; o.blade = 1;
+                o.shake = Math.sin(q * 90) * 2.5 * hold;
+            }
             return { w, kind: k, u, o, sw };
         }
         if (k === 'DOWN') {

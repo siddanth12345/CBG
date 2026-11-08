@@ -134,6 +134,16 @@ const STEPS = [
         init: () => ({ opened: false }),
         check: (st) => st.opened,
     },
+    {
+        title: 'Combat rules',
+        text: () => `<b>Combo limit:</b> hits on the same foe inside 1.5 s stack. From hit 4 the knockback grows, from hit 5 stuns turn into knockback, and hit 6 is a finisher that breaks the combo. The counter at the right of the screen warns you.<br>
+<b>Counters:</b> a shield or an active move beats most attacks (Volt's lose to everything). Bulwark's riposte also returns projectiles and breaks falling swords and rocks, but a DOWN move clashes with it and stuns both.<br>
+<b>I-frames:</b> grab stuns and counter stuns give 1.4 s, a grabber is safe until 0.5 s after the grab, and carried foes (Bulwark's sword) are safe from the finishing burst until their stun ends.<br>
+<b>Carrying:</b> some moves pick foes up (sword, whirlpool, roll). Hit the carrier or counter to break free. Press next when you've read this.`,
+        init: () => ({ f: 0 }),
+        check(st) { return ++st.f > 480; },
+        progress: (st) => `${Math.min(100, Math.round(st.f / 4.8))}%`,
+    }
 ];
 
 export class Guide {
