@@ -26,14 +26,32 @@ function beat() {
     const now = Date.now(), names = new Set();
     for (const [n, ts] of seen) { if (now - ts > 12000) seen.delete(n); else names.add(n); }
     B.setOnlineNames(names);
+    // pending borg requests are re-delivered whenever the person they are for is online (a request is never lost to a missed broadcast or an offline player)
+    for (const r of B.getRequests().outgoing) {
+        const to = (r.to || '').toLowerCase();
+        if (seen.has(to) && now - (resent.get(r.id) || 0) > 7000) { resent.set(r.id, now); t.send({ t: 'req', id: r.id, from: r.from, to }); }
+    }
 }
+const resent = new Map(), replied = new Map();
 function handle(m) {
     if (!isRec(m)) return;
     switch (m.t) {
-        case 'here': if (txt(m.name, 40) && m.name !== me) seen.set(m.name, Date.now()); break;
+        case 'here':
+            if (txt(m.name, 40) && m.name !== me) {
+                const isNew = !seen.has(m.name); seen.set(m.name, Date.now());
+                if (isNew && t) { B.setOnlineNames(new Set(seen.keys())); setTimeout(() => { try { t && t.send({ t: 'here', name: me }); } catch (e) { /* ignore */ } }, Math.random() * 600); }   // a newcomer sees everyone straight away
+            }
+            break;
         case 'req':
             if (!txt(m.id, 80) || !txt(m.from, 40) || !txt(m.to, 40) || m.to.toLowerCase() !== me) break;
+            if (B.isBorg(m.from)) {                                     // already borgs: the other side missed our accept, so say it again
+                if (Date.now() - (replied.get(m.id) || 0) > 3000) { replied.set(m.id, Date.now()); send({ t: 'accept', from: displayName(), to: m.from.toLowerCase(), id: m.id }, 2, 200); }
+                break;
+            }
             if (B.noteIncoming({ id: m.id, from: m.from, to: m.to, t: Date.now() })) Inbox.onRequest(m.from);
+            break;
+        case 'decline':
+            if (txt(m.from, 40) && txt(m.to, 40) && m.to.toLowerCase() === me) for (const r of B.getRequests().outgoing) if (r.to.toLowerCase() === m.from.toLowerCase()) B.removeOutgoing(r.id);
             break;
         case 'accept':
             if (!txt(m.from, 40) || !txt(m.to, 40) || m.to.toLowerCase() !== me) break;
@@ -57,6 +75,7 @@ export async function startInbox() {
     me = displayName().toLowerCase();
     try { t = await openTransport('bus'); } catch (e) { t = null; return; }
     t.onmessage = handle;
+    for (const d of [300, 1500, 3500]) setTimeout(() => t && t.send({ t: 'here', name: me }), d);    // announce a few times so everyone sees you fast
     beat(); beatT = setInterval(beat, 4000);
 }
 export function stopInbox() {
@@ -75,13 +94,14 @@ export async function sendBorgRequest(username) {
     if (B.isBorg(name)) return { ok: false, msg: 'Already borgs.' };
     if (B.borgCount() >= B.MAX_BORGS) return { ok: false, msg: 'Too many borgs.' };
     if (Date.now() - Inbox.sentAt < 2000) return { ok: false, msg: 'Wait a moment before sending another borg request.' };
-    if (!B.isGuestName(name) && !(await lookupUsername(name))) return { ok: false, msg: 'No player with that exact username.' };
+    // accounts live in each player's own browser, so a friend on another computer cannot be looked up here: the request is kept and delivered the moment they are online
+    const known = B.isGuestName(name) || B.isOnlineName(name) || await lookupUsername(name);
     Inbox.sentAt = Date.now();
     if (!t) await startInbox();
     const req = { id: Math.random().toString(36).slice(2) + Date.now().toString(36), from: displayName(), to: name, t: Date.now() };
     B.noteOutgoing(req);
     await send({ t: 'req', id: req.id, from: req.from, to: name.toLowerCase() }, 5, 200);
-    return { ok: true, msg: `Borg request sent to ${name}.` };
+    return { ok: true, msg: known ? `Borg request sent to ${name}.` : `Request saved. ${name} gets it as soon as they are online (check the exact spelling).` };
 }
 export async function acceptRequest(req) {
     const r = B.addBorgDirect(req.from);
@@ -90,7 +110,7 @@ export async function acceptRequest(req) {
     await send({ t: 'accept', from: displayName(), to: req.from.toLowerCase(), id: req.id }, 5, 200);
     return { ok: true, msg: `You and ${req.from} are now borgs.` };
 }
-export const declineRequest = (req) => B.removeIncoming(req.id);
+export const declineRequest = (req) => { B.removeIncoming(req.id); send({ t: 'decline', from: displayName(), to: req.from.toLowerCase(), id: req.id }, 3, 200); };
 export const cancelRequest = (req) => B.removeOutgoing(req.id);
 
 /** invite a borg into a private room: we host it and send them the code */

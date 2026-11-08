@@ -630,6 +630,11 @@ export class FighterModel {
             p.rHx = -22; p.lHx = -14; p.rK = 10; p.lK = 16; p.headX = -22; p.lean = 6; p.aura = 1;
             return p;
         }
+        if (f.backT > 0) {                              // knocked flat on the back (Bulwark's stab): falls over, lies still, then gets up (1 s)
+            const u = 1 - f.backT / 60, down = smooth(seg(u, 0, 0.25)), up = smooth(seg(u, 0.8, 1)), lay = down * (1 - up);
+            p.pitch = 90 * lay; p.dy = -9 * lay; p.rSx = 20 + 60 * lay; p.lSx = 20 + 60 * lay; p.rSz = 40 * lay; p.lSz = 40 * lay; p.rE = 20; p.lE = 20; p.rK = 10 * lay; p.lK = 10 * lay; p.headX = -10 * lay; p.lean = 0;
+            return p;
+        }
         if (f.hitstun > 0) {
             const sp = Math.hypot(f.vx, f.vy);
             const k = Math.sin(t * 28);
@@ -696,7 +701,7 @@ export class FighterModel {
         const rip = f.char === 'bulwark' && (f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0);      // the riposte reuses the uppercut pose: ready -> thrust -> recover
         if (!rip && (f.attackTimer <= 0 || !f.attackKind)) return null;
         if (f.isRolling || f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.isHanging || f.grabbedBy) return null;
-        const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? (() => { const q = 1 - f.stabT / 48; return q < 0.3 ? 0.16 + 0.3 * smooth(q / 0.3) : q < 0.58 ? 0.46 + 0.02 * (q - 0.3) / 0.28 : 0.48 - 0.16 * smooth((q - 0.58) / 0.42); })() : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
+        const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? (() => { const q = 1 - f.stabT / 60; return q < 0.25 ? 0.16 + 0.3 * smooth(q / 0.25) : q < 0.72 ? 0.46 + 0.02 * (q - 0.25) / 0.47 : 0.48 - 0.16 * smooth((q - 0.72) / 0.28); })() : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
                       : clamp01((ATTACK_FRAMES - 1 - f.attackTimer + alpha) / ATTACK_FRAMES);
         const w = smooth(u / 0.1) * (1 - smooth(seg(u, 0.72, 1)));
         const k = rip ? 'UP' : f.attackKind;
@@ -728,7 +733,7 @@ export class FighterModel {
             o.torsoY = -24 * crouch + 18 * sw * (1 - rec); o.headX = -20 * sw;
             o.blade = smooth(seg(u, 0.06, 0.2)) * (1 - smooth(seg(u, 0.78, 0.98)));
             if (f.stabT > 0) {                                  // the counter's stab: a hard lunge into the chest, a long hold, then a slow heave to pull the sword out (0.8 s)
-                const q = 1 - f.stabT / 48, th = smooth(seg(q, 0, 0.3)), pull = smooth(seg(q, 0.58, 1)), hold = th * (1 - pull);
+                const q = 1 - f.stabT / 60, th = smooth(seg(q, 0, 0.25)), pull = smooth(seg(q, 0.72, 1)), hold = th * (1 - pull);
                 o.fwd = 18 * hold; o.lean = 26 * th - 38 * pull; o.dy = -12 * hold + 6 * pull; o.torsoY = 14 * th - 20 * pull; o.headX = -38 * hold + 14 * pull;
                 o.rSx = lerp(o.rSx, 130, hold); o.lSx = lerp(o.lSx, 110, hold); o.rK = 40 * hold + 20 * pull; o.lK = 30 * hold; o.aura = 1; o.blade = 1;
                 o.shake = Math.sin(q * 90) * 2.5 * hold;

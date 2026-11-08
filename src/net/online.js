@@ -72,6 +72,7 @@ function watch() {
 /** ---- host ---- */
 export async function hostRoom(code, mode = 'pvp') {
     leaveRoom(false);
+    NETHOOK.fast = () => { const i = Online.t && Online.t.info; return !!i && (i.mode === 'p2p' || i.mode === 'local'); };
     Online.name = displayName(); Online.mode = mode; Online.viaQueue = false;
     Online.role = 'host'; Online.code = code || newCode();
     set('waiting', 'Opening room…');
@@ -215,6 +216,7 @@ export async function joinRoom(code) {
     try { Online.t = await openTransport(code); } catch (e) { Online.role = null; set('closed', e.message); return false; }
     const t = Online.t;
     if (t.enableRtc) t.enableRtc('guest');
+    NETHOOK.rtt = () => (Online.t && Online.t.info && Online.t.info.rtt) || 0;
     const myId = Online.myId = Math.random().toString(36).slice(2, 8);
     let welcomed = false;
     t.onmessage = (m) => {

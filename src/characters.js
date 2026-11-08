@@ -120,10 +120,10 @@ export const BRIEF = {
     umbra: {
         N: ['Void Orb', 'Hold F for a slow orb that bends a little toward your opponent.'],
         S: ['Shadow Step', 'Tap side F. After a short purple startup you appear behind the nearest person and stab.'],
-        U: ['Smoke Vanish', 'Tap up F to vanish, become untouchable, and reappear high up. No attack.'],
+        U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s, invincible and harmless (like Ember\'s dash, without the damage).'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
-        M: ['Shadow Edge', 'Passive. Melee hits on a foe who is facing away are backstabs: +40% damage, +20% knockback. Every melee hit also quickens Umbra (+35% speed for 0.7 s).'],
+        M: ['Shadow Edge', 'Passive. Melee hits on a foe who is facing away are backstabs: +40% damage, +20% knockback. A successful backstab makes him 3x faster for 3 s.'],
     },
     terra: {
         N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],

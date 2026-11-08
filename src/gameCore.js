@@ -18,7 +18,7 @@ export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online:
 export const audio = new SoundEngine();
 /** everything the host has produced since the last network snapshot (effects, sounds, particles) */
 export const outbox = [];
-export const NETHOOK = { send: null };
+export const NETHOOK = { send: null, rtt: null, fast: null };
 // online host: forward every sound the simulation plays so the guest hears it too
 for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(audio))) {
     if (!/^play/.test(name) || typeof audio[name] !== 'function') continue;
@@ -477,6 +477,7 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
+        this.backT = 0; this._shadowT = 0;   // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
@@ -595,6 +596,7 @@ class Fighter {
         if (this.zapImmuneT > 0) this.zapImmuneT--;
         if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
         if (this._shadowT > 0) this._shadowT--;
+        if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
             if (!this.grounded) this._airT = (this._airT || 0) + 1;
@@ -1136,6 +1138,7 @@ class Fighter {
                 return;
             }
             this.activeMove = { type: 'SPIRAL', t: 3 };
+            if (sp.ghost) this.invincibleTimer = Math.max(this.invincibleTimer, 3);        // Umbra's Shadow Flight: untouchable, harmless
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
@@ -1152,7 +1155,7 @@ class Fighter {
             }
             this.vx = this.vy = 0;
             this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
-            if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
+            if (sp.ghost) { /* no hitbox */ } else if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
                 const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
                 if (x.t % 6 === 1) this.swingHitSet = new Set();
                 if (!this.swingHitSet) this.swingHitSet = new Set();
@@ -1215,7 +1218,7 @@ class Fighter {
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
                 this.vx = Math.cos(x.ang) * sp.speed * 0.45; this.vy = Math.sin(x.ang) * sp.speed * 0.45;
                 const over = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
-                this.actionLock = Math.max(this.actionLock, lk(this, sp.missile ? 16 : over ? 20 : 70));
+                this.actionLock = Math.max(this.actionLock, lk(this, sp.ghost ? 10 : sp.missile ? 16 : over ? 20 : 70));
             }
         } else if (x.k === 'erupt') {
             const sp = spec(this.char, 'U');
@@ -1720,12 +1723,12 @@ class Fighter {
         let ang = Math.atan2(aim.y - this.y, aim.x - this.x);
         if (Math.sin(ang) > 0.3) ang = -ang;                                    // a recovery: never aimed down into the floor
         this.grounded = false; this.y -= 4;
-        this.startSx('rocket', 0, { ang, hits: 0, charge: 36 });
+        this.startSx('rocket', 0, { ang, hits: 0, charge: sp.ghost ? 0 : 36 });
         this.swingHitSet = new Set();
         if (sp.armor) this.armorT = sp.frames + 6;
         this.facing = Math.cos(ang) >= 0 ? 1 : -1;
-        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + 36;
-        this.setMove('SPIRAL', sp.frames + 36);
+        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + (sp.ghost ? 0 : 36);
+        this.setMove('SPIRAL', sp.frames + (sp.ghost ? 0 : 36));
         fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
     }
 
@@ -2349,9 +2352,16 @@ class Fighter {
             if (--this.riposteAfter === 0) this.riposteCd = 60;
         } else if (this.stabT > 0) {
             const v = this._stabVictim;
-            if (v && isAlive(v)) { v.vx = 0; v.vy = 0; v.hitstun = Math.max(v.hitstun, 4); v.x += (this.x + this.facing * 40 - v.x) * 0.3; pushOutOfStage(v, v.x, v.y); }
-            if (this.stabT === 21 && v) { createParticles(v.x, v.y - 6, '#dc2626', 16); fx('hit', v.x, v.y, 14, this.facing > 0 ? 0 : Math.PI); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true); }
-            if (--this.stabT === 0) { this._stabVictim = null; }
+            this.vx = 0; this.vy = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 3);
+            if (v && isAlive(v)) { v.vx = 0; v.vy = 0; v.hitstun = Math.max(v.hitstun, 4); v.invincibleTimer = Math.max(v.invincibleTimer, 3); v.x += (this.x + this.facing * 40 - v.x) * 0.3; pushOutOfStage(v, v.x, v.y); }
+            if (this.stabT === 45 && v) { createParticles(v.x, v.y - 6, '#dc2626', 16); fx('hit', v.x, v.y, 14, this.facing > 0 ? 0 : Math.PI); S.screenShake = Math.max(S.screenShake, 10); audio.playHit(true); }
+            if (--this.stabT === 0) {                       // the kick: Bulwark boots the foe off the sword; they fall on their back for 1 s (i-frames until 0.2 s after)
+                if (v && isAlive(v)) {
+                    v.facing = this.facing; v.vx = this.facing * 4; v.vy = -3; v.grounded = false; v.hitstun = 60; v.backT = 60; v.invincibleTimer = Math.max(v.invincibleTimer, 74);
+                    fx('hit', v.x, v.y, 12, this.facing > 0 ? 0 : Math.PI); createParticles(v.x, v.y, '#e2e8f0', 10); S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
+                }
+                this._stabVictim = null;
+            }
         } else if (this.riposteCd > 0) this.riposteCd--;
     }
     /** Ember's cluster bomb: three sticky fire bubbles (middle one on the aim, two 22 degrees either side) */
@@ -3327,9 +3337,9 @@ function bulwarkRiposte(bw, atk) {
     fx('burn', (bw.x + atk.x) / 2, (bw.y + atk.y) / 2, 0, 0, 'blood'); dripBlood((bw.x + atk.x) / 2, (bw.y + atk.y) / 2);
     atk.interrupt();
     if (close) { audio.playStab();
-        bw.stabT = 48; bw.actionLock = 48; bw._stabVictim = atk; bw.activeMove = null;                   // the stab-and-pull animation takes 0.8 s; both are untouchable for 1 s
-        bw.invincibleTimer = Math.max(bw.invincibleTimer, 60); atk.invincibleTimer = Math.max(atk.invincibleTimer, 60);
-        atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 150; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
+        bw.stabT = 60; bw.actionLock = 60; bw._stabVictim = atk; bw.activeMove = null; bw.vx = bw.vy = 0;                   // the stab-and-pull animation takes 0.8 s; both are untouchable for 1 s
+        bw.invincibleTimer = Math.max(bw.invincibleTimer, 64); atk.invincibleTimer = Math.max(atk.invincibleTimer, 64);
+        atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 240; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
     } else {
         const d = dx >= 0 ? 1 : -1;
         atk.clashStunTimer = STUN; atk.invincibleTimer = Math.max(atk.invincibleTimer, STUN_IFRAMES); atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 0; bw.riposteCd = 0;   // a successful counter has no cooldown
@@ -4114,12 +4124,15 @@ function checkCombatCollisions(attacker, defender) {
     }
 }
 /** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who is facing away (or is in the air / mid-attack) is a backstab: +40% damage, +20% knockback,
- *  and every melee hit makes Umbra's shadow quicken him (speed boost for 0.7 s). */
+ *  and a successful backstab makes him 3x faster for 3 s. */
 function umbraEdge(att, def, hb) {
     if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
     const behind = (def.facing || 1) * (att.x - def.x) < 0;
-    att._shadowT = 42;
-    return behind ? { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 } : hb;
+    if (!behind) return hb;
+    att._shadowT = 180;                                        // successful backstab: 3x speed for 3 s, with a flash
+    fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
+    createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
+    return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
 }
 
 let fBadge = null;
@@ -4466,7 +4479,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.35 : 1);   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 3 : 1);   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -4582,11 +4595,12 @@ function trackSnapRate() {
     if (lastSnapAt) {
         const gap = Math.min(400, now - lastSnapAt);
         snapAvg += (gap - snapAvg) * 0.08; snapDev += (Math.abs(gap - snapAvg) - snapDev) * 0.08;
-        const want = Math.max(64, Math.min(150, snapAvg * 1.6 + snapDev * 3));
+        const want = Math.max(36, Math.min(150, snapAvg * 1.5 + snapDev * 3));
         interpMs += (want - interpMs) * 0.05;
     }
     lastSnapAt = now;
 }
+const ownGuestFighter = () => S.match ? fighters[S.mySlot] : p1;
 function guestSmooth() {
     const rt = performance.now() - interpMs;
     for (const f of (S.match ? fighters : [p1, p2])) {
@@ -4607,6 +4621,20 @@ function guestSmooth() {
         else if (b.tp) { x = a.x; y = a.y; }               // a teleport (blink, respawn): hold, then jump
         else { const u = (rt - a.t) / (b.t - a.t); x = a.x + (b.x - a.x) * u; y = a.y + (b.y - a.y) * u; }
         if (Math.hypot(x - f.x, y - f.y) > 260) { f._teleported = true; } else f._teleported = false;
+        if (f === ownGuestFighter()) {                    // YOUR fighter: no interpolation delay. Show the newest snapshot pushed ahead by the trip time, and start walking the instant a key goes down
+            const last = buf[buf.length - 1];
+            if (last && !last.tp && !(f.hitstun > 0) && !f.grabbedBy) {
+                const lat = Math.min(10, (performance.now() - last.t) / 16.7 + ((NETHOOK.rtt && NETHOOK.rtt()) || 40) / 33);
+                const dir = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
+                f._held = dir !== 0 && dir === f._heldDir ? f._held + 1 : (dir !== 0 ? 1 : 0); f._heldDir = dir;
+                const free = f.grounded && !f.sx && !f.activeMove && !f.isShielding && !f.attackTimer;
+                const walk = 8.5 * charOf(f.char).walk * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 3 : 1);
+                const lead = free && dir ? Math.max(0, dir * walk * Math.min(lat, f._held) - (f.vx || 0) * Math.min(lat, f._held)) : 0;
+                const tx = last.x + (f.vx || 0) * lat + lead, ty = last.y + (f.vy || 0) * lat * 0.6;
+                f._px = f._px === undefined ? tx : f._px + (tx - f._px) * 0.5; f._py = f._py === undefined ? ty : f._py + (ty - f._py) * 0.5;
+                if (Math.hypot(f._px - x, f._py - y) < 160) { x = f._px; y = f._py; }
+            }
+        }
         f.x = x; f.y = y;
     }
     for (const o of orbs) { o.x += o.vx * 0.5; o.y += o.vy * 0.5; }
@@ -4735,7 +4763,7 @@ export function step() {
         checkCombatCollisions(p2, p1);
         itemInteractions();
     }
-    if (S.online === 'host' && NETHOOK.send && (++netTick % 2) === 0) NETHOOK.send(snapshot());
+    if (S.online === 'host' && NETHOOK.send && (++netTick % ((NETHOOK.fast && NETHOOK.fast()) ? 1 : 2)) === 0) NETHOOK.send(snapshot());     // 60 snapshots/s on a direct link, 30 through the relay
 
     for (let i = shockwaves.length - 1; i >= 0; i--) {
         const sw = shockwaves[i];
@@ -4786,3 +4814,4 @@ export {
     Fighter, AIBot, updateAimMatrix, renderHUD, startMatchSequence, endGame, gameOverModal,
     CHARGE_MAX, triggerDramaticZoom, launch,
 };
+export { bulwarkRiposte, umbraEdge };

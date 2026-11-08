@@ -23,21 +23,7 @@ export function tickExtras(S, fighters, me) {
     box.style.display = playing ? 'block' : 'none';
     if (!playing) return;
 
-    // ---- combo counter: the longest running combo on anyone (yours in orange, one on you in red)
-    let best = null;
-    for (const f of fighters) if (f.active && f.comboT > 0 && f.comboN >= 2 && (!best || f.comboN > best.comboN)) best = f;
-    let c = '';
-    if (best) {
-        const n = best.comboN, mine = best.lastHitBy === me, onMe = best === me;
-        const col = onMe ? '#fca5a5' : mine ? '#fdba74' : '#e2e8f0';
-        const warn = n >= 5 ? '#f87171' : n >= 3 ? '#fde047' : '#94a3b8';
-        const left = Math.round(best.comboT / 60 * 10) / 10;
-        c = `<div style="font-size:${Math.min(64, 30 + n * 5)}px;font-weight:900;line-height:1;color:${col}">${n}<span style="font-size:15px;font-weight:800;margin-left:4px">HITS</span></div>` +
-            `<div style="font-size:12px;font-weight:700;color:${warn};margin-top:2px">${NEXT[Math.min(5, n)] || NEXT[5]}</div>` +
-            `<div style="height:4px;width:110px;margin:5px 0 0 auto;border-radius:3px;background:rgba(148,163,184,.25)"><div style="height:100%;width:${Math.round(best.comboT / 90 * 100)}%;border-radius:3px;background:${col}"></div></div>`;
-        void left;
-    }
-    if (c !== last.c) { last.c = c; combo.innerHTML = c; }
+    combo.innerHTML = '';
 
     // ---- training readout
     const train = S.gameMode === 'training';
