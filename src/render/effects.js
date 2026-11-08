@@ -156,6 +156,16 @@ export class Effects {
         this.sMesh.count = 0;
         scene.add(this.sMesh);
 
+        this.bMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({
+            transparent: true, depthWrite: false, toneMapped: false,
+        }), this.MAXS);
+        this.bMesh.frustumCulled = false; this.bMesh.renderOrder = 6;
+        this.bMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.bMesh.setColorAt(0, new THREE.Color());
+        this.bMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        this.bMesh.count = 0;
+        scene.add(this.bMesh);
+
         // ---- dash ghosts (instanced silhouettes)
         const ghostGeo = mergeGeos([
             { geo: new THREE.CapsuleGeometry(11, 24, 4, 10), mat: new THREE.Matrix4().makeTranslation(0, -8, 0) },
@@ -368,6 +378,20 @@ export class Effects {
             this.sparks_.push({
                 p: pos.clone(), v: new THREE.Vector3(Math.cos(a) * s, Math.sin(a) * s, (Math.random() - 0.5) * s * 0.35),
                 t: 0, life: life * (0.6 + Math.random() * 0.7), c: col,
+            });
+        }
+    }
+
+    balls(pos, color, count, speed, life = 0.75) {
+        const col = new THREE.Color(color);
+        for (let i = 0; i < count; i++) {
+            if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.15;
+            const s = speed * (0.35 + Math.random() * 0.7);
+            this.sparks_.push({
+                p: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 10, 0)),
+                v: new THREE.Vector3(Math.cos(a) * s * 0.28, Math.sin(a) * s, (Math.random() - 0.5) * 12),
+                t: 0, life: life * (0.7 + Math.random() * 0.5), c: col, ball: true, r: 3.2 + Math.random() * 4.6,
             });
         }
     }
@@ -675,6 +699,11 @@ export class Effects {
                     this.sparks(pos, '#ffffff', 8, 180, 0.35);
                     break;
                 case 'burn':
+                    if (e.c === 'blood') {
+                        this.balls(pos, '#7f1d1d', 8, 70, 0.85);
+                        this.balls(pos, '#450a0a', 5, 40, 1.05);
+                        break;
+                    }
                     this.star(pos, 60, '#fb923c', 0.2, 4);
                     this.sparks(pos, '#f97316', 12, 260, 0.5, 'up');
                     break;
@@ -738,14 +767,25 @@ export class Effects {
             const s = this.sparks_[i];
             s.t += dt;
             if (s.t >= s.life) { this.sparks_.splice(i, 1); continue; }
-            s.v.y -= 260 * dt; s.v.multiplyScalar(1 - dt * 2.2);
+            s.v.y -= (s.ball ? 640 : 260) * dt; s.v.multiplyScalar(1 - dt * (s.ball ? 0.6 : 2.2));
             s.p.addScaledVector(s.v, dt);
         }
+        let nb = 0;
         for (const s of this.sparks_) {
-            if (n >= this.MAXS) break;
+            const k = 1 - s.t / s.life;
+            if (s.ball) {
+                if (nb >= this.MAXS) continue;
+                const r = (s.r || 4) * (0.75 + 0.35 * k);
+                Sc.set(r, r * (0.82 + 0.2 * k), r);
+                M.compose(s.p, Q.identity(), Sc);
+                this.bMesh.setMatrixAt(nb, M);
+                this.bMesh.setColorAt(nb, C.copy(s.c).multiplyScalar(0.55 + 0.45 * k));
+                nb++;
+                continue;
+            }
+            if (n >= this.MAXS) continue;
             const sp = s.v.length();
             if (sp < 0.001) continue;
-            const k = 1 - s.t / s.life;
             const len = Math.min(46, 5 + sp * 0.07) * (0.35 + k * 0.65);
             Q.setFromUnitVectors(this.up, V.copy(s.v).divideScalar(sp));
             Sc.set(1.6 * (0.4 + k * 0.6), len, 1.6 * (0.4 + k * 0.6));
@@ -754,6 +794,9 @@ export class Effects {
             this.sMesh.setColorAt(n, C.copy(s.c).multiplyScalar(k));
             n++;
         }
+        this.bMesh.count = nb;
+        this.bMesh.instanceMatrix.needsUpdate = true;
+        if (this.bMesh.instanceColor) this.bMesh.instanceColor.needsUpdate = true;
         this.sMesh.count = n;
         this.sMesh.instanceMatrix.needsUpdate = true;
         if (this.sMesh.instanceColor) this.sMesh.instanceColor.needsUpdate = true;

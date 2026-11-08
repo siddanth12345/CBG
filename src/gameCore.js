@@ -609,7 +609,7 @@ class Fighter {
                 this.bleedT--;
                 if (++this.bleedTick % 12 === 0) {
                     this.damage += 1.5; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
-                    createParticles(this.x, this.y - 6, '#dc2626', 7); fx('burn', this.x, this.y - 30, 0, 0, 'blood'); audio.playHit(false);
+                    dripBlood(this.x, this.y - 10); fx('burn', this.x, this.y - 20, 0, 0, 'blood'); audio.playHit(false);
                 }
             }
         }
@@ -2989,6 +2989,20 @@ class AIBot extends Fighter {
 }
 
 const particles = [];
+function dripBlood(x, y) {
+    const room = Math.max(0, 220 - particles.length);
+    const n = Math.min(9, room);
+    for (let i = 0; i < n; i++) {
+        particles.push({
+            x: x + (Math.random() - 0.5) * 16, y: y - 6,
+            vx: (Math.random() - 0.5) * 1.4, vy: 1.4 + Math.random() * 2.8,
+            z: (Math.random() - 0.5) * 10, vz: 0,
+            radius: 2.4 + Math.random() * 3.4,
+            color: Math.random() < 0.45 ? '#450a0a' : '#7f1d1d',
+            alpha: 1, life: 40, drip: true,
+        });
+    }
+}
 function createParticles(x, y, color, count = 10) {
     if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
     // hard cap so ledge thrash / KO spam can't melt the frame rate
@@ -3303,7 +3317,7 @@ function bulwarkRiposte(bw, atk) {
     const dx = atk.x - bw.x, dy = atk.y - bw.y, close = Math.abs(dx) < 120 && Math.abs(dy) < 110;
     bw.riposteT = 0; bw.riposteAfter = 0; bw.facing = dx >= 0 ? 1 : -1;
     audio.playHit(true); S.screenShake = Math.max(S.screenShake, 12);
-    fx('counter', (bw.x + atk.x) / 2, (bw.y + atk.y) / 2); createParticles((bw.x + atk.x) / 2, (bw.y + atk.y) / 2, '#e2e8f0', 16);
+    fx('burn', (bw.x + atk.x) / 2, (bw.y + atk.y) / 2, 0, 0, 'blood'); dripBlood((bw.x + atk.x) / 2, (bw.y + atk.y) / 2);
     atk.interrupt();
     if (close) {
         bw.stabT = 42; bw.actionLock = 42; bw._stabVictim = atk; bw.activeMove = null;
@@ -3718,6 +3732,11 @@ function zapGate(f) {
     if (f.zapN >= 3) { f.zapN = 0; f.zapT = 0; return true; }
     return false;
 }
+/** side / up / down F (and every character's version, including the charge) is "in a move" */
+function inSpecialMove(f) {
+    return !!(f.sx || f.sideT > 0 || f.upT > 0 || f.spiralT > 0 || f.diving || f.suplexT > 0 || f.fActive
+        || (f.activeMove && ['BLINK', 'SPIRAL', 'SUPLEX', 'HEADBUTT', 'CORE'].includes(f.activeMove.type)));
+}
 function updateZapTrails() {
     for (let i = zapTrails.length - 1; i >= 0; i--) {
         const z = zapTrails[i];
@@ -3725,6 +3744,8 @@ function updateZapTrails() {
         const dx = z.x2 - z.x1, dy = z.y2 - z.y1, L2 = dx * dx + dy * dy || 1;
         for (const f of foesOf(z.owner)) {
             if (z.hit.has(f) || f.invincibleTimer > 0 || f.zapImmuneT > 0 || f.stocks <= 0 || f.out) continue;
+            const stunned = f.hitstun > 0 || f.clashStunTimer > 0 || f.dizzyTimer > 0 || f.freezeTimer > 0;
+            if (inSpecialMove(f) && !stunned) continue;   // trail ignores anyone mid side / up / down F unless they are stunned
             const tt = Math.max(0, Math.min(1, ((f.x - z.x1) * dx + (f.y - z.y1) * dy) / L2));
             if (Math.hypot(f.x - (z.x1 + dx * tt), f.y - (z.y1 + dy * tt)) > 46 + f.height * 0.25) continue;
             z.hit.add(f);
@@ -4692,10 +4713,11 @@ export function step() {
 
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
+        if (p.drip) { p.vy += 0.42; p.vx *= 0.98; }
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
-        p.alpha -= 0.04;
+        p.alpha -= p.drip ? 0.028 : 0.04;
         if (p.alpha <= 0) {
             particles.splice(i, 1);
         }
