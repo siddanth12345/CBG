@@ -603,12 +603,12 @@ class Fighter {
             else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30);
         }
         if (this.char === 'bulwark') this.tickRiposte();
-        if (this.bleedT > 0) {                                          // riposte stab: bleeding out, 1.5 damage every 0.2 s
+        if (this.bleedT > 0) {                                          // Bulwark riposte: 2.5 s bleed, 1 damage every 0.3 s
             if (this.stocks <= 0 || this.out) this.bleedT = 0;
             else {
                 this.bleedT--;
-                if (++this.bleedTick % 12 === 0) {
-                    this.damage += 1.5; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
+                if (++this.bleedTick % 18 === 0) {
+                    this.damage += 1; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
                     dripBlood(this.x, this.y - 10); fx('burn', this.x, this.y - 20, 0, 0, 'blood'); audio.playHit(false);
                 }
             }
@@ -3321,7 +3321,7 @@ function bulwarkRiposte(bw, atk) {
     atk.interrupt();
     if (close) {
         bw.stabT = 42; bw.actionLock = 42; bw._stabVictim = atk; bw.activeMove = null;
-        atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 108; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
+        atk.hitstun = 108; atk.vx = 0; atk.vy = 0; atk.bleedT = 150; atk.bleedTick = 0; atk._bleedBy = bw; atk.lastHitBy = bw; atk.lastHitT = 0;
     } else {
         const d = dx >= 0 ? 1 : -1;
         atk.clashStunTimer = STUN; atk.vx = d * 9; atk.vy = -4; bw.vx = -d * 6; bw.vy = -3; bw.actionLock = 0; bw.riposteCd = 0;   // a successful counter has no cooldown
@@ -3441,6 +3441,7 @@ function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
+    if (attacker && attacker !== defender && attacker.bleedT > 0) hb = { ...hb, damage: (hb.damage || 0) * 0.5, bkb: (hb.bkb || 0) * 0.5, kbg: (hb.kbg || 0) * 0.5 }; // bleeding fighters deal 50% less damage and knockback
     if (attacker && attacker !== defender) {                          // COMBO LIMIT (everyone): hits inside a 1.5 s window stack; from the 4th the knockback grows,
         if (defender.comboT <= 0) defender.comboN = 0;                // from the 5th any stun turns into knockback, and the 6th is a big finisher that breaks the combo
         if (defender.comboT <= 78 || defender.comboN === 0) { defender.comboN++; defender.comboT = 90; }       // one move's multi-hit counts once
@@ -3568,7 +3569,8 @@ function explodeOrb(o) {
     if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
     if (o.trap) for (const f of fighters) if (f.trapId === o.id) { f.trapId = 0; f.invincibleTimer = Math.max(f.invincibleTimer, 60); f.ghostT = Math.max(f.ghostT, 60); }
     const R = o.R !== undefined ? o.R : 80 + 90 * o.charge;
-    const dmg = o.d !== undefined ? o.d : 4 + 16 * o.charge;          // Luminent: min 4, max 20; every character has its own numbers
+    const baseDmg = o.d !== undefined ? o.d : 4 + 16 * o.charge;  // Luminent: min 4, max 20; every character has its own numbers
+    const dmg = baseDmg * (o.owner && o.owner.bleedT > 0 ? 0.5 : 1);
     fx('explosion', o.x, o.y, R, o.charge, o.owner ? STYLE_OF[o.owner.char] : 0);
     S.screenShake = Math.max(S.screenShake, 8 + 10 * o.charge);
     audio.playHit(o.charge > 0.5);
@@ -4426,7 +4428,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1);   // training walk mult for p1
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.7 : 1);   // training walk mult for p1; bleeding slows movement by 30%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
