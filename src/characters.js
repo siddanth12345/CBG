@@ -94,7 +94,8 @@ export const BRIEF = {
         S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back.'],
         U: ['Jet Stream', 'Tap up F to fly where you aim for 0.9 s. The air you tore through becomes a current that sweeps foes along. No damage.'],
         DG: ['Roaming Twister', 'On the ground, down F sends a tornado rolling forward for 2.5 s. It lifts and spins foes, then flings them out forward.'],
-        DA: ['Cyclone Drill', 'In the air, down F corkscrews straight down with small hits, then a gale launches foes straight up.'],
+        DA: ['Cyclone Drill', 'In the air, down F corkscrews straight down with small hits and a final impact. No knockback at the end.'],
+        M: ['Wind Current', 'Passive. Neutral melee also sends a helix of wind where you face (5 s). It lifts everything it touches, you included, and vanishes 2 s after the first push. 3 s cooldown after it ends.'],
     },
     ember: {
         N: ['Flamethrower', 'Hold F and aim a stream of fire. A longer hold means a longer flame and a stronger end burst.'],
@@ -109,7 +110,7 @@ export const BRIEF = {
         U: ['Geyser', 'Tap up F and a water pillar under you lifts you. People in it are stunned, not flung. Then you get a short aim boost.'],
         DG: ['Whirlpool', 'On the ground, down F makes a pool that pulls people to the centre. No damage. Only one at a time.'],
         DA: ['Splash Dive', 'In the air, down F plunges into a wide splash that shoves people aside.'],
-        M: ['Undertow', 'Passive. Melee hits drench the foe for 3 s: 25% slower, and his other moves hit a drenched foe 20% harder.'],
+        M: ['Dive In', 'Neutral melee while standing on your own whirlpool: dive into it and steer it at walking speed for 2 s. Anyone it catches is pulled underground inside it, and everyone bursts out (knockback, no damage) when it ends or when they jump.'],
     },
     volt: {
         N: ['Enlightened', 'Hold F, then release to hang in the air and steer a lightning ball (mouse or joystick). It explodes when it hits, ends, or you get hit.'],

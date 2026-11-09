@@ -1,12 +1,13 @@
 // Character select: every character is a half-profile card. The whole card is the select button;
 // the Info button on it shows what the character does.
 import { CHAR_IDS, CHARS, getMyChar, setMyChar, portraitSVG } from './characters.js';
+import { perksFor } from './meta.js';
 
 const ACCENTS = { luminent: '#22d3ee', bulwark: '#60a5fa', zephyr: '#34d399', ember: '#fb923c', tide: '#38bdf8', volt: '#facc15', umbra: '#a78bfa', terra: '#a8a29e' };
 
 export class CharUI {
-    constructor({ root, openBtn, onTry }) {
-        this.onTry = onTry || null;
+    constructor({ root, openBtn, onTry, onSort }) {
+        this.onTry = onTry || null; this.onSort = onSort || null;
         this.el = document.createElement('div');
         this.el.className = 'lm-modal lm-hidden';
         this.el.innerHTML = `<div class="lm-panel" role="dialog" aria-label="Characters">
@@ -20,6 +21,8 @@ export class CharUI {
             if (e.target === this.el || e.target.closest('[data-close]')) return this.hide();
             const info = e.target.closest('[data-info]');
             if (info) { e.stopPropagation(); const id = info.dataset.info; if (this.open_.has(id)) this.open_.delete(id); else this.open_.add(id); this.render(); return; }
+            const sortBtn = e.target.closest('[data-sort]');
+            if (sortBtn) { e.stopPropagation(); if (this.onSort) this.onSort(sortBtn.dataset.sort); return; }
             const tryBtn = e.target.closest('[data-try]');
             if (tryBtn) { e.stopPropagation(); setMyChar(tryBtn.dataset.try); this.hide(); if (this.onTry) this.onTry(tryBtn.dataset.try); return; }
             const card = e.target.closest('[data-pick]');
@@ -41,6 +44,7 @@ export class CharUI {
                     <div class="ch-meta"><b>${c.name}</b><span>${c.role}</span>
                         <div class="ch-bar" title="Walk speed ${spd}%"><i style="width:${Math.min(100, spd / 1.4)}%"></i></div></div>
                     ${on ? '<em class="ch-tag">Equipped</em>' : ''}
+                    <button class="lm-btn lm-btn-ghost lm-mini ch-info ch-sort" data-sort="${id}" style="right:64px" title="Equip perks">Sort${perksFor(id).length ? ' ' + perksFor(id).length + '/2' : ''}</button>
                     <button class="lm-btn lm-btn-ghost lm-mini ch-info" data-info="${id}" aria-expanded="${this.open_.has(id)}">${this.open_.has(id) ? 'Hide' : 'Info'}</button>
                 </div>
                 ${this.open_.has(id) ? `<div class="ch-desc">

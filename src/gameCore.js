@@ -5,7 +5,8 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
-import { tickExtras } from './hudExtras.js';
+import { tickExtras, notify, showReward } from './hudExtras.js';
+import { perksFor, reportMatch } from './meta.js';
 import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
@@ -477,7 +478,7 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
-        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
+        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
            // cloakT: Umbra is invisible to everyone but himself
            // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -541,7 +542,7 @@ class Fighter {
         this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
-        this.invincibleTimer = 120; this.ghostT = 0;
+        this.invincibleTimer = 120 + (hasPerk(this, 'wind2') ? 60 : 0); this.ghostT = 0;
         this.spawnT = (!fullReset && S.gameState === 'playing') ? 60 : 0;
         if (this.spawnT <= 0 && this.grounded) this.vy = 0;
         this.attackTimer = 0;
@@ -600,6 +601,8 @@ class Fighter {
         if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
         if (this._shadowT > 0) this._shadowT--;
         if (this._boostWait) { this._boostWait = false; this._edgeBoost = true; }
+        if (this.buryT > 0) this.buryT--;
+        if (this._wpT > 0) this._wpT--;
         if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
@@ -1110,7 +1113,7 @@ class Fighter {
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
                 if (sp.twister) {
-                    tornadoes.push({ x: this.x + f * 60, y: feet, vx: f * 5.2, r: 105, h: 300, life: 150, owner: this, caught: new Map(), age: 0 });
+                    { const T = { id: ++windId, x: this.x + f * 60, y: feet, vx: f * 5.2, r: 105, h: 300, life: 150, owner: this, caught: new Map(), age: 0 }; tornadoes.push(T); fx('twister', T.x, T.y, f * T.r, T.life, T.id); }
                     fx('gust', this.x + f * 60, feet, 120, 0, 'wind'); S.screenShake = Math.max(S.screenShake, 6); createParticles(this.x + f * 60, feet - 10, '#e0f2fe', 16);
                 } else if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
@@ -1552,7 +1555,7 @@ class Fighter {
 
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
-        this.cd[kind] = sp.cd !== undefined ? sp.cd : CD[kind];
+        this.cd[kind] = Math.round((sp.cd !== undefined ? sp.cd : CD[kind]) * (hasPerk(this, 'quick') ? 0.9 : 1));
         if (kind === 'SPIRAL') this.upT = (sp.frames || 20) + (sp.windup || 0) + 12;
         if (kind === 'BLINK' && sp.kind !== 'roll' && sp.kind !== 'bubble' && this.char !== 'umbra') this.sideT = (sp.frames || 0) + (sp.windup || 0) + 22;
         this.actionLock = lk(this, sp.lock !== undefined ? sp.lock : trainLock());
@@ -2252,6 +2255,7 @@ class Fighter {
     }
 
     jump() {
+        if (this.buryT > 0) { this._wantOut = true; return false; }          // jumping while buried in a whirlpool = getting out of it
         if (this.hitstun > 0 || this.isShielding || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.grabHolding || this.isRolling) return false;
         if (this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0) return false;
         // rolling: jump WITH the ball (same height); cancel only after 0.6 s — does not extend roll life
@@ -2352,6 +2356,8 @@ class Fighter {
             case 'SIDE_LEFT': kind = 'SIDE_LEFT'; this.facing = -1; break;
             case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; this.facing = 1; break;
         }
+        if (kind === 'JAB' && this.char === 'tide' && enterWhirl(this)) return true;        // Tide's neutral melee on his whirlpool: dive in
+        if (kind === 'JAB' && this.char === 'zephyr') spawnWind(this);                         // Zephyr's passive: a wind current
         this.attackKind = kind;
         this.attackSerial++;
         this.attackTimer = ATTACK_FRAMES;
@@ -2434,6 +2440,12 @@ class Fighter {
             return;
         }
 
+        if (this === viewerFighter() && !S.demo) {                          // "why did I die": one line about the last hit that got through
+            const h = this._lastHit;
+            notify(h && h.by && h.by !== this && this.lastHitT < 360
+                ? `KO'd by ${h.by.name || 'a foe'} (${h.by.char}) with ${MOVE_NAMES[h.type] || String(h.type).toLowerCase()} at ${Math.round(this.damage)}%${h.combo >= 3 ? ` · hit ${h.combo} of a combo` : ''}`
+                : `You fell out at ${Math.round(this.damage)}%`);
+        }
         const timerMode = !!(S.match && S.match.mode === 'timer');
         if (!timerMode) this.stocks--;
         this.deaths++;
@@ -3127,6 +3139,12 @@ function spawnItem(type) {
 
 /** the fighter this screen belongs to (null when nobody: showcase / demo) */
 export const viewerFighter = () => S.demo ? null : S.match ? fighters[S.mySlot] : p1;
+/** perks (bought in the shop, equipped per character): only the fighter this screen belongs to carries them */
+const hasPerk = (f, id) => !!f && f === viewerFighter() && S.online !== 'guest' && perksFor(f.char).includes(id);
+/** match stats of the human player (for coins, daily challenges, the ladder) */
+const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
+const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
+const MOVE_NAMES = { J: 'melee', CORE: 'Neutral F', BLINK: 'Side F', SPIRAL: 'Up F', HEADBUTT: 'Down air', GRAB: 'grab', SUPLEX: 'Down F' };
 /** what a bot sees of a foe: a cloaked Umbra is invisible. Hard bots gamble on a spot near him (re-rolled every half second); the others only know where he vanished. */
 function aiSeen(bot, foe) {
     if (!foe || !(foe.cloakT > 0)) { if (bot) bot._lost = null; return foe; }
@@ -3169,6 +3187,7 @@ function burnItem(it) {
 function burnStick(f) { if (f.heldItem && f.heldItem.type === 'FIRESTICK') burnItem(f.heldItem); }
 
 function pickUp(f, it) {
+    bump(f, 'items');
     if (it.type === 'STRAWBERRY') {
         f.damage = Math.max(0, f.damage - 30);
         fx('heal', f.x, f.y); audio.playGrab(); it.st = 'dead'; return true;
@@ -3376,6 +3395,7 @@ function finishTimer() {
 /** the attacker's move was stopped (shield / counter / clash): effects + punishment */
 const STUN_IFRAMES = 84;                                    // grab stun / counter stun: 1.4 s of i-frames from the moment the stun starts
 function counterStun(attacker, defender) {
+    bump(defender, 'counters');
     attacker.interrupt();
     attacker.clashStunTimer = STUN;                         // 0.5 s
     attacker.invincibleTimer = Math.max(attacker.invincibleTimer, STUN_IFRAMES);
@@ -3518,9 +3538,13 @@ function emberCounter(em, foe) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
+    if (attacker && attacker !== defender && hb.damage !== undefined) {                          // perks
+        const m = (hasPerk(attacker, 'sharp') ? 1.06 : 1) * (hasPerk(attacker, 'last') && attacker.stocks === 1 ? 1.12 : 1) * (hasPerk(defender, 'tough') ? 0.92 : 1);
+        const k = (hasPerk(attacker, 'heavy') ? 1.06 : 1) * (hasPerk(defender, 'iron') ? 0.94 : 1);
+        if (m !== 1 || k !== 1) hb = { ...hb, damage: (hb.damage || 0) * m, bkb: (hb.bkb || 0) * k };
+    }
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
     if (attacker && attacker !== defender && attacker._edgeBoost && attacker.cloakT > 0 && hb.damage) { hb = { ...hb, damage: hb.damage * 1.5 }; attacker._edgeBoost = false; }      // Umbra: the hit after a re-backstab inside the cloak
-    if (attacker && attacker !== defender && attacker.char === 'tide' && defender.soakT > 0 && !hb._soak && hb.damage) hb = { ...hb, damage: hb.damage * 1.2, bkb: (hb.bkb || 0) * 1.08 };      // Tide vs a drenched foe
     if (attacker && attacker !== defender && attacker.bleedT > 0) hb = { ...hb, damage: (hb.damage || 0) * 0.5, bkb: (hb.bkb || 0) * 0.5, kbg: (hb.kbg || 0) * 0.5 }; // bleeding fighters deal 50% less damage and knockback
     if (attacker && attacker !== defender) {                          // COMBO LIMIT (everyone): hits inside a 1.5 s window stack; from the 4th the knockback grows,
         if (defender.comboT <= 0) defender.comboN = 0;                // from the 5th any stun turns into knockback, and the 6th is a big finisher that breaks the combo
@@ -3532,6 +3556,12 @@ function launch(attacker, defender, hb) {
             if (n >= 5 && hb.stun) hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, bkb: Math.max(hb.bkb, 9), kbg: Math.max(hb.kbg, 0.9), angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
             if (n >= 6) { hb = { ...hb, bkb: Math.max(hb.bkb, 10.5), kbg: Math.max(hb.kbg, 1) }; defender.comboN = 0; defender.comboT = 0; defender.invincibleTimer = Math.max(defender.invincibleTimer, 40); }
         }
+    }
+    if (attacker && attacker !== defender) {
+        bump(attacker, 'dealt', hb.damage || 0); bump(attacker, 'hits');
+        if (attacker === viewerFighter() && S.stats) S.stats.combo = Math.max(S.stats.combo, defender.comboN || 0);
+        bump(defender, 'taken', hb.damage || 0);
+        defender._lastHit = { by: attacker, type: hb.type || 'J', combo: defender.comboN || 1, t: 0 };
     }
     if (attacker && attacker !== defender && attacker.char === 'volt') {
         if (hb.stun && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
@@ -3891,10 +3921,11 @@ function updateTornadoes() {
         const x0 = t.x; t.x += t.vx;
         if (t.x < STAGE.x - 200 || t.x > STAGE.x + STAGE.width + 200) t.life = Math.min(t.life, 1);
         if (--t.life <= 0 || !t.owner) {
+            fx('twisterend', 0, 0, 0, 0, t.id);
             for (const [f] of t.caught) if (isAlive(f)) { f._inTwister = false; launch(t.owner, f, { damage: 5, bkb: 10, kbg: 0.95, angle: t.vx >= 0 ? -0.75 : Math.PI + 0.75, x: f.x, y: f.y }); }
             fx('gust', t.x, t.y, t.r * 1.6, 0, 'wind'); createParticles(t.x, t.y - 80, '#e0f2fe', 18); tornadoes.splice(i, 1); continue;
         }
-        if (t.age % 4 === 0) { fx('whirlpool', t.x, t.y, t.r * 0.8, 10, 'wind'); createParticles(t.x + (Math.random() - 0.5) * t.r, t.y - Math.random() * t.h, '#e0f2fe', 2); }
+        if (t.age % 4 === 0) createParticles(t.x + (Math.random() - 0.5) * t.r, t.y - Math.random() * t.h, '#e0f2fe', 2);
         for (const f of foesOf(t.owner)) {
             if (!isAlive(f) || f.invincibleTimer > 0) { t.caught.delete(f); continue; }
             const inT = Math.abs(f.x - t.x) < t.r + f.width * 0.3 && f.y > t.y - t.h - 40 && f.y < t.y + f.height * 0.6;
@@ -3910,42 +3941,82 @@ function updateTornadoes() {
         }
     }
 }
+/** Tide hops into his own whirlpool with a neutral melee: he rides it (moving it at walking speed) for 2 s, until he jumps */
+function enterWhirl(t) {
+    for (const w of whirlpools) {
+        if (w.owner !== t || w.rider || Math.abs(t.x - w.x) > w.r + 30 || t.y < w.y - 170) continue;
+        w.rider = t; w.rideT = 120; w.life = Math.max(w.life, 126); t._wantOut = false; t.interrupt();
+        fx('gust', w.x, w.y, w.r * 0.6, 0, 'water'); createParticles(w.x, w.y - 10, '#38bdf8', 14); audio.playShield();
+        return true;
+    }
+    return false;
+}
+function burstOut(w, f) {
+    f.buryT = 0; f._wantOut = false; f._wpT = 150; f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; f.grounded = false;
+    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.15, x: f.x, y: f.y });        // knockback only
+    fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 16); S.screenShake = Math.max(S.screenShake, 5);
+}
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
         const w = whirlpools[i];
-        w.life--;
-        if (w.life <= 0) { whirlpools.splice(i, 1); continue; }
-        if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
-        // pull zone = pool itself (diameter wide, radius tall) — grab-style forced center lock
-        for (const f of foesOf(w.owner || p1)) {
-            if (!isAlive(f) || f.invincibleTimer > 0) continue;
-            // real launches can still knock you free
-            if (f.hitstun > 18) { f._inWhirl = false; continue; }
-            const dx = w.x - f.x;
-            const horiz = Math.abs(dx);
-            if (horiz > w.r + f.width * 0.35) { f._inWhirl = false; continue; }
-            const above = w.y - f.y;
-            if (above > w.r + f.height * 0.5 || f.y > w.y + f.height) { f._inWhirl = false; continue; }
-
-            // centre of the pool (same idea as grab: force position toward the holder)
-            const tx = w.x;
-            const ty = w.y - f.height * 0.35;
-            // grab-style: zero out velocity, then snap/lerp body toward centre every frame
-            f.clashStunTimer = 0;            // never grey-stun from the pool
-            f.vx = 0;
-            f.vy = 0;
-            // strong lerp into centre (forcible, like being held)
-            const k = 0.55;
-            const wox = f.x, woy = f.y;
-            f.x += (tx - f.x) * k;
-            f.y += (ty - f.y) * k;
-            pushOutOfStage(f, wox, woy); f.px = f.x; f.py = f.y;
-            // residual velocity so physics/other systems still see motion toward centre
-            f.vx = (tx - f.x) * 2.5;
-            f.vy = (ty - f.y) * 2.5;
-            f.grounded = false;
-            f._inWhirl = true;
+        const t = w.rider;
+        if (t) {                                            // the rider is underground inside the pool and steers it
+            const h = t._in || {};
+            if (!isAlive(t) || t._wantOut || --w.rideT <= 0 || t.hitstun > 0) {
+                w.rider = null; t.buryT = 0; t._wantOut = false; t.y = w.y - t.height * 0.5 - 6; t.vy = -8; t.vx = 0; t.px = t.x; t.py = t.y; t.invincibleTimer = Math.max(t.invincibleTimer, 20);
+                fx('gust', w.x, w.y, w.r * 0.7, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 14); w.life = Math.min(w.life, 40);
+            } else {
+                const spd = 8.5 * charOf(t.char).walk * (t.bleedT > 0 ? 0.3 : 1), d = (h.right ? 1 : 0) - (h.left ? 1 : 0);
+                if (d) { w.x = Math.max(STAGE.x + 20, Math.min(STAGE.x + STAGE.width - 20, w.x + d * spd)); t.facing = d; }
+                t.x = w.x; t.y = w.y + 6; t.px = t.x; t.py = t.y; t.vx = 0; t.vy = 0; t.buryT = 3; t.invincibleTimer = Math.max(t.invincibleTimer, 3); t.grounded = false;
+                w.life = Math.max(w.life, 3);
+            }
         }
+        w.life--;
+        if (w.life <= 0) {
+            if (w.caught) for (const f of w.caught) if (isAlive(f)) burstOut(w, f);
+            if (w.rider) { w.rider.buryT = 0; w.rider.y = w.y - w.rider.height * 0.5 - 6; w.rider.px = w.rider.x; w.rider.py = w.rider.y; }
+            whirlpools.splice(i, 1); continue;
+        }
+        if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        const caught = w.caught || (w.caught = new Set());
+        for (const f of foesOf(w.owner || p1)) {
+            if (!isAlive(f)) { caught.delete(f); continue; }
+            if (caught.has(f)) {                            // buried: carried along under the pool until they jump out (or it ends)
+                f._wpN = (f._wpN || 0) + 1;
+                if (f._wantOut || f._wpN > 240 || (f.isAI && f._wpN > 70)) { caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
+                f.x = w.x; f.y = w.y + 8; f.px = f.x; f.py = f.y; f.vx = 0; f.vy = 0; f.buryT = 3; f.hitstun = Math.max(f.hitstun, 3); f.invincibleTimer = Math.max(f.invincibleTimer, 3); f.grounded = false; f.clashStunTimer = 0;
+                continue;
+            }
+            if (f._wpT > 0 || f.invincibleTimer > 0 || f.hitstun > 18) continue;
+            if (Math.abs(w.x - f.x) > w.r + f.width * 0.35 || w.y - f.y > w.r + f.height * 0.5 || f.y > w.y + f.height) continue;
+            caught.add(f); f._wpN = 0; f._wantOut = false; f.interrupt(); f.buryT = 3;
+            fx('gust', f.x, w.y, 70, 0, 'water'); createParticles(f.x, w.y - 10, '#38bdf8', 10); audio.playHit(false);
+        }
+    }
+}
+
+// ---- Zephyr's passive: a neutral melee sends out a wind current (a DNA-strand helix of air) that lifts everything it touches
+const winds = []; let windId = 0;
+function spawnWind(z) {
+    if (z._windCd > 0 || winds.some(w => w.owner === z)) return;
+    const w = { id: ++windId, x: z.x + z.facing * 30, y: z.y, dir: z.facing, len: 560, r: 78, life: 300, pushed: false, owner: z };
+    winds.push(w); fx('helix', w.x, w.y, w.dir * w.len, 300, w.id); audio.playZap();
+}
+function updateWinds() {
+    for (const f of fighters) if (f._windCd > 0) f._windCd--;
+    for (let i = winds.length - 1; i >= 0; i--) {
+        const w = winds[i], o = w.owner;
+        if (--w.life <= 0 || !isAlive(o)) { fx('helixend', 0, 0, 0, 0, w.id); if (o) o._windCd = 180; winds.splice(i, 1); continue; }
+        for (const f of fighters) {
+            if (!f.active || !isAlive(f)) continue;
+            const along = (f.x - w.x) * w.dir;
+            if (along < -20 || along > w.len || Math.abs(f.y - w.y) > w.r + f.height * 0.4) continue;
+            if (f.isHanging || f.buryT > 0 || f.grabbedBy) continue;
+            f.vy = Math.max(f.vy - 2.4, -15); f.vx += w.dir * 0.5; f.grounded = false;
+            if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); }       // vanishes 2 s after the first thing is pushed (the user included)
+        }
+        for (const q of orbs) { const along = (q.x - w.x) * w.dir; if (along > -20 && along < w.len && Math.abs(q.y - w.y) < w.r + 20) { q.vy -= 0.9; if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); } } }
     }
 }
 
@@ -4147,7 +4218,7 @@ function checkCombatCollisions(attacker, defender) {
             }
 
             if (attacker.suplexPending) {                     // Down-F on the ground: carry them up and suplex
-                attacker.beginSuplex(defender);
+                bump(attacker, 'grabs'); attacker.beginSuplex(defender);
                 createParticles(defender.x, defender.y, '#ef4444', 20);
                 return;
             }
@@ -4155,6 +4226,7 @@ function checkCombatCollisions(attacker, defender) {
             defender.interrupt();
             defender.isShielding = false;
             attacker.isGrabDashing = false;
+            bump(attacker, 'grabs');
             attacker.grabHolding = defender;
             attacker.grabTimer = 90;
             defender.grabbedBy = attacker;
@@ -4216,6 +4288,7 @@ function umbraEdge(att, def, hb) {
     if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
     const behind = (def.facing || 1) * (att.x - def.x) < 0;
     if (!behind) return hb;
+    bump(att, 'backstabs');
     if (att.cloakT > 0) att._boostWait = true;                 // a backstab while already invisible: refresh the invisibility, and the NEXT hit deals 1.5x damage
     att._shadowT = 300; att.cloakT = 300;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
@@ -4361,14 +4434,14 @@ export function startDemo(map, chars) {
         f.startX = STAGE.x + STAGE.width * (0.3 + 0.4 * i); f.startY = STAGE.y - 120;
         f.reset(true); f.shieldHold = 0; f.remoteAim = null; f.maxJumps = charOf(f.char).jumps; f.jumpsLeft = f.maxJumps;
     });
-    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0; whirlpools.length = 0; tornadoes.length = 0; items.length = 0;
+    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0; whirlpools.length = 0; tornadoes.length = 0; winds.length = 0; items.length = 0;
     return { map: m, chars: cs };
 }
 
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.gameMode = mode;
+    S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4396,7 +4469,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
     orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0;
-    whirlpools.length = 0; tornadoes.length = 0;
+    whirlpools.length = 0; tornadoes.length = 0; winds.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
     if (S.match) {
@@ -4523,6 +4596,12 @@ export function applyTrainPrefs() {
 
 const gameOverModal = document.getElementById('gameOverModal');
 function endGame(winnerText, winnerRole = null) {
+    if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.stats && S.gameMode !== 'training' && S.online !== 'guest' && S.online !== 'host') {
+        S.rewardShown = true;
+        const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
+        S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
+        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked, secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
+    }
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
     document.getElementById('winnerText').textContent = winnerText;
@@ -4559,6 +4638,7 @@ function aiWalk(f) {
 
 /** walking / shielding for one fighter from a held-input state ({left,right,shield,drop}) */
 function drive(f, h) {
+    f._in = h;
     const free = f.hitstun === 0 && f.dizzyTimer === 0 && f.clashStunTimer === 0 && !f.grabHolding &&
         !f.isRolling && f.freezeTimer === 0;
     if (free) {
@@ -4567,7 +4647,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1);   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (hasPerk(f, 'swift') ? 1.06 : 1);   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -4799,7 +4879,43 @@ export function applySnapshot(s) {
     }
 }
 
+const REC_FRAMES = 180;                                  // the replay is the last 3 s of the match, shown at half speed
+function recordFrame() {
+    const rec = S.rec || (S.rec = []);
+    rec.push({ f: fighters.map(f => f.active ? packFighter(f) : null), o: orbs.slice(0, 24).map(o => ({ x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake });
+    if (rec.length > REC_FRAMES) rec.shift();
+}
+function applyReplayFrame(fr) {
+    fr.f.forEach((d, i) => {
+        const f = fighters[i]; if (!d || !f) return;
+        for (const k in d) {
+            const v = d[k];
+            if (k === 'swing') f.swing = v ? SWING[v] : null;
+            else if (REFS.includes(k)) f[k] = v < 0 ? null : fighters[v];
+            else f[k] = v;
+        }
+        f.px = f.x; f.py = f.y; f._slowK = 1; f._upd = true;
+    });
+    orbs.length = 0;
+    for (const o of fr.o) { const own = o.own < 0 ? p1 : fighters[o.own]; orbs.push({ id: -1, x: o.x, y: o.y, vx: 0, vy: 0, r: o.r, charge: o.c, owner: own, color: o.col, life: 200, kind: o.k }); }
+    S.screenShake = fr.sh || 0;
+}
+/** slow-motion replay of the last 3 s (offline matches). onDone is called when it ends */
+export function startReplay(onDone) {
+    if (!S.rec || S.rec.length < 30 || S.online) return false;
+    S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
+    return true;
+}
+export function stopReplay() { if (S.replay) { const d = S.replay.done; S.replay = null; if (d) d(); } }
+function tickReplay() {
+    const R = S.replay; R.i += 0.5;
+    const n = Math.floor(R.i);
+    if (n >= R.frames.length) { stopReplay(); return; }
+    applyReplayFrame(R.frames[n]);
+}
 export function step() {
+    if (S.replay) { tickReplay(); return; }
+    if (S.gameState === 'playing' && !S.online && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
     const bubble = S.online !== 'guest' && items.length > 0;       // the clock bubble slows every projectile, item and ENEMY fighter inside it (not its owner or their team)
     for (const f of fighters) {
         if (!f.active) continue;
@@ -4824,7 +4940,7 @@ export function step() {
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
-        updateWhirlpools(); updateTornadoes();
+        updateWhirlpools(); updateTornadoes(); updateWinds();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
         const live2 = fighters.filter(isAlive);
@@ -4844,7 +4960,7 @@ export function step() {
         }
         if (p2._upd) p2.update();
 
-        updateWhirlpools(); updateTornadoes();
+        updateWhirlpools(); updateTornadoes(); updateWinds();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
 

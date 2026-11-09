@@ -611,6 +611,59 @@ export class Effects {
                     this.sparks(pos, P[1], 10, R * 1.2, 0.4);
                     break;
                 }
+                case 'twister': {         // Zephyr's Roaming Twister: a = +/- radius (sign = travel direction), b = life frames, c = id. A visible spinning funnel with debris.
+                    const dirx = (e.a || 1) < 0 ? -1 : 1, R = Math.max(50, Math.abs(e.a || 100)), H = 300, dur = Math.max(0.3, (e.b || 150) / 60);
+                    const g = new THREE.Group(); g.position.copy(pos);
+                    const rings = [], N = 16;
+                    for (let i = 0; i < N; i++) {
+                        const k = i / (N - 1), rr = R * (0.22 + 0.9 * k);
+                        const m = new THREE.Mesh(new THREE.TorusGeometry(rr, Math.max(2, 3 + k * 3), 6, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? '#e0f2fe' : '#bae6fd').multiplyScalar(1.5), transparent: true, opacity: 0.8 - k * 0.3, blending: ADD, depthWrite: false, toneMapped: false }));
+                        m.rotation.x = Math.PI / 2; m.position.y = 6 + k * H; g.add(m); rings.push({ m, rr, k });
+                    }
+                    const cone = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.12, R * 0.22, H, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.16, blending: ADD, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+                    cone.position.y = H / 2 + 6; g.add(cone);
+                    const deb = [];                                              // flying debris orbiting up the funnel
+                    for (let i = 0; i < 22; i++) { const d = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 7), new THREE.MeshBasicMaterial({ color: i % 3 ? 0xe0f2fe : 0x94a3b8, toneMapped: false })); g.add(d); deb.push({ d, ph: Math.random() * 6.28, k: Math.random(), sp: 1.5 + Math.random() * 2 }); }
+                    this.scene.add(g);
+                    const ent = { obj: g, t: 0, dur, id: e.c, step: (u) => {
+                        const tt = ent.t;
+                        g.position.x = pos.x + dirx * 5.2 * 60 * tt;
+                        rings.forEach((r, i) => { r.m.rotation.z = tt * (6 + r.k * 5) * (i % 2 ? -1 : 1); r.m.position.x = Math.sin(tt * 5 + i) * 6 * r.k; r.m.position.z = Math.cos(tt * 5 + i) * 6 * r.k; });
+                        cone.rotation.y = tt * 7;
+                        for (const q of deb) { const a = q.ph + tt * q.sp * 3, rr = R * (0.25 + 0.85 * q.k) * 1.05; q.d.position.set(Math.cos(a) * rr, 6 + q.k * H + Math.sin(tt * 4 + q.ph) * 12, Math.sin(a) * rr * 0.6); q.d.rotation.set(a, a * 1.3, 0); }
+                        if (ent.dur - ent.t < 0.25) { const f = Math.max(0, (ent.dur - ent.t) / 0.25); g.scale.set(f, 1, f); }
+                    }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } };
+                    (this._byId || (this._byId = new Map())).set('tw' + e.c, ent);
+                    this.timed.push(ent);
+                    this.sparks(pos, '#e0f2fe', 12, R * 1.3, 0.5);
+                    break;
+                }
+                case 'twisterend': { const en = this._byId && this._byId.get('tw' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.25); break; }
+                case 'helix': {           // Zephyr's wind current: a = +/- length (sign = direction), b = life frames, c = id. Two intertwined strands like a DNA helix.
+                    const len = Math.abs(e.a || 500), dirx = (e.a || 1) < 0 ? -1 : 1, dur = Math.max(0.3, (e.b || 300) / 60), RAD = 62, N = 54;
+                    const g = new THREE.Group(); g.position.copy(pos);
+                    const sg = new THREE.SphereGeometry(5.2, 8, 6), mA = new THREE.MeshBasicMaterial({ color: new THREE.Color('#e0f2fe').multiplyScalar(1.6), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false }), mB = new THREE.MeshBasicMaterial({ color: new THREE.Color('#86efac').multiplyScalar(1.6), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false });
+                    const A = [], B = [], rungs = [];
+                    for (let i = 0; i < N; i++) { const a = new THREE.Mesh(sg, mA), b = new THREE.Mesh(sg, mB); g.add(a, b); A.push(a); B.push(b); }
+                    const rg = new THREE.CylinderGeometry(1.2, 1.2, 1, 5), rm = new THREE.MeshBasicMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.4, blending: ADD, depthWrite: false, toneMapped: false });
+                    for (let i = 0; i < N; i += 3) { const r = new THREE.Mesh(rg, rm); g.add(r); rungs.push(r); }
+                    const tube = new THREE.Mesh(new THREE.CylinderGeometry(RAD, RAD, len, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xcffafe, transparent: true, opacity: 0.07, blending: ADD, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+                    tube.rotation.z = Math.PI / 2; tube.position.x = dirx * len / 2; g.add(tube);
+                    this.scene.add(g);
+                    const ent = { obj: g, t: 0, dur, id: e.c, step: (u) => {
+                        const tt = ent.t, fade = Math.min(1, Math.max(0, (ent.dur - ent.t) / 0.3), ent.t / 0.15 + 0.2);
+                        for (let i = 0; i < N; i++) {
+                            const k = i / (N - 1), x = dirx * k * len, ph = k * Math.PI * 9 - tt * 9, y = Math.sin(ph) * RAD, z = Math.cos(ph) * RAD * 0.8;
+                            A[i].position.set(x, y, z); B[i].position.set(x, -y, -z);
+                            if (i % 3 === 0) { const r = rungs[i / 3]; r.position.set(x, 0, 0); r.rotation.set(0, 0, 0); const ang = Math.atan2(2 * y, 2 * z); r.rotation.x = ang; r.scale.set(1, Math.hypot(y, z) * 1.95, 1); r.rotation.x = Math.PI / 2 - Math.atan2(z, y) + Math.PI / 2; r.rotation.z = 0; r.rotation.x = -Math.atan2(y, z) ; }
+                        }
+                        mA.opacity = mB.opacity = 0.95 * fade; rm.opacity = 0.4 * fade; tube.material.opacity = 0.07 * fade;
+                    }, free: () => { sg.dispose(); rg.dispose(); mA.dispose(); mB.dispose(); rm.dispose(); tube.geometry.dispose(); tube.material.dispose(); } };
+                    (this._byId || (this._byId = new Map())).set('hx' + e.c, ent);
+                    this.timed.push(ent);
+                    break;
+                }
+                case 'helixend': { const en = this._byId && this._byId.get('hx' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.3); break; }
                 case 'trail': {          // a = travel angle (sim), b = 1 for a dash streak
                     const P = pal(e.c), wa = -(e.a || 0);
                     this.spray(pos, wa + Math.PI, P[Math.random() < 0.5 ? 0 : 1], e.b ? 3 : 4, 160, 0.5, 0.3);
