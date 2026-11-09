@@ -477,7 +477,8 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
-        this.backT = 0; this._shadowT = 0; this.cloakT = 0;   // cloakT: Umbra is invisible to everyone but himself
+        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
+           // cloakT: Umbra is invisible to everyone but himself
            // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
@@ -599,6 +600,7 @@ class Fighter {
         if (this.comboT > 0 && --this.comboT === 0) this.comboN = 0;
         if (this._shadowT > 0) this._shadowT--;
         if (this._boostWait) { this._boostWait = false; this._edgeBoost = true; }
+        if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
@@ -1107,7 +1109,10 @@ class Fighter {
                 const w = STAGE.width * sp.w, feet = this.y + this.height / 2;
                 const cx = x.tx !== null ? x.tx : this.x + (sp.centred ? 0 : f * (sp.off || 0)), cy = x.ty !== null ? x.ty : feet - sp.h / 2;
                 this.swingHitSet = new Set();
-                if (sp.zone) {
+                if (sp.twister) {
+                    tornadoes.push({ x: this.x + f * 60, y: feet, vx: f * 5.2, r: 105, h: 300, life: 150, owner: this, caught: new Map(), age: 0 });
+                    fx('gust', this.x + f * 60, feet, 120, 0, 'wind'); S.screenShake = Math.max(S.screenShake, 6); createParticles(this.x + f * 60, feet - 10, '#e0f2fe', 16);
+                } else if (sp.zone) {
                     // fixed pixel radius (rPx) so big maps don't scale the pool up
                     const R = sp.rPx != null ? sp.rPx : STAGE.width * (sp.R || sp.w * 0.5);
                     // only one whirlpool — if one is live, animation only (no second pool)
@@ -1160,7 +1165,10 @@ class Fighter {
             }
             this.vx = this.vy = 0;
             this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
-            if (sp.ghost) { /* no hitbox */ } else if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
+            if (sp.jet) {                                                  // Zephyr's Jet Stream: no hitbox; the air he flies through becomes a current that carries foes along
+                if (x.t % 2 === 0 && x.px !== undefined) { zapTrails.push({ x1: x.px, y1: x.py, x2: this.x, y2: this.y, life: 36, owner: this, hit: new Set(), push: 15, wind: true }); fx('gust', this.x, this.y, 46, 0, 'wind'); }
+                x.px = this.x; x.py = this.y; createParticles(this.x, this.y, '#e0f2fe', 2);
+            } else if (sp.ghost) { /* no hitbox */ } else if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
                 const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
                 if (x.t % 6 === 1) this.swingHitSet = new Set();
                 if (!this.swingHitSet) this.swingHitSet = new Set();
@@ -1233,7 +1241,7 @@ class Fighter {
                 this.sx = null; this.activeMove = null; this.armorT = Math.min(this.armorT, 3);
                 this.vx = Math.cos(x.ang) * sp.speed * 0.45; this.vy = Math.sin(x.ang) * sp.speed * 0.45;
                 const over = this.x > STAGE.x - 40 && this.x < STAGE.x + STAGE.width + 40 && this.y < STAGE.y;
-                this.actionLock = Math.max(this.actionLock, lk(this, sp.ghost ? 10 : sp.missile ? 16 : over ? 20 : 70));
+                this.actionLock = Math.max(this.actionLock, lk(this, (sp.ghost || sp.jet) ? 12 : sp.missile ? 16 : over ? 20 : 70));
             }
         } else if (x.k === 'erupt') {
             const sp = spec(this.char, 'U');
@@ -1738,12 +1746,12 @@ class Fighter {
         let ang = Math.atan2(aim.y - this.y, aim.x - this.x);
         if (Math.sin(ang) > 0.3) ang = -ang;                                    // a recovery: never aimed down into the floor
         this.grounded = false; this.y -= 4;
-        this.startSx('rocket', 0, { ang, hits: 0, charge: sp.ghost ? 0 : 36 });
+        this.startSx('rocket', 0, { ang, hits: 0, charge: (sp.ghost || sp.jet) ? 0 : 36 });
         this.swingHitSet = new Set();
         if (sp.armor) this.armorT = sp.frames + 6;
         this.facing = Math.cos(ang) >= 0 ? 1 : -1;
-        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + (sp.ghost ? 0 : 36);
-        this.setMove('SPIRAL', sp.frames + (sp.ghost ? 0 : 36));
+        this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + ((sp.ghost || sp.jet) ? 0 : 36);
+        this.setMove('SPIRAL', sp.frames + ((sp.ghost || sp.jet) ? 0 : 36));
         fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
     }
 
@@ -3512,6 +3520,7 @@ function launch(attacker, defender, hb) {
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
     if (attacker && attacker !== defender && attacker._edgeBoost && attacker.cloakT > 0 && hb.damage) { hb = { ...hb, damage: hb.damage * 1.5 }; attacker._edgeBoost = false; }      // Umbra: the hit after a re-backstab inside the cloak
+    if (attacker && attacker !== defender && attacker.char === 'tide' && defender.soakT > 0 && !hb._soak && hb.damage) hb = { ...hb, damage: hb.damage * 1.2, bkb: (hb.bkb || 0) * 1.08 };      // Tide vs a drenched foe
     if (attacker && attacker !== defender && attacker.bleedT > 0) hb = { ...hb, damage: (hb.damage || 0) * 0.5, bkb: (hb.bkb || 0) * 0.5, kbg: (hb.kbg || 0) * 0.5 }; // bleeding fighters deal 50% less damage and knockback
     if (attacker && attacker !== defender) {                          // COMBO LIMIT (everyone): hits inside a 1.5 s window stack; from the 4th the knockback grows,
         if (defender.comboT <= 0) defender.comboN = 0;                // from the 5th any stun turns into knockback, and the 6th is a big finisher that breaks the combo
@@ -3817,7 +3826,7 @@ function updateDrops() {
 /** Ember's twin fire pillars: a direct hit deals damage and sets you on fire; standing in the flames only burns */
 /** Volt's lightning trail: whoever touches it is stunned 0.7 s and has inverted controls for 2 s after */
 /** count a Volt stun on this foe; true when it is the 3rd within 10 s (that one must be a knockback, and the count starts over) */
-const DMG_MULT = { terra: 0.85, bulwark: 0.95, umbra: 1.1, ember: 1.08, zephyr: 1.1, volt: 1.12 };      // outgoing damage tuning per character
+const DMG_MULT = { terra: 0.85, bulwark: 0.95, umbra: 1.1, ember: 1.08, zephyr: 1.1, volt: 1.12, tide: 1.1 };      // outgoing damage tuning per character
 function zapGate(f) {
     f.zapN++; f.zapT = 600;
     if (f.zapN >= 3) { f.zapN = 0; f.zapT = 0; return true; }
@@ -3842,7 +3851,7 @@ function updateZapTrails() {
             z.hit.add(f);
             if (z.push) {                                                // Lightning Rod trail: only shoves them the way the bolt travelled
                 const L = Math.sqrt(L2); f.interrupt(); f.invincibleTimer = Math.max(f.invincibleTimer, 36); f.vx = dx / L * z.push; f.vy = dy / L * z.push - 2; f.hitstun = Math.max(f.hitstun || 0, 14); f.zapImmuneT = f.hitstun + 78; f.lastHitBy = z.owner; f.lastHitT = 0;
-                S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
+                S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); createParticles(f.x, f.y, z.wind ? '#e0f2fe' : '#60a5fa', 10); fx('hit', f.x, f.y, 10, 0); continue;
             }
             if (zapGate(f)) {                                              // 3rd stun in 10 s: knocked away like a melee hit instead
                 z.hit.add(f); launch(z.owner, f, { damage: 0, bkb: 9, kbg: 0.9, angle: f.x >= z.owner.x ? -0.6 : Math.PI + 0.6, x: f.x, y: f.y });
@@ -3874,6 +3883,33 @@ function updatePillars() {
     }
 }
 
+const tornadoes = [];
+/** Zephyr's Roaming Twister: a tornado rolls across the ground; foes it touches are lifted and spun round inside it, and when it ends (or they have spun long enough) they are flung out forward. */
+function updateTornadoes() {
+    for (let i = tornadoes.length - 1; i >= 0; i--) {
+        const t = tornadoes[i]; t.age++;
+        const x0 = t.x; t.x += t.vx;
+        if (t.x < STAGE.x - 200 || t.x > STAGE.x + STAGE.width + 200) t.life = Math.min(t.life, 1);
+        if (--t.life <= 0 || !t.owner) {
+            for (const [f] of t.caught) if (isAlive(f)) { f._inTwister = false; launch(t.owner, f, { damage: 5, bkb: 10, kbg: 0.95, angle: t.vx >= 0 ? -0.75 : Math.PI + 0.75, x: f.x, y: f.y }); }
+            fx('gust', t.x, t.y, t.r * 1.6, 0, 'wind'); createParticles(t.x, t.y - 80, '#e0f2fe', 18); tornadoes.splice(i, 1); continue;
+        }
+        if (t.age % 4 === 0) { fx('whirlpool', t.x, t.y, t.r * 0.8, 10, 'wind'); createParticles(t.x + (Math.random() - 0.5) * t.r, t.y - Math.random() * t.h, '#e0f2fe', 2); }
+        for (const f of foesOf(t.owner)) {
+            if (!isAlive(f) || f.invincibleTimer > 0) { t.caught.delete(f); continue; }
+            const inT = Math.abs(f.x - t.x) < t.r + f.width * 0.3 && f.y > t.y - t.h - 40 && f.y < t.y + f.height * 0.6;
+            if (!t.caught.has(f)) { if (!inT || f.hitstun > 18) continue; t.caught.set(f, 0); f.interrupt(); }
+            const n = t.caught.get(f) + 1; t.caught.set(f, n); f._inTwister = true;
+            if (f.hitstun > 26 && n > 3) { t.caught.delete(f); continue; }                  // a real hit from someone else knocks them free
+            const wox = f.x, woy = f.y, a = n * 0.32, lift = Math.min(1, n / 40);
+            f.x += (t.x + Math.cos(a) * 52 * (1 - 0.3 * lift) - f.x) * 0.45;
+            f.y += (t.y - 36 - lift * 190 - Math.sin(n * 0.09) * 40 * lift - f.y) * 0.25;
+            f.vx = 0; f.vy = 0; f.hitstun = Math.max(f.hitstun, 4); f.grounded = false; pushOutOfStage(f, wox, woy); f.px = f.x; f.py = f.y;
+            if (n % 15 === 0) { f.damage += 0.8; f.lastHitBy = t.owner; f.lastHitT = 0; audio.playHit(false); createParticles(f.x, f.y, '#e0f2fe', 5); }
+            if (n >= 100) { t.caught.delete(f); f._inTwister = false; launch(t.owner, f, { damage: 5, bkb: 10, kbg: 0.95, angle: t.vx >= 0 ? -0.75 : Math.PI + 0.75, x: f.x, y: f.y }); }
+        }
+    }
+}
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
         const w = whirlpools[i];
@@ -4325,7 +4361,7 @@ export function startDemo(map, chars) {
         f.startX = STAGE.x + STAGE.width * (0.3 + 0.4 * i); f.startY = STAGE.y - 120;
         f.reset(true); f.shieldHold = 0; f.remoteAim = null; f.maxJumps = charOf(f.char).jumps; f.jumpsLeft = f.maxJumps;
     });
-    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0; whirlpools.length = 0; items.length = 0;
+    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0; whirlpools.length = 0; tornadoes.length = 0; items.length = 0;
     return { map: m, chars: cs };
 }
 
@@ -4360,7 +4396,7 @@ function startMatchSequence(mode, cfg) {
     document.getElementById('gameOverModal').classList.add('hidden');
     dramaticZoom.active = false;
     orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0;
-    whirlpools.length = 0;
+    whirlpools.length = 0; tornadoes.length = 0;
     items.length = 0; guestItems.clear(); inputBuf.a = null;
 
     if (S.match) {
@@ -4531,7 +4567,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1);   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1);   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -4680,7 +4716,7 @@ function guestSmooth() {
                 const dir = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
                 f._held = dir !== 0 && dir === f._heldDir ? f._held + 1 : (dir !== 0 ? 1 : 0); f._heldDir = dir;
                 const free = f.grounded && !f.sx && !f.activeMove && !f.isShielding && !f.attackTimer;
-                const walk = 8.5 * charOf(f.char).walk * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 3 : 1);
+                const walk = 8.5 * charOf(f.char).walk * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1);
                 const lead = free && dir ? Math.max(0, dir * walk * Math.min(lat, f._held) - (f.vx || 0) * Math.min(lat, f._held)) : 0;
                 const tx = last.x + (f.vx || 0) * lat + lead, ty = last.y + (f.vy || 0) * lat * 0.6;
                 f._px = f._px === undefined ? tx : f._px + (tx - f._px) * 0.5; f._py = f._py === undefined ? ty : f._py + (ty - f._py) * 0.5;
@@ -4788,7 +4824,7 @@ export function step() {
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
-        updateWhirlpools();
+        updateWhirlpools(); updateTornadoes();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
         const live2 = fighters.filter(isAlive);
@@ -4808,7 +4844,7 @@ export function step() {
         }
         if (p2._upd) p2.update();
 
-        updateWhirlpools();
+        updateWhirlpools(); updateTornadoes();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
 

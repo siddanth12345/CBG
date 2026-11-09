@@ -58,7 +58,7 @@ export const CHARS = {
 
 // knockback taken scales with speed: the slowest walker (Terra) takes 0.6x, the fastest (Zephyr) 1.5x, proportional in between.
 // jumps in the air: 3 minimum, 5 maximum; slow tanks recover worst, the fastest has the most.
-const BAL_KB = { terra: 1.12, ember: 0.94, umbra: 0.94, bulwark: 1.04 };
+const BAL_KB = { terra: 1.12, ember: 0.94, umbra: 0.94, bulwark: 1.04, tide: 0.94 };
 const JUMPS = { luminent: 3, bulwark: 3, zephyr: 5, ember: 4, tide: 4, volt: 4, umbra: 4, terra: 3 };
 for (const c of Object.values(CHARS)) {
     const w = c.walk;
@@ -92,9 +92,9 @@ export const BRIEF = {
     zephyr: {
         N: ['Gale Burst', 'Hold F for a close wind blast. It shoves everyone around you away. No projectile.'],
         S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back.'],
-        U: ['Updraft', 'Tap up F for a very high, very fast rise. It only shoves nearby people. No real hit.'],
-        DG: ['Cyclone Kick', 'On the ground, down F spins in place. Two pulses fling people away.'],
-        DA: ['Dive Kick', 'In the air, down F is a quick diagonal kick that bounces you back up.'],
+        U: ['Jet Stream', 'Tap up F to fly where you aim for 0.9 s. The air you tore through becomes a current that sweeps foes along. No damage.'],
+        DG: ['Roaming Twister', 'On the ground, down F sends a tornado rolling forward for 2.5 s. It lifts and spins foes, then flings them out forward.'],
+        DA: ['Cyclone Drill', 'In the air, down F corkscrews straight down with small hits, then a gale launches foes straight up.'],
     },
     ember: {
         N: ['Flamethrower', 'Hold F and aim a stream of fire. A longer hold means a longer flame and a stronger end burst.'],
@@ -109,6 +109,7 @@ export const BRIEF = {
         U: ['Geyser', 'Tap up F and a water pillar under you lifts you. People in it are stunned, not flung. Then you get a short aim boost.'],
         DG: ['Whirlpool', 'On the ground, down F makes a pool that pulls people to the centre. No damage. Only one at a time.'],
         DA: ['Splash Dive', 'In the air, down F plunges into a wide splash that shoves people aside.'],
+        M: ['Undertow', 'Passive. Melee hits drench the foe for 3 s: 25% slower, and his other moves hit a drenched foe 20% harder.'],
     },
     volt: {
         N: ['Enlightened', 'Hold F, then release to hang in the air and steer a lightning ball (mouse or joystick). It explodes when it hits, ends, or you get hit.'],
