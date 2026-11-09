@@ -190,10 +190,16 @@ export class View {
         const alive = (f) => f.active && !f.out;
         const big = WORLD.width / 3800;
         const lim = (v, m) => Math.max(-m, Math.min(m, v));
-        if (mode === 'full') { out.set(0, 0, 0); return d0; }     // the whole map, always
+        const rk = S.replay && S.lastKO && fighters[S.lastKO.def] ? S.lastKO : null;         // replay: follow the killer and the one who got killed
+        if (mode === 'full' && !rk) { out.set(0, 0, 0); return d0; }     // the whole map, always
         let pts;                                                  // [x, y] in render units; the box around them is what the camera frames
         let mx = 520, my = 380;                                   // breathing room
-        if (mode === 'stage') {
+        if (rk) {
+            pts = [[wx(fighters[rk.def].x), wy(fighters[rk.def].y)]];
+            const kf = rk.att >= 0 ? fighters[rk.att] : null;
+            if (kf) pts.push([wx(kf.x), wy(kf.y)]);
+            mx = 420; my = 320;
+        } else if (mode === 'stage') {
             const top = Math.min(STAGE.y - 380, ...(STAGE.platforms || []).map(p => p.y - 120));
             pts = [[wx(STAGE.x), wy(top)], [wx(STAGE.x + STAGE.width), wy(STAGE.y + STAGE.height + 140)]];
             const offStage = alive(me) && (me.x < STAGE.x - 20 || me.x > STAGE.x + STAGE.width + 20 || me.y > STAGE.y + 30 || me.y < top - 40);

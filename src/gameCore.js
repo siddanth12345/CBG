@@ -2444,6 +2444,7 @@ class Fighter {
             return;
         }
 
+        { const k = this.lastHitBy; S.lastKO = { att: k && k !== this && this.lastHitT < 360 ? idxOf(k) : -1, def: idxOf(this) }; }      // the replay camera follows these two
         if (this === viewerFighter() && !S.demo) {                          // "why did I die": one line about the last hit that got through
             const h = this._lastHit;
             notify(h && h.by && h.by !== this && this.lastHitT < 360
@@ -3544,9 +3545,13 @@ function emberCounter(em, foe) {
 /** Kill cam: a hit that will send the victim out of the blast zone. Slow motion for everyone; the two fighters involved also get the zoom + blue-screen overlay */
 function willKO(def) {
     let x = def.x, y = def.y, vx = def.vx, vy = def.vy;
+    const spike = vy > 10, sx0 = STAGE.x - 260, sx1 = STAGE.x + STAGE.width + 260;
+    let far = false;                                         // still well away from the stage when the hit-stun ends?
     for (let i = 0; i < 150; i++) {
+        if (i === 62) far = x < sx0 || x > sx1 || y < STAGE.y - 1000;
         const py = y; x += vx; y += vy; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity * 3); vx *= WORLD.airFriction;
-        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top || y > BLAST_ZONES.bottom) return true;
+        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top) return true;
+        if (y > BLAST_ZONES.bottom) return spike || i >= 62 && far || i < 62 && (x < sx0 || x > sx1);       // a slight shove off the lower edge can be recovered from: only spikes / far-out launches count
         if (py <= STAGE.y && y > STAGE.y && x > STAGE.x && x < STAGE.x + STAGE.width) return false;      // lands on the stage
     }
     return false;
@@ -3983,7 +3988,7 @@ function enterWhirl(t) {
 }
 function burstOut(w, f) {
     f.buryT = 0; f._wantOut = false; f._wpT = 150; f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; f.grounded = false;
-    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.0, x: w.x, y: f.y });        // knockback only
+    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.0, x: w.x, y: f.y }); f.clashStunTimer = Math.max(f.clashStunTimer, 30);        // stunned like the up melee        // knockback only
     fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 16); S.screenShake = Math.max(S.screenShake, 5);
 }
 /** Tide jumps (or is thrown) out of the pool: everyone buried in it bursts out, and foes close by get knocked away (no damage) */
@@ -3992,7 +3997,7 @@ function popOut(w, t) {
         if (!isAlive(f)) continue;
         if (w.caught && w.caught.has(f)) { w.caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
         if (f.invincibleTimer > 0 || f._wpT > 0) continue;
-        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) launch(t, f, { damage: 0, bkb: 11, kbg: 0.95, angle: -0.8, x: w.x, y: f.y });
+        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) { f._wpT = 60; launch(t, f, { damage: 0, bkb: 11, kbg: 0.95, angle: -0.8, x: w.x, y: f.y }); f.clashStunTimer = Math.max(f.clashStunTimer, 30); }
     }
     fx('gust', w.x, w.y, w.r * 1.3, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playHit(true);
 }
@@ -4014,7 +4019,7 @@ function updateWhirlpools() {
         }
         w.life--;
         if (w.life <= 0) {
-            if (w.caught) for (const f of w.caught) if (isAlive(f)) burstOut(w, f);
+            if (w.owner) popOut(w, w.owner);                 // the pool closing: everyone inside bursts out, foes close by are knocked back and stunned
             if (w.rider) { w.rider.buryT = 0; w.rider.y = w.y - w.rider.height * 0.5 - 6; w.rider.px = w.rider.x; w.rider.py = w.rider.y; }
             fx('poolend', 0, 0, 0, 0, w.id); whirlpools.splice(i, 1); continue;
         }
@@ -4481,7 +4486,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.kcT = 0; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.kcT = 0; S.lastKO = null; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4923,7 +4928,7 @@ export function applySnapshot(s) {
 const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ f: fighters.map(f => f.active ? packFighter(f) : null), o: orbs.slice(0, 24).map(o => ({ x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null });
+    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null });
     if (rec.length > REC_FRAMES) rec.shift();
 }
 function applyReplayFrame(fr) {
@@ -4935,10 +4940,19 @@ function applyReplayFrame(fr) {
             else if (REFS.includes(k)) f[k] = v < 0 ? null : fighters[v];
             else f[k] = v;
         }
-        f.px = f.x; f.py = f.y; f._slowK = 1; f._upd = true;
+        f.px = f.x; f.py = f.y; f._upd = true;
     });
+    const seenIt = new Set();
+    for (const o of (fr.it || [])) {
+        seenIt.add(o.id);
+        let g = guestItems.get(o.id);
+        if (!g) { g = { id: o.id }; guestItems.set(o.id, g); items.push(g); }
+        Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: o.h, r: ITEM_R[o.t] });
+    }
+    for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
+    for (const f of fighters) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;
     orbs.length = 0;
-    for (const o of fr.o) { const own = o.own < 0 ? p1 : fighters[o.own]; orbs.push({ id: -1, x: o.x, y: o.y, vx: 0, vy: 0, r: o.r, charge: o.c, owner: own, color: o.col, life: 200, kind: o.k }); }
+    for (const o of fr.o) { const own = o.own < 0 ? p1 : fighters[o.own]; orbs.push({ id: o.id === undefined ? -1 : o.id, x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, r: o.r, charge: o.c, owner: own, color: o.col, life: 200, kind: o.k }); }
     S.screenShake = fr.sh || 0;
     for (const e of fr.fx || []) { if (e[0] === 'killcam') continue; fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 }); }
     for (const q of fr.pt || []) createParticles(q[0], q[1], q[2], q[3]);
@@ -4947,6 +4961,7 @@ function applyReplayFrame(fr) {
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone) {
     if (!S.rec || S.rec.length < 30 || S.online) return false;
+    items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
     return true;
 }
