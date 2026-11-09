@@ -299,7 +299,8 @@ function frame(now) {
     last = now;
     try {
         if (!window.__luminaryPaused) {
-            acc += dt;
+            acc += dt * (S.kcT > 0 && S.online !== 'guest' && !S.replay ? 0.3 : 1);       // kill cam: slow motion
+            if (S.kcT > 0 && !S.replay) S.kcT = Math.max(0, S.kcT - dt);
             let n = 0;
             while (acc >= STEP && n < 3) { step(); acc -= STEP; n++; }
             if (n === 3) acc = 0;

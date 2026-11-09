@@ -1,5 +1,5 @@
 /** On-screen extras: the combo counter (with a warning before the finisher) and the training-mode numbers readout. Pure DOM, fed by gameCore each HUD tick. */
-let box = null, combo = null, readout = null, last = { c: '', r: '' };
+let box = null, combo = null, readout = null, kc = null, last = { c: '', r: '' };
 
 function ensure() {
     if (box) return;
@@ -10,7 +10,11 @@ function ensure() {
     combo.style.cssText = 'position:absolute;right:max(14px,env(safe-area-inset-right));top:34%;text-align:right;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7);transition:transform .08s;';
     readout = document.createElement('div');
     readout.style.cssText = 'position:absolute;left:max(10px,env(safe-area-inset-left));bottom:max(96px,env(safe-area-inset-bottom));min-width:210px;max-width:290px;padding:8px 10px;border-radius:10px;background:rgba(2,6,23,.72);border:1px solid rgba(148,163,184,.35);color:#e2e8f0;font-size:11px;line-height:1.45;font-variant-numeric:tabular-nums;display:none;';
-    box.append(combo, readout);
+    kc = document.createElement('div');                                             // the blue "final blow" screen overlay
+    kc.style.cssText = 'position:absolute;inset:0;display:none;background:radial-gradient(ellipse at center,rgba(30,64,175,0) 35%,rgba(37,99,235,.55) 100%),repeating-linear-gradient(0deg,rgba(56,189,248,.10) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 120px 30px rgba(56,189,248,.65);mix-blend-mode:screen;';
+    const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:16%;text-align:center;font:900 clamp(28px,6vw,64px) system-ui;letter-spacing:.3em;color:#e0f2fe;text-shadow:0 0 24px #38bdf8,0 0 60px #2563eb;';
+    kc.appendChild(kt);
+    box.append(kc, combo, readout);
     document.body.appendChild(box);
 }
 
@@ -21,6 +25,7 @@ export function tickExtras(S, fighters, me) {
     ensure();
     const playing = S.gameState === 'playing';
     box.style.display = playing ? 'block' : 'none';
+    { const on = playing && S.kcT > 0 && S.kcFull; kc.style.display = on ? 'block' : 'none'; if (on) { const k = Math.min(1, S.kcT / 0.4, (1.7 - S.kcT) / 0.15); kc.style.opacity = (0.55 + 0.45 * Math.sin(S.kcT * 40)) * k; } }
     if (!playing) return;
 
     combo.innerHTML = '';

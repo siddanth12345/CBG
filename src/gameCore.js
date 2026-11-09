@@ -6,7 +6,7 @@
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
 import { tickExtras, notify, showReward } from './hudExtras.js';
-import { perksFor, reportMatch } from './meta.js';
+import { perksFor, reportMatch, perkStat } from './meta.js';
 import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
@@ -31,14 +31,15 @@ export const shockwaves = [];
 export const fxEvents = [];
 export const orbs = [];                    // CBG Core projectiles
 export const whirlpools = [];              // Tide Whirlpool zones: { x, y, r, life, owner, pull }
-let orbSerial = 0;
+let orbSerial = 0, poolSerial = 0;
 const zapTrails = [];               // Volt's Thunder Dash: lingering zigzag lightning that stuns and scrambles the controls of anyone who touches it (host only)
 const pillars = [];                  // Ember's twin fire pillars (host only)
 const SWORD_SCALE = 1.5, SWORD_OFF = 105;     // Bulwark's falling swords are 1.5x as big
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 72;              // Ember's rolling charge: 1.2 s to full
 const ROLL_AUTO = 30;                // hold full charge 0.5 s → auto release
-function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
+const recBuf = { fx: [], p: [] };
+function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.gameState === 'playing' && !S.replay && recBuf.fx.length < 80) recBuf.fx.push([type, x, y, a, b, c]); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
 
 const WORLD = {
     width: 3800,
@@ -542,7 +543,8 @@ class Fighter {
         this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0;
         this.clashStunTimer = 0;
         this.hitstun = 0;
-        this.invincibleTimer = 120 + (hasPerk(this, 'wind2') ? 60 : 0); this.ghostT = 0;
+        this.invincibleTimer = Math.max(120 + perkOf(this, 'spawn'), this._kcInv > 0 ? 180 : 0); this._kcInv = 0; this.ghostT = 0;      // 3 s of i-frames after a kill-cam KO
+
         this.spawnT = (!fullReset && S.gameState === 'playing') ? 60 : 0;
         if (this.spawnT <= 0 && this.grounded) this.vy = 0;
         this.attackTimer = 0;
@@ -602,6 +604,7 @@ class Fighter {
         if (this._shadowT > 0) this._shadowT--;
         if (this._boostWait) { this._boostWait = false; this._edgeBoost = true; }
         if (this.buryT > 0) this.buryT--;
+        if (this._kcInv > 0) this._kcInv--;
         if (this._wpT > 0) this._wpT--;
         if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
@@ -1121,8 +1124,9 @@ class Fighter {
                     // only one whirlpool — if one is live, animation only (no second pool)
                     if (whirlpools.length === 0) {
                         // no activeHitbox: zero damage, zero stun — pure pull zone
-                        whirlpools.push({ x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
-                        fx('whirlpool', cx, feet, R, sp.life || 180, STYLE_OF[this.char]);
+                        const pid = ++poolSerial;
+                        whirlpools.push({ id: pid, x: cx, y: feet, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0 });
+                        fx('pool', cx, feet, R, 600, pid);
                         S.screenShake = Math.max(S.screenShake, 8);
                         createParticles(cx, feet - 10, '#38bdf8', 16);
                     } else {
@@ -1555,7 +1559,7 @@ class Fighter {
 
         const sp = spec(this.char, SLOT_OF[kind]);
         if (!this.grounded) this.airSpecials++;
-        this.cd[kind] = Math.round((sp.cd !== undefined ? sp.cd : CD[kind]) * (hasPerk(this, 'quick') ? 0.9 : 1));
+        this.cd[kind] = Math.round((sp.cd !== undefined ? sp.cd : CD[kind]) * (1 + perkOf(this, 'cd')));
         if (kind === 'SPIRAL') this.upT = (sp.frames || 20) + (sp.windup || 0) + 12;
         if (kind === 'BLINK' && sp.kind !== 'roll' && sp.kind !== 'bubble' && this.char !== 'umbra') this.sideT = (sp.frames || 0) + (sp.windup || 0) + 22;
         this.actionLock = lk(this, sp.lock !== undefined ? sp.lock : trainLock());
@@ -3059,6 +3063,7 @@ function dripBlood(x, y) {
     }
 }
 function createParticles(x, y, color, count = 10) {
+    if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 60) recBuf.p.push([x, y, color, count]);
     if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
     // hard cap so ledge thrash / KO spam can't melt the frame rate
     const room = Math.max(0, 220 - particles.length);
@@ -3141,6 +3146,7 @@ function spawnItem(type) {
 export const viewerFighter = () => S.demo ? null : S.match ? fighters[S.mySlot] : p1;
 /** perks (bought in the shop, equipped per character): only the fighter this screen belongs to carries them */
 const hasPerk = (f, id) => !!f && f === viewerFighter() && S.online !== 'guest' && perksFor(f.char).includes(id);
+const perkOf = (f, stat) => (!!f && f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0;
 /** match stats of the human player (for coins, daily challenges, the ladder) */
 const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
 const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
@@ -3535,12 +3541,35 @@ function emberCounter(em, foe) {
     return true;
 }
 
+/** Kill cam: a hit that will send the victim out of the blast zone. Slow motion for everyone; the two fighters involved also get the zoom + blue-screen overlay */
+function willKO(def) {
+    let x = def.x, y = def.y, vx = def.vx, vy = def.vy;
+    for (let i = 0; i < 150; i++) {
+        const py = y; x += vx; y += vy; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity * 3); vx *= WORLD.airFriction;
+        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top || y > BLAST_ZONES.bottom) return true;
+        if (py <= STAGE.y && y > STAGE.y && x > STAGE.x && x < STAGE.x + STAGE.width) return false;      // lands on the stage
+    }
+    return false;
+}
+function applyKillCam(ai, di) {
+    S.kcT = 1.7; S.kcDef = di; S.kcAtt = ai;
+    const me = S.demo ? -1 : (S.match ? S.mySlot : 0);
+    S.kcFull = !S.demo && (me === ai || me === di);
+}
+function startKillCam(att, def) {
+    if (S.kcT > 0 || S.replay || S.demo || S.gameMode === 'training' || S.online === 'guest' || !att || att === def) return;
+    if (def.stocks <= 0 || def.out || !willKO(def)) return;
+    def._kcInv = 400;
+    const ai = idxOf(att), di = idxOf(def);
+    applyKillCam(ai, di);
+    fx('killcam', def.x, def.y, ai, di, 1);
+}
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (attacker && attacker !== defender && hb.damage !== undefined) {                          // perks
-        const m = (hasPerk(attacker, 'sharp') ? 1.06 : 1) * (hasPerk(attacker, 'last') && attacker.stocks === 1 ? 1.12 : 1) * (hasPerk(defender, 'tough') ? 0.92 : 1);
-        const k = (hasPerk(attacker, 'heavy') ? 1.06 : 1) * (hasPerk(defender, 'iron') ? 0.94 : 1);
+        const m = (1 + perkOf(attacker, 'dmg') + (attacker.stocks === 1 ? perkOf(attacker, 'last') : 0)) * (1 + perkOf(defender, 'taken'));
+        const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
         if (m !== 1 || k !== 1) hb = { ...hb, damage: (hb.damage || 0) * m, bkb: (hb.bkb || 0) * k };
     }
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
@@ -3679,6 +3708,7 @@ function launch(attacker, defender, hb) {
     audio.playHit(kbForce > 18);
     createParticles(defender.x, defender.y, '#f59e0b', Math.floor(kbForce));
     fx('hit', defender.x, defender.y, kbForce, hb.angle);
+    startKillCam(attacker, defender);
 }
 
 function explodeOrb(o) {
@@ -3953,8 +3983,18 @@ function enterWhirl(t) {
 }
 function burstOut(w, f) {
     f.buryT = 0; f._wantOut = false; f._wpT = 150; f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; f.grounded = false;
-    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.15, x: f.x, y: f.y });        // knockback only
+    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.0, x: w.x, y: f.y });        // knockback only
     fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 16); S.screenShake = Math.max(S.screenShake, 5);
+}
+/** Tide jumps (or is thrown) out of the pool: everyone buried in it bursts out, and foes close by get knocked away (no damage) */
+function popOut(w, t) {
+    for (const f of foesOf(t)) {
+        if (!isAlive(f)) continue;
+        if (w.caught && w.caught.has(f)) { w.caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
+        if (f.invincibleTimer > 0 || f._wpT > 0) continue;
+        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) launch(t, f, { damage: 0, bkb: 11, kbg: 0.95, angle: -0.8, x: w.x, y: f.y });
+    }
+    fx('gust', w.x, w.y, w.r * 1.3, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playHit(true);
 }
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
@@ -3964,9 +4004,9 @@ function updateWhirlpools() {
             const h = t._in || {};
             if (!isAlive(t) || t._wantOut || --w.rideT <= 0 || t.hitstun > 0) {
                 w.rider = null; t.buryT = 0; t._wantOut = false; t.y = w.y - t.height * 0.5 - 6; t.vy = -8; t.vx = 0; t.px = t.x; t.py = t.y; t.invincibleTimer = Math.max(t.invincibleTimer, 20);
-                fx('gust', w.x, w.y, w.r * 0.7, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 14); w.life = Math.min(w.life, 40);
+                popOut(w, t); w.life = Math.min(w.life, 40);
             } else {
-                const spd = 8.5 * charOf(t.char).walk * (t.bleedT > 0 ? 0.3 : 1), d = (h.right ? 1 : 0) - (h.left ? 1 : 0);
+                const spd = 17 * charOf(t.char).walk * (t.bleedT > 0 ? 0.3 : 1), d = (h.right ? 1 : 0) - (h.left ? 1 : 0);
                 if (d) { w.x = Math.max(STAGE.x + 20, Math.min(STAGE.x + STAGE.width - 20, w.x + d * spd)); t.facing = d; }
                 t.x = w.x; t.y = w.y + 6; t.px = t.x; t.py = t.y; t.vx = 0; t.vy = 0; t.buryT = 3; t.invincibleTimer = Math.max(t.invincibleTimer, 3); t.grounded = false;
                 w.life = Math.max(w.life, 3);
@@ -3976,9 +4016,9 @@ function updateWhirlpools() {
         if (w.life <= 0) {
             if (w.caught) for (const f of w.caught) if (isAlive(f)) burstOut(w, f);
             if (w.rider) { w.rider.buryT = 0; w.rider.y = w.y - w.rider.height * 0.5 - 6; w.rider.px = w.rider.x; w.rider.py = w.rider.y; }
-            whirlpools.splice(i, 1); continue;
+            fx('poolend', 0, 0, 0, 0, w.id); whirlpools.splice(i, 1); continue;
         }
-        if (w.life % 20 === 0) fx('whirlpool', w.x, w.y, w.r, Math.max(12, w.life), 'water');
+        if (w._lx !== w.x) { w._lx = w.x; fx('poolmove', w.x, w.y, 0, 0, w.id); }
         const caught = w.caught || (w.caught = new Set());
         for (const f of foesOf(w.owner || p1)) {
             if (!isAlive(f)) { caught.delete(f); continue; }
@@ -4441,7 +4481,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.kcT = 0; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4596,11 +4636,11 @@ export function applyTrainPrefs() {
 
 const gameOverModal = document.getElementById('gameOverModal');
 function endGame(winnerText, winnerRole = null) {
-    if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.stats && S.gameMode !== 'training' && S.online !== 'guest' && S.online !== 'host') {
-        S.rewardShown = true;
+    if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') {
+        S.rewardShown = true; if (!S.stats) S.stats = newStats();
         const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
-        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked, secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
+        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.online, online: !!S.online, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
     }
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
@@ -4647,7 +4687,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (hasPerk(f, 'swift') ? 1.06 : 1);   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (1 + perkOf(f, 'walk'));   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -4872,6 +4912,7 @@ export function applySnapshot(s) {
     } else if (S.gameState !== 'countdown' || s.gs === 'playing') S.gameState = s.gs;
     // effects, sounds, particles the host produced since the last snapshot
     for (const e of s.ev) {
+        if (e.k === 'f' && e.e[0] === 'killcam') applyKillCam(e.e[3], e.e[4]);
         if (e.k === 'f') fxEvents.push({ type: e.e[0], x: e.e[1], y: e.e[2], a: e.e[3], b: e.e[4], c: e.e[5] || 0 });
         else if (e.k === 'a') { try { audio[e.m](...e.a); } catch (err) { /* sound not available */ } }
         else if (e.k === 'p') createParticles(...e.e);
@@ -4879,10 +4920,10 @@ export function applySnapshot(s) {
     }
 }
 
-const REC_FRAMES = 180;                                  // the replay is the last 3 s of the match, shown at half speed
+const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ f: fighters.map(f => f.active ? packFighter(f) : null), o: orbs.slice(0, 24).map(o => ({ x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake });
+    rec.push({ f: fighters.map(f => f.active ? packFighter(f) : null), o: orbs.slice(0, 24).map(o => ({ x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null });
     if (rec.length > REC_FRAMES) rec.shift();
 }
 function applyReplayFrame(fr) {
@@ -4899,8 +4940,11 @@ function applyReplayFrame(fr) {
     orbs.length = 0;
     for (const o of fr.o) { const own = o.own < 0 ? p1 : fighters[o.own]; orbs.push({ id: -1, x: o.x, y: o.y, vx: 0, vy: 0, r: o.r, charge: o.c, owner: own, color: o.col, life: 200, kind: o.k }); }
     S.screenShake = fr.sh || 0;
+    for (const e of fr.fx || []) { if (e[0] === 'killcam') continue; fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 }); }
+    for (const q of fr.pt || []) createParticles(q[0], q[1], q[2], q[3]);
+    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; } else S.kcT = 0;
 }
-/** slow-motion replay of the last 3 s (offline matches). onDone is called when it ends */
+/** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone) {
     if (!S.rec || S.rec.length < 30 || S.online) return false;
     S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
@@ -4908,7 +4952,7 @@ export function startReplay(onDone) {
 }
 export function stopReplay() { if (S.replay) { const d = S.replay.done; S.replay = null; if (d) d(); } }
 function tickReplay() {
-    const R = S.replay; R.i += 0.5;
+    const R = S.replay; R.i += 1;
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }
     applyReplayFrame(R.frames[n]);
@@ -5019,4 +5063,4 @@ export {
     Fighter, AIBot, updateAimMatrix, renderHUD, startMatchSequence, endGame, gameOverModal,
     CHARGE_MAX, triggerDramaticZoom, launch,
 };
-export { bulwarkRiposte, umbraEdge, pickUp, throwHeldItem, slowAt };
+export { applyKillCam, bulwarkRiposte, umbraEdge, pickUp, throwHeldItem, slowAt };

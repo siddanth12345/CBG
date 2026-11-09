@@ -563,7 +563,7 @@ export class Effects {
                 case 'whirlpool': {       // lasting water spiral on the ground; a = radius, b = life frames
                     const P = pal(e.c || 'water');
                     const R = Math.max(40, e.a || 120);
-                    const dur = Math.min(3.2, Math.max(0.35, (e.b || 60) / 60));
+                    const dur = Math.min(12, Math.max(0.35, (e.b || 60) / 60));
                     const g = new THREE.Group();
                     g.position.copy(pos);
                     g.position.y = this.stageTop + 2;
@@ -592,10 +592,10 @@ export class Effects {
                     );
                     spray.position.y = 12; g.add(spray);
                     this.scene.add(g);
-                    this.timed.push({
+                    const ent = {
                         obj: g, t: 0, dur,
                         step: (u) => {
-                            const spin = u * Math.PI * 6;
+                            const spin = ent.t * 6.28; if (g.userData.px !== undefined) g.position.x += (g.userData.px - g.position.x) * 0.5; const rem = ent.dur - ent.t; g.scale.setScalar(rem < 0.3 ? Math.max(0.01, rem / 0.3) : 1);
                             rings.forEach((r, i) => {
                                 r.rotation.z = spin * (1 + i * 0.15) * (i % 2 ? -1 : 1);
                                 r.material.opacity = (0.85 - i * 0.1) * (1 - u * 0.5);
@@ -607,10 +607,29 @@ export class Effects {
                             spray.material.opacity = 0.35 * (1 - u * 0.3);
                             g.position.y = this.stageTop + 2 + Math.sin(u * 12) * 1.5;
                         },
-                    });
+                    };
+                    this.timed.push(ent);
+                    if (this._poolId) { (this._byId || (this._byId = new Map())).set('pl' + this._poolId, ent); this._poolId = 0; }
                     this.sparks(pos, P[1], 10, R * 1.2, 0.4);
                     break;
                 }
+                case 'killcam': {         // a = attacker index, b = victim index: black, red and blue sparks around the victim for the slow-motion moment
+                    const colors = ['#312e81', '#ef4444', '#38bdf8'], vid = e.b;
+                    const sp = this.sparks, self = this;
+                    const ent = { obj: new THREE.Object3D(), t: 0, dur: 1.7, k: 0, step: () => {
+                        const f = fighters[vid]; if (!f) return;
+                        ent.k++;
+                        if (ent.k % 2 === 0) for (const c of colors) self.sparks(new THREE.Vector3(wx(f.x), wy(f.y), 0), c, 5, 110, 0.5);
+                    }, free: () => {} };
+                    this.scene.add(ent.obj); this.timed.push(ent);
+                    this.sparks(pos, '#38bdf8', 26, 200, 0.7);
+                    break;
+                }
+                case 'pool': {            // Tide's whirlpool as ONE object that can be moved: a = radius, b = max life frames, c = id
+                    this._poolId = e.c; fxEvents.unshift({ type: 'whirlpool', x: e.x, y: e.y, a: e.a, b: e.b, c: 'water' }); break;
+                }
+                case 'poolmove': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.obj.userData.px = pos.x; break; }
+                case 'poolend': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.3); break; }
                 case 'twister': {         // Zephyr's Roaming Twister: a = +/- radius (sign = travel direction), b = life frames, c = id. A visible spinning funnel with debris.
                     const dirx = (e.a || 1) < 0 ? -1 : 1, R = Math.max(50, Math.abs(e.a || 100)), H = 300, dur = Math.max(0.3, (e.b || 150) / 60);
                     const g = new THREE.Group(); g.position.copy(pos);

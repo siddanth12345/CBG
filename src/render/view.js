@@ -239,6 +239,11 @@ export class View {
             target.set(wx(dramaticZoom.targetX) * e, wy(dramaticZoom.targetY) * e, 0);
             dist = d0 / dramaticZoom.currentZoom;
         }
+        if (S.kcT > 0 && S.kcFull && fighters[S.kcDef]) {                // kill cam: push in on the victim
+            const e = smooth(clamp01(Math.min((1.7 - S.kcT) / 0.25, S.kcT / 0.35))), v = fighters[S.kcDef];
+            target.x += (wx(v.x) - target.x) * e * 0.85; target.y += (wy(v.y) - target.y) * e * 0.85;
+            dist /= 1 + 1.1 * e;
+        }
         if (this.debugCam) { target.copy(this.debugCam.target); dist = this.debugCam.dist; }
         this.zoomDist = dist;
         this.basePos.set(target.x, target.y + Math.sin(PITCH) * dist, Math.cos(PITCH) * dist);

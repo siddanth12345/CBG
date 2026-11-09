@@ -2,19 +2,44 @@
 // Everything is stored in this browser (localStorage key luminary/meta); the game core only reads perks and reports stats.
 const KEY = 'luminary/meta';
 
-/** balanced perks: each is a small edge, a character carries two */
+/** perks, weakest to greatest. tier 0 = plain, 1 = yellow outline, 2 = red, 3 = purple.
+ *  stats (summed over the two equipped perks): dmg / kb dealt, taken (damage), kbTaken, walk, cd (cooldown), last (extra damage on the last stock), spawn (extra respawn i-frames), coins */
+const P = (tier, name, icon, cost, desc, st) => ({ tier, name, icon, cost, desc, st });
 export const PERKS = {
-    sharp:  { name: 'Sharp Edge',   icon: '🗡️', cost: 120, desc: '+6% damage dealt.' },
-    heavy:  { name: 'Heavy Hands',  icon: '🥊', cost: 120, desc: '+6% knockback dealt.' },
-    tough:  { name: 'Tough Skin',   icon: '🛡️', cost: 140, desc: '-8% damage taken.' },
-    iron:   { name: 'Iron Will',    icon: '⚓', cost: 140, desc: '-6% knockback taken.' },
-    swift:  { name: 'Swift Feet',   icon: '👟', cost: 100, desc: '+6% walk speed.' },
-    wind2:  { name: 'Second Wind',  icon: '🌬️', cost: 150, desc: '+1 s of invincibility after you respawn.' },
-    quick:  { name: 'Quick Hands',  icon: '⏱️', cost: 160, desc: 'Special-move cooldowns are 10% shorter.' },
-    last:   { name: 'Last Stand',   icon: '🔥', cost: 130, desc: '+12% damage dealt while on your last stock.' },
-    magnet: { name: 'Coin Magnet',  icon: '🧲', cost: 90,  desc: '+25% coins from matches.' },
+    swift:   P(0, 'Swift Feet',     '👟', 100, '+6% walk speed.', { walk: 0.06 }),
+    magnet:  P(0, 'Coin Magnet',    '🧲', 90,  '+25% coins from matches.', { coins: 0.25 }),
+    sharp:   P(0, 'Sharp Edge',     '🗡️', 120, '+6% damage dealt.', { dmg: 0.06 }),
+    heavy:   P(0, 'Heavy Hands',    '🥊', 120, '+6% knockback dealt.', { kb: 0.06 }),
+    last:    P(0, 'Last Stand',     '🔥', 130, '+12% damage dealt on your last stock.', { last: 0.12 }),
+    tough:   P(0, 'Tough Skin',     '🛡️', 140, '-8% damage taken.', { taken: -0.08 }),
+    iron:    P(0, 'Iron Will',      '⚓', 140, '-6% knockback taken.', { kbTaken: -0.06 }),
+    wind2:   P(0, 'Second Wind',    '🌬️', 150, '+1 s of invincibility after you respawn.', { spawn: 60 }),
+    quick:   P(0, 'Quick Hands',    '⏱️', 160, 'Special cooldowns 10% shorter.', { cd: -0.10 }),
+
+    swift2:  P(1, 'Fleet Feet',     '👟', 240, '+10% walk speed.', { walk: 0.10 }),
+    sharp2:  P(1, 'Keen Edge',      '🗡️', 280, '+10% damage dealt.', { dmg: 0.10 }),
+    heavy2:  P(1, 'Crushing Hands', '🥊', 280, '+10% knockback dealt.', { kb: 0.10 }),
+    tough2:  P(1, 'Hardened Skin',  '🛡️', 300, '-12% damage taken.', { taken: -0.12 }),
+    iron2:   P(1, 'Anchor',         '⚓', 300, '-10% knockback taken.', { kbTaken: -0.10 }),
+    quick2:  P(1, 'Rapid Hands',    '⏱️', 340, 'Special cooldowns 16% shorter.', { cd: -0.16 }),
+
+    sharp3:  P(2, 'Razor Edge',     '🗡️', 520, '+15% damage dealt.', { dmg: 0.15 }),
+    heavy3:  P(2, 'Titan Hands',    '🥊', 520, '+15% knockback dealt.', { kb: 0.15 }),
+    tough3:  P(2, 'Ironclad',       '🛡️', 560, '-17% damage taken.', { taken: -0.17 }),
+    coin2:   P(2, 'Gold Rush',      '💰', 480, '+50% coins from matches.', { coins: 0.5 }),
+    last2:   P(2, 'Desperado',      '🔥', 520, '+25% damage dealt on your last stock.', { last: 0.25 }),
+    phoenix: P(2, 'Phoenix',        '🪶', 540, '+2 s of invincibility after you respawn.', { spawn: 120 }),
+
+    apex:    P(3, 'Apex',           '👑', 900, '+20% damage and +10% knockback dealt.', { dmg: 0.20, kb: 0.10 }),
+    bastion: P(3, 'Bastion',        '🏰', 950, '-22% damage taken and -15% knockback taken.', { taken: -0.22, kbTaken: -0.15 }),
+    timelord:P(3, 'Time Lord',      '⌛', 1000, 'Special cooldowns 25% shorter and +10% walk speed.', { cd: -0.25, walk: 0.10 }),
+    legend:  P(3, 'Last Legend',    '⭐', 1000, '+40% damage dealt on your last stock and +1.5 s respawn invincibility.', { last: 0.40, spawn: 90 }),
+    jackpot: P(3, 'Jackpot',        '🎰', 800, 'Double coins from matches.', { coins: 1.0 }),
 };
-export const PERK_IDS = Object.keys(PERKS);
+export const PERK_IDS = Object.keys(PERKS);                                  // already ordered weakest to greatest
+export const TIER_STYLE = [{ name: 'Standard', color: '#64748b' }, { name: 'Gold', color: '#facc15' }, { name: 'Red', color: '#ef4444' }, { name: 'Purple', color: '#a855f7' }];
+/** summed stat of the given perk ids */
+export const perkStat = (ids, stat) => ids.reduce((a, id) => a + ((PERKS[id] && PERKS[id].st[stat]) || 0), 0);
 
 /** the 20 challenge types. check(st, cx): st = match stats of the human player, cx = { won, char, mode, secs, stocksLeft, maxDmg } */
 export const CHALLENGES = [
@@ -89,7 +114,7 @@ export const isDone = (id) => doneToday().includes(id);
 
 /** called by the game when a match against bots / custom match ends. Returns a summary to show */
 export function reportMatch(st, cx) {
-    const mult = M.owned.length && perksFor(cx.char).includes('magnet') ? 1.25 : 1;
+    const mult = 1 + perkStat(perksFor(cx.char), 'coins') + (cx.online ? 0 : 0);
     let gain = 10 + (cx.won ? 15 : 0) + Math.min(25, Math.floor(st.dealt / 20)) + Math.min(10, st.kills * 3);
     const done = [];
     for (const ch of todaysChallenges()) {
@@ -99,8 +124,8 @@ export function reportMatch(st, cx) {
     let rank = null;
     if (cx.ranked) {
         const before = M.rating, tb = tierOf(before);
-        M.rating = Math.max(0, M.rating + (cx.won ? 25 + (st.deaths === 0 ? 10 : 0) : -18));
-        if (cx.won) M.wins++; else M.losses++;
+        const x = cx.online ? 3 : 1;                                   // online ranked climbs 3x faster
+        if (!cx.draw) { M.rating = Math.max(0, M.rating + x * (cx.won ? 25 + (st.deaths === 0 ? 10 : 0) : -18)); if (cx.won) M.wins++; else M.losses++; }
         M.hist = [...M.hist.slice(-29), { r: M.rating, w: cx.won ? 1 : 0, t: Date.now() }];
         rank = { before, after: M.rating, tier: tierOf(M.rating), up: tierOf(M.rating).name !== tb.name && M.rating > before, down: tierOf(M.rating).name !== tb.name && M.rating < before };
         gain += cx.won ? 20 : 6;
