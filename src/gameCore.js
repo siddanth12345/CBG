@@ -38,7 +38,11 @@ const SWORD_SCALE = 1.5, SWORD_OFF = 105;     // Bulwark's falling swords are 1.
 const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 72;              // Ember's rolling charge: 1.2 s to full
 const ROLL_AUTO = 30;                // hold full charge 0.5 s → auto release
-const recBuf = { fx: [], p: [] };
+const recBuf = { fx: [], p: [], snd: [] };
+for (const n of ['playF', 'playJump', 'playDash', 'playHit', 'playGrab', 'playThrow', 'playShield', 'playHoming', 'playSpear', 'playBurst', 'playZap', 'playStomp', 'playParry', 'playStab', 'playKO']) {
+    const orig = audio[n] && audio[n].bind(audio); if (!orig) continue;
+    audio[n] = (...args) => { if (S.gameState === 'playing' && !S.replay && recBuf.snd.length < 40) recBuf.snd.push([n, ...args]); return orig(...args); };     // remembered for the replay
+}
 function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.gameState === 'playing' && !S.replay && recBuf.fx.length < 80) recBuf.fx.push([type, x, y, a, b, c]); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
 
 const WORLD = {
@@ -3418,8 +3422,9 @@ function applySuddenBlast(t) {
     if (!b) return;
     const u = Math.min(1, (t || 0) / (60 * 13));   // closes twice as fast
     const e = u * u * (3 - 2 * u);
-    const L = STAGE.x - 160, R = STAGE.x + STAGE.width + 160;
-    const T = STAGE.y - 280, B = STAGE.y + 280;
+    const cx = STAGE.x + STAGE.width / 2, hw = (STAGE.width + 320) * 0.5 / 2;       // final box: half as wide as before (centred on the stage) and 1.5x as tall
+    const L = cx - hw, R = cx + hw;
+    const T = STAGE.y - 420, B = STAGE.y + 420;
     BLAST_ZONES.left = b.left + (L - b.left) * e;
     BLAST_ZONES.right = b.right + (R - b.right) * e;
     BLAST_ZONES.top = b.top + (T - b.top) * e;
@@ -5074,7 +5079,7 @@ export function applySnapshot(s) {
 const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null });
+    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0 });
     if (rec.length > REC_FRAMES) rec.shift();
 }
 function applyReplayFrame(fr) {
@@ -5100,8 +5105,10 @@ function applyReplayFrame(fr) {
     orbs.length = 0;
     for (const o of fr.o) { const own = o.own < 0 ? p1 : fighters[o.own]; orbs.push({ id: o.id === undefined ? -1 : o.id, x: o.x, y: o.y, vx: o.vx || 0, vy: o.vy || 0, r: o.r, charge: o.c, owner: own, color: o.col, life: 200, kind: o.k }); }
     S.screenShake = fr.sh || 0;
-    for (const e of fr.fx || []) { if (e[0] === 'killcam') continue; fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 }); }
+    for (const e of fr.fx || []) { fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 }); }
     for (const q of fr.pt || []) createParticles(q[0], q[1], q[2], q[3]);
+    if (fr.bz) { BLAST_ZONES.left = fr.bz[0]; BLAST_ZONES.right = fr.bz[1]; BLAST_ZONES.top = fr.bz[2]; BLAST_ZONES.bottom = fr.bz[3]; S.sudden = !!fr.sd; S.sdT = fr.sdt || 0; }     // the closing kill barrier
+    for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
     if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; } else S.kcT = 0;
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
@@ -5109,10 +5116,10 @@ export function startReplay(onDone) {
     if (!S.rec || S.rec.length < 30) return false;
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     dramaticZoom.active = false;
-    S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
+    S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
     return true;
 }
-export function stopReplay() { if (S.replay) { const d = S.replay.done; S.replay = null; if (d) d(); } }
+export function stopReplay() { if (S.replay) { const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; if (d) d(); } }
 function tickReplay() {
     const R = S.replay; R.i += 1;
     const n = Math.floor(R.i);
@@ -5121,7 +5128,8 @@ function tickReplay() {
 }
 export function step() {
     if (S.replay) { tickReplay(); return; }
-    if (S.kcPause > 0) {                                     // final blow: everything is frozen, then the hit's velocity is released unchanged
+    if (S.kcPause > 0) {                                     // final blow
+        if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') recordFrame();                  // the freeze is part of the replay too: everything is frozen, then the hit's velocity is released unchanged
         if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y }); S.kcHold = null; }
         return;
     }
