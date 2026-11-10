@@ -129,7 +129,7 @@ export class Effects {
         this.flames = new FireTrail(scene);
         this.starGeo = starGeometry(8, 0.2);
         this.starGeo4 = starGeometry(4, 0.16);
-        this.sdN = 160;
+        this.sdN = 320;
         this.sdMesh = new THREE.InstancedMesh(this.starGeo4, new THREE.MeshBasicMaterial({
             color: 0xffffff, transparent: true, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
         }), this.sdN);
@@ -810,11 +810,11 @@ export class Effects {
         g.scale.setScalar(Math.max(1, r));
     }
 
-    /** Ember cluster sparkles riding the sudden-death kill box as it closes */
+    /** Ember cluster sparkles riding the kill barrier (blast zones) all match; it closes in during sudden death */
     suddenWall(dt) {
         const mesh = this.sdMesh;
         if (!mesh) return;
-        if (!S.sudden) { if (mesh.count) mesh.count = 0; return; }
+        if (!S.gameState || S.gameState === 'start') { if (mesh.count) mesh.count = 0; return; }   // the kill barrier is outlined in every match, not just sudden death
         const bz = BLAST_ZONES;
         const segs = [
             [bz.left, bz.top, bz.right, bz.top],
