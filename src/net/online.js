@@ -28,7 +28,7 @@ export const Online = {
     note: '',
     name: 'Player',
     mode: 'pvp',          // 'pvp' (1v1) | 'lobby' (up to 8)
-    viaQueue: false,
+    viaQueue: false, rankedQ: false,
     slot: 1,              // my fighter slot (0 = host)
     myId: '',
     lobby: { members: [], settings: defaultSettings(), started: false },
@@ -73,7 +73,7 @@ function watch() {
 export async function hostRoom(code, mode = 'pvp') {
     leaveRoom(false);
     NETHOOK.fast = () => { const i = Online.t && Online.t.info; return !!i && (i.mode === 'p2p' || i.mode === 'local'); };
-    Online.name = displayName(); Online.mode = mode; Online.viaQueue = false;
+    Online.name = displayName(); Online.mode = mode; Online.viaQueue = false; Online.rankedQ = false;
     Online.role = 'host'; Online.code = code || newCode();
     set('waiting', 'Opening room…');
     try { Online.t = await openTransport(Online.code); } catch (e) { Online.role = null; set('closed', e.message); return false; }
@@ -163,10 +163,10 @@ export function setMemberTeam(slot, team) {
 export function addBot(level) {
     if (Online.role !== 'host' || Online.mode !== 'lobby' || Online.lobby.started) return false;
     const L = Online.lobby;
-    if (L.members.length >= MAX_PLAYERS || !['static', 'easy', 'medium', 'hard'].includes(level)) return false;
+    if (L.members.length >= MAX_PLAYERS || !['static', 'easy', 'medium', 'hard', 'expert', 'master', 'apex'].includes(level)) return false;
     let slot = 1; while (L.members.some(x => x.slot === slot)) slot++;
     const counts = TEAMS.map(tm => L.members.filter(x => x.team === tm).length);
-    const label = level === 'static' ? 'Static Bot' : level === 'easy' ? 'Easy Bot' : level === 'medium' ? 'Medium Bot' : 'Hard Bot';
+    const label = { static: 'Static Bot', easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot', expert: 'Expert Bot', master: 'Master Bot', apex: 'Apex Bot' }[level];
     const same = L.members.filter(x => x.bot === level).length;
     const name = same === 0 ? label : `${label} ${same + 1}`;
     if (same === 1) {
@@ -208,7 +208,7 @@ export function beginMatch() {
 /** ---- guest ---- */
 export async function joinRoom(code) {
     leaveRoom(false);
-    Online.name = displayName(); Online.viaQueue = false;
+    Online.name = displayName(); Online.viaQueue = false; Online.rankedQ = false;
     code = (code || '').trim().toUpperCase();
     if (!/^[A-Z]{4}$/.test(code)) { set('closed', 'Codes are 4 letters'); return false; }
     Online.role = 'guest'; Online.code = code;

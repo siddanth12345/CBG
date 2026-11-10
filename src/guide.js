@@ -232,6 +232,8 @@ export class Guide {
     /** called every frame by main.js */
     tick() {
         if (!this.active) return;
+        const sig = (touchMode() ? 'touch' : 'keys') + '|' + ['left', 'right', 'jump', 'attack', 'neutral', 'grab', 'settings', 'tutorial'].map(a => { try { return keyLabel(a); } catch (e) { return ''; } }).join(',');
+        if (sig !== this._sig) { const first = this._sig === undefined; this._sig = sig; if (!first && !this.doneAt) this.render(); }     // controls changed (rebinding, touch <-> keyboard): reword the step right away
         if (this.finished) return;
         if (S.gameState !== 'playing') return;      // countdown / menus: nothing to watch yet
         const s = STEPS[this.i];

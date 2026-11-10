@@ -6,7 +6,7 @@ import {
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay,
 } from './gameCore.js';
 import { MetaUI } from './metaUI.js';
-import { tierOf, getMeta } from './meta.js';
+import { tierOf, getMeta, botFor } from './meta.js';
 import { held, actionsFor, getNfToggle, toggleNeutral, neutralLatched } from './controls.js';
 import { TouchControls } from './touch.js';
 import { LayoutEditor } from './layoutUI.js';
@@ -41,7 +41,8 @@ const toasts = new Toasts($('luminary-root'));
 const borgsUI = new BorgsUI({ root: $('luminary-root'), toasts, onInviteSent: () => lobby.open('Invite sent. Waiting for your friend to join…') });
 const metaUI = new MetaUI({
     root: $('luminary-root'), shopBtn: $('shopBtnStart'), dailyBtn: $('dailyBtnStart'),
-    onRanked: () => { audio.init(); S.ranked = true; startMatchSequence(tierOf(getMeta().rating).bot); },
+    onRanked: () => { audio.init(); const b = botFor(getMeta().rating); S.ranked = true; S.rankBot = b.bot; S.rankMod = b.mod; startMatchSequence(['easy', 'medium', 'hard'].includes(b.bot) ? b.bot : 'hard'); },
+    onRankedOnline: () => { audio.init(); S.ranked = false; leaveRoom(false); backToMenu(); lobby.open(); joinQueue(true); },
 });
 const charUI = new CharUI({
     root: $('luminary-root'), openBtn: $('charBtnStart'), onSort: (id) => metaUI.openSort(id),
@@ -266,7 +267,7 @@ function backToMenu() {
     view.showcase.start();
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
-$('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; backToMenu(); });
+$('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
 $('replayBtn').addEventListener('click', () => { if (startReplay(() => gameOverModal.classList.remove('hidden'))) gameOverModal.classList.add('hidden'); });
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
@@ -275,7 +276,7 @@ if (trainMenuBtn) trainMenuBtn.addEventListener('click', () => trainUI.open());
 
 
 for (const [id, mode] of [['easyModeBtn', 'easy'], ['mediumModeBtn', 'medium'], ['hardModeBtn', 'hard'], ['trainingModeBtn', 'training']]) {
-    $(id).addEventListener('click', () => { audio.init(); S.ranked = false; startMatchSequence(mode); });
+    $(id).addEventListener('click', () => { audio.init(); S.ranked = false; S.rankBot = null; startMatchSequence(mode); });
 }
 
 // ------------------------------------------------------------------ loop
@@ -291,10 +292,11 @@ function onlineGameOver() {
         if (!resultRecorded) { resultRecorded = true; recordResult(S.winnerRole === 'lobby' ? !!S.iWon : S.winnerRole === S.online); $('requeueBtn').classList.toggle('hidden', !Online.viaQueue || Online.mode === 'lobby'); }
     } else if (S.gameState !== 'gameover') resultRecorded = false;
 }
-$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(); });
+$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(Online.rankedQ); });
 
 function frame(now) {
-    { const rb = $('replayBtn'); if (rb) rb.classList.toggle('hidden', !(S.gameState === 'gameover' && !S.online && !S.replay && S.rec && S.rec.length >= 30)); }
+    S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online);
+    { const rb = $('replayBtn'); if (rb) rb.classList.toggle('hidden', !(S.gameState === 'gameover' && !S.replay && S.rec && S.rec.length >= 30)); }
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     try {

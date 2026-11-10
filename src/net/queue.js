@@ -5,7 +5,7 @@ import { openTransport } from './transport.js';
 import { Online, hostRoom, joinRoom, leaveRoom } from './online.js';
 
 export const Queue = { active: false, waiting: 0, onChange: () => {} };
-let t = null, hbT = 0, id = '', t0 = 0, peers = new Map(), matched = false, announcing = 0;
+let rankedQ = false, t = null, hbT = 0, id = '', t0 = 0, peers = new Map(), matched = false, announcing = 0;
 const newCode = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
 
 function stop() {
@@ -15,17 +15,18 @@ function stop() {
 }
 export function leaveQueue() { matched = true; stop(); }
 
-export async function joinQueue() {
+export async function joinQueue(ranked = false) {
     leaveRoom(false);
+    rankedQ = !!ranked;
     stop(); matched = false;
     id = Math.random().toString(36).slice(2, 9); t0 = Date.now();
-    try { t = await openTransport('mm1v1'); } catch (e) { Online.note = e.message; Online.status = 'closed'; Online.onChange(); return false; }
+    try { t = await openTransport(rankedQ ? 'mm1v1r' : 'mm1v1'); } catch (e) { Online.note = e.message; Online.status = 'closed'; Online.onChange(); return false; }
     Queue.active = true; Queue.onChange();
     t.onmessage = (m) => {
         if (matched || !m) return;
         if (m.t === 'q') peers.set(m.id, { t0: m.t0, seen: Date.now() });
         else if (m.t === 'unq') peers.delete(m.id);
-        else if (m.t === 'matched' && m.b === id) { matched = true; const code = m.code; stop(); joinRoom(code); Online.viaQueue = true; }
+        else if (m.t === 'matched' && m.b === id) { matched = true; const code = m.code; stop(); joinRoom(code); Online.viaQueue = true; Online.rankedQ = rankedQ; }
     };
     const tick = () => {
         if (matched || !t) return;
@@ -48,13 +49,13 @@ async function host(partner) {
     const qt = t; t = null; clearInterval(hbT); hbT = 0;     // keep the queue channel just long enough to announce
     const ok = await hostRoom(code);
     if (!ok) { qt.close(); matched = false; Queue.active = false; Queue.onChange(); return; }
-    Online.viaQueue = true;
+    Online.viaQueue = true; Online.rankedQ = rankedQ;
     let n = 0;
     announcing = setInterval(() => {
         qt.send({ t: 'matched', a: id, b: partner, code });
         if (++n >= 8 || Online.status === 'connected') { clearInterval(announcing); announcing = 0; qt.send({ t: 'unq', id }); qt.close(); Queue.active = false; Queue.onChange(); }
     }, 500);
     setTimeout(() => {                                         // the partner never showed up (they matched someone else): search again
-        if (Online.role === 'host' && Online.status !== 'connected') { leaveRoom(false); joinQueue(); }
+        if (Online.role === 'host' && Online.status !== 'connected') { leaveRoom(false); joinQueue(rankedQ); }
     }, 9000);
 }

@@ -65,16 +65,24 @@ export const CHALLENGES = [
     { id: 'marathon', name: 'Marathon',         desc: 'Win a match that lasts over 3 minutes.',         coins: 55, check: (s, c) => c.won && c.secs > 180 },
 ];
 
+/** Ranked ladder. Rating starts at 1000. A win is worth 20 (25 flawless), a loss costs 15, so even a perfect run of flawless wins needs
+ *  100 games to reach the top: 1000 + 100 x 25 = 3500. Online ranked 1v1 moves 3x as fast. */
+export const RANK = { start: 1000, win: 20, flawless: 5, loss: 15, topGames: 100 };
 export const TIERS = [
-    { name: 'Bronze', min: 0, color: '#b45309', bot: 'easy' },
-    { name: 'Silver', min: 1100, color: '#94a3b8', bot: 'medium' },
-    { name: 'Gold', min: 1300, color: '#facc15', bot: 'hard' },
-    { name: 'Platinum', min: 1500, color: '#67e8f9', bot: 'hard' },
-    { name: 'Diamond', min: 1750, color: '#a78bfa', bot: 'hard' },
+    { name: 'Bronze',   min: 0,    color: '#b45309', bot: 'easy',   mods: [] },
+    { name: 'Silver',   min: 1500, color: '#94a3b8', bot: 'medium', mods: [] },
+    { name: 'Gold',     min: 2100, color: '#facc15', bot: 'hard',   mods: [] },
+    { name: 'Platinum', min: 2700, color: '#67e8f9', bot: 'expert', mods: ['rusher', 'zoner'] },
+    { name: 'Diamond',  min: 3100, color: '#a78bfa', bot: 'master', mods: ['rusher', 'zoner', 'turtle', 'trickster'] },
+    { name: 'Champion', min: RANK.start + RANK.topGames * (RANK.win + RANK.flawless), color: '#f43f5e', bot: 'apex', mods: ['rusher', 'zoner', 'turtle', 'trickster'] },
 ];
+export const BOT_NAMES = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot', expert: 'Expert Bot', master: 'Master Bot', apex: 'Apex Bot' };
+export const MOD_NAMES = { rusher: 'Rusher', zoner: 'Zoner', turtle: 'Turtle', trickster: 'Trickster' };
 export const tierOf = (r) => { let t = TIERS[0]; for (const x of TIERS) if (r >= x.min) t = x; return t; };
+/** the opponent for a rating: bot level and a random mod from that tier's list */
+export const botFor = (r) => { const t = tierOf(r); return { bot: t.bot, mod: t.mods.length ? t.mods[Math.floor(Math.random() * t.mods.length)] : '', tier: t }; };
 
-const blank = () => ({ coins: 100, owned: [], slots: {}, rating: 1000, wins: 0, losses: 0, daily: { day: '', done: [] }, hist: [] });
+const blank = () => ({ coins: 100, owned: [], slots: {}, rating: RANK.start, wins: 0, losses: 0, daily: { day: '', done: [] }, hist: [] });
 let M = blank();
 try { const raw = localStorage.getItem(KEY); if (raw) M = { ...blank(), ...JSON.parse(raw) }; } catch (e) { /* private window */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M)); } catch (e) { /* ignore */ } };
@@ -125,7 +133,7 @@ export function reportMatch(st, cx) {
     if (cx.ranked) {
         const before = M.rating, tb = tierOf(before);
         const x = cx.online ? 3 : 1;                                   // online ranked climbs 3x faster
-        if (!cx.draw) { M.rating = Math.max(0, M.rating + x * (cx.won ? 25 + (st.deaths === 0 ? 10 : 0) : -18)); if (cx.won) M.wins++; else M.losses++; }
+        if (!cx.draw) { M.rating = Math.max(0, M.rating + x * (cx.won ? RANK.win + (st.deaths === 0 ? RANK.flawless : 0) : -RANK.loss)); if (cx.won) M.wins++; else M.losses++; }
         M.hist = [...M.hist.slice(-29), { r: M.rating, w: cx.won ? 1 : 0, t: Date.now() }];
         rank = { before, after: M.rating, tier: tierOf(M.rating), up: tierOf(M.rating).name !== tb.name && M.rating > before, down: tierOf(M.rating).name !== tb.name && M.rating < before };
         gain += cx.won ? 20 : 6;

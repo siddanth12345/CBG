@@ -1,5 +1,5 @@
 // Shop, perk "Sort" picker, and the Daily & Ranked screen (all reading src/meta.js).
-import { PERKS, PERK_IDS, TIER_STYLE, CHALLENGES, TIERS, tierOf, getMeta, buyPerk, owns, setSlot, perksFor, todaysChallenges, isDone, onMetaChange } from './meta.js';
+import { PERKS, PERK_IDS, TIER_STYLE, RANK, BOT_NAMES, MOD_NAMES, CHALLENGES, TIERS, tierOf, getMeta, buyPerk, owns, setSlot, perksFor, todaysChallenges, isDone, onMetaChange } from './meta.js';
 import { CHARS } from './characters.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -13,8 +13,8 @@ function modal(root, title) {
 }
 
 export class MetaUI {
-    constructor({ root, shopBtn, dailyBtn, onRanked }) {
-        this.onRanked = onRanked;
+    constructor({ root, shopBtn, dailyBtn, onRanked, onRankedOnline }) {
+        this.onRanked = onRanked; this.onRankedOnline = onRankedOnline;
         this.shop = modal(root, 'Shop');
         this.sort = modal(root, 'Sort');
         this.daily = modal(root, 'Daily & Ranked');
@@ -39,6 +39,7 @@ export class MetaUI {
         if (buy) { const r = buyPerk(buy.dataset.buy); this.msg = r.msg; this.render(el); return; }
         const slot = e.target.closest('[data-slot]');
         if (slot) { const [i, id] = slot.dataset.slot.split(':'); setSlot(this.sortChar, +i, id === '-' ? null : id); this.render(el); return; }
+        if (e.target.closest('[data-rankedq]')) { el.classList.add('lm-hidden'); if (this.onRankedOnline) this.onRankedOnline(); return; }
         if (e.target.closest('[data-ranked]')) { el.classList.add('lm-hidden'); if (this.onRanked) this.onRanked(); return; }
         const go = e.target.closest('[data-goshop]');
         if (go) { el.classList.add('lm-hidden'); this.openShop(); }
@@ -62,8 +63,16 @@ export class MetaUI {
         } else {
             const t = tierOf(M.rating), next = TIERS.find(x => x.min > M.rating);
             const today = todaysChallenges();
-            body.innerHTML = `<div style="${card}"><div style="flex:1"><b style="color:${t.color};font-size:20px">${t.name}</b> · ${M.rating}<br><small>${M.wins} wins · ${M.losses} losses${next ? ` · ${next.min - M.rating} to ${next.name}` : ' · top tier'}</small></div><button class="lm-btn" data-ranked>Play ranked (${t.bot})</button></div>
-                <p class="lm-note">Ranked is a 1v1 against a ${t.bot} bot as your equipped character. Win +25 (+10 flawless), lose −18, and bonus coins. <b>Online matches against real players are ranked too and move your rating 3x faster</b> (+75 / −54).</p>
+            const ladder = TIERS.map((x, k) => {
+                const cur = x.name === t.name, reached = M.rating >= x.min, hi = TIERS[k + 1] ? TIERS[k + 1].min : x.min + 400;
+                const pct = reached ? Math.max(0, Math.min(100, Math.round((M.rating - x.min) / (hi - x.min) * 100))) : 0;
+                const bots = `${BOT_NAMES[x.bot]}${x.mods.length ? ' + styles: ' + x.mods.map(m => MOD_NAMES[m]).join(', ') : ''}`;
+                return `<div style="${card}${cur ? `border:2px solid ${x.color};box-shadow:0 0 14px ${x.color}55;` : ''}opacity:${reached ? 1 : 0.7}"><span style="font-size:22px;color:${x.color}">${reached ? '◆' : '◇'}</span><div style="flex:1"><b style="color:${x.color}">${x.name}</b> <small>${x.min}+ rating</small>${cur ? ' <b style="color:#fde047">· YOU ARE HERE</b>' : ''}<br><small>Opponent: ${bots}</small>${cur && next ? `<div style="height:5px;border-radius:3px;background:rgba(148,163,184,.25);margin-top:5px"><i style="display:block;height:100%;width:${pct}%;border-radius:3px;background:${x.color}"></i></div>` : ''}</div></div>`;
+            }).join('');
+            body.innerHTML = `<div style="${card}"><div style="flex:1"><b style="color:${t.color};font-size:20px">${t.name}</b> · ${M.rating}<br><small>${M.wins} wins · ${M.losses} losses${next ? ` · ${next.min - M.rating} to ${next.name}` : ' · top rank'}</small></div></div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button class="lm-btn" data-ranked>Ranked vs ${BOT_NAMES[t.bot]}</button><button class="lm-btn" data-rankedq>Ranked online 1v1</button></div>
+                <p class="lm-note">A win gives +${RANK.win} (+${RANK.flawless} flawless), a loss costs ${RANK.loss}. Even flawless wins only, the top rank takes ${RANK.topGames} games. <b>Ranked online 1v1</b> pairs you with a real player and moves your rating <b>3x faster</b> (+${RANK.win * 3} / −${RANK.loss * 3}).</p>
+                <h3 style="margin:10px 0 6px">All ranks</h3>${ladder}
                 <h3 style="margin:10px 0 6px">Today's challenges</h3>
                 ${today.map(c => `<div style="${card}"><span style="font-size:20px">${isDone(c.id) ? '✅' : '🎯'}</span><div style="flex:1"><b>${c.name}</b><br><small>${c.desc}</small></div><b style="color:#fde047">🪙 ${c.coins}</b></div>`).join('')}
                 <p class="lm-note">${CHALLENGES.length} challenge types rotate daily. They count in bot matches and custom matches (not training).</p>`;

@@ -6,7 +6,7 @@
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
 import { tickExtras, notify, showReward } from './hudExtras.js';
-import { perksFor, reportMatch, perkStat } from './meta.js';
+import { perksFor, reportMatch, perkStat, BOT_NAMES, MOD_NAMES } from './meta.js';
 import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
@@ -2527,11 +2527,14 @@ class AIBot extends Fighter {
         this.shieldHold = 0;
         this.lastSeen = null;
         this.memSaveT = 0;
-        this.diff = null;                       // custom matches: 'easy' | 'medium' | 'hard' per bot
+        this.diff = null;                       // 'easy' | 'medium' | 'hard' | 'expert' | 'master' | 'apex' per bot
+        this.mod = '';                          // bot style: 'rusher' | 'zoner' | 'turtle' | 'trickster'
     }
 
+    get skill() { return SKILL[this.diff] || 1; }
+
     get level() {
-        if (this.diff) return this.diff;
+        if (this.diff) return SKILL[this.diff] ? 'hard' : this.diff;           // Expert / Master / Apex play the hard-bot brain, faster and tougher
         // training static dummy must never be treated as hard (that enabled counter-rolls)
         if (S.gameMode === 'training') return (S.train && S.train.botType && S.train.botType !== 'static') ? S.train.botType : 'static';
         return S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard';
@@ -2646,6 +2649,36 @@ class AIBot extends Fighter {
         return false;
     }
 
+    /** bot styles for the harder ranks. Returns true when the style took this frame. */
+    modTick(t) {
+        if (this.actionBlocked() || this.actionLock > 0 || !t) return false;
+        const dx = t.x - this.x, dy = t.y - this.y, dist = Math.hypot(dx, dy), dir = dx >= 0 ? 1 : -1, n = this.actionTimer;
+        const foeAttacking = (t.attackTimer > 0 || t.activeMove) && dist < 230;
+        switch (this.mod) {
+            case 'rusher':                                                                           // never stops coming: closes the gap and keeps swinging
+                if (this.grounded && Math.abs(dx) > 100 && Math.abs(dx) < 900) { this.vx += dir * 0.8; this.facing = dir; }
+                if (dist < 150 && n % 12 === 0 && Math.random() < 0.75) return this.attack(dy < -40 ? 'UP' : 'NEUTRAL');
+                if (n % 50 === 0 && dist > 300 && dist < 800 && Math.random() < 0.5 && this.grounded) { this.jump(); }
+                return false;
+            case 'zoner':                                                                            // keeps its distance and fills the air with specials
+                if (this.grounded && dist < 300 && n % 3 === 0) { this.vx -= dir * 1.3; this.facing = dir; }
+                if (n % 22 === 0 && dist > 260 && dist < 950 && Math.random() < 0.6) return this.aiSpecial(t, dist, dx, dy);
+                return false;
+            case 'turtle':                                                                           // shields up, waits for the swing, then punishes it
+                if (foeAttacking && this.canShield() && Math.random() < 0.4) { this.shieldHold = 16; this.isShielding = true; return true; }
+                if ((t.hitstun > 0 || t.clashStunTimer > 0 || t.dizzyTimer > 0) && dist < 170 && n % 4 === 0) return this.attack(dy < -40 ? 'UP' : 'NEUTRAL');
+                return false;
+            case 'trickster':                                                                        // hops around and blinks behind you
+                if (n % 45 === 0 && Math.random() < 0.35) {
+                    if (this.cd.BLINK <= 0 && dist > 140 && dist < 700 && this.useSpecial('BLINK', t.x - dir * 140, t.y)) return true;
+                    if (this.grounded) this.jump();
+                }
+                if (n % 25 === 0 && dist < 200 && Math.random() < 0.4) return this.attack('DOWN');
+                return false;
+        }
+        return false;
+    }
+
     updateAI(target) {
         // static / training dummy: zero input, no rolls, no attacks
         if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static'))) {
@@ -2674,6 +2707,7 @@ class AIBot extends Fighter {
         }
 
         this.actionTimer++;
+        if (this.mod && !S.demo && this.modTick(target)) return;
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
         // HARD: force Side-F often (combo or gap) — cache-bust build so this is visible
@@ -2762,7 +2796,7 @@ class AIBot extends Fighter {
         }
 
         if (this.level === 'easy') {
-            const reactionRate = 35;
+            const reactionRate = Math.max(12, Math.round(35 / this.skill));
             const movementSpeed = 0.55;
 
             if (this.actionTimer % reactionRate === 0) {
@@ -3148,7 +3182,14 @@ function spawnItem(type) {
 export const viewerFighter = () => S.demo ? null : S.match ? fighters[S.mySlot] : p1;
 /** perks (bought in the shop, equipped per character): only the fighter this screen belongs to carries them */
 const hasPerk = (f, id) => !!f && f === viewerFighter() && S.online !== 'guest' && perksFor(f.char).includes(id);
-const perkOf = (f, stat) => (!!f && f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0;
+/** harder bots (Expert / Master / Apex) fight with built-in stat bundles, the same kind of numbers as the shop perks */
+const SKILL = { expert: 1.3, master: 1.6, apex: 2 };
+const BOT_STATS = {
+    expert: { dmg: 0.08, taken: -0.10, kbTaken: -0.06, cd: -0.12 },
+    master: { dmg: 0.16, taken: -0.18, kbTaken: -0.12, cd: -0.22, walk: 0.06 },
+    apex:   { dmg: 0.28, taken: -0.28, kbTaken: -0.20, cd: -0.35, walk: 0.10 },
+};
+const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0) + ((f.isAI && f.diff && BOT_STATS[f.diff] && S.gameMode !== 'training') ? (BOT_STATS[f.diff][stat] || 0) : 0);
 /** match stats of the human player (for coins, daily challenges, the ladder) */
 const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
 const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
@@ -3669,7 +3710,7 @@ function launch(attacker, defender, hb) {
 
     if (defender.isAI && defender.level === 'hard' && defender.level !== 'static') {
         defender.incomingHitCount++;
-        if (!hb.stun && defender.grounded && defender.incomingHitCount >= 3 && defender.rollCooldown <= 0) {
+        if (!hb.stun && defender.grounded && defender.incomingHitCount >= (defender.skill >= 1.6 ? 2 : 3) && defender.rollCooldown <= 0) {
             defender.incomingHitCount = 0;
             const away = Math.sign(defender.x - attacker.x) || 1;
             if (defender.executeRoll(true, away)) {            // the bot slips out of the combo with a roll
@@ -4466,7 +4507,7 @@ export function assignTagNames() {
             }
             const lv = f.diff || (typeof f.level === 'string' ? f.level : null)
                 || (S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard');
-            const base = lv === 'easy' ? 'Easy Bot' : lv === 'medium' ? 'Medium Bot' : 'Hard Bot';
+            const base = (BOT_NAMES[lv] || 'Hard Bot') + (f.mod ? ' · ' + MOD_NAMES[f.mod] : '');
             (bots[base] || (bots[base] = [])).push(f);
         } else {
             f.tagName = (f === p1) ? (displayName() || f.name || 'Player') : (f.name || 'Player');
@@ -4540,7 +4581,7 @@ function startMatchSequence(mode, cfg) {
         cfg.players.forEach((pl, i) => {
             // the local player is always drawn as p1 (slot 0 locally): swap slot 0 and my slot
             const f = fighters[pl.slot];
-            f.char = charOf(pl.char).id; f.active = true; f.name = pl.name; f.team = S.match.teams ? pl.team : null; f.isAI = !!pl.bot; f.diff = pl.bot || null; f.shieldHold = 0;
+            f.char = charOf(pl.char).id; f.active = true; f.name = pl.name; f.team = S.match.teams ? pl.team : null; f.isAI = !!pl.bot; f.diff = pl.bot || null; f.mod = SKILL[pl.bot] ? ['rusher', 'zoner', 'turtle', 'trickster'][Math.floor(Math.random() * 4)] : ''; f.shieldHold = 0;
             f.color = S.match.teams && pl.team ? TEAM_COLORS[pl.team] : FFA_COLORS[pl.slot % 8];
             f.superColor = null;
             f.startX = STAGE.x + STAGE.width * 0.15 + (n > 1 ? span * i / (n - 1) : span / 2);
@@ -4559,7 +4600,9 @@ function startMatchSequence(mode, cfg) {
         p1.name = displayName() || p1.name || 'Player';
         if (p2.isAI) {
             p2.diff = S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : S.gameMode === 'hard' ? 'hard' : (p2.diff || 'hard');
-            p2.name = p2.diff === 'easy' ? 'Easy Bot' : p2.diff === 'medium' ? 'Medium Bot' : 'Hard Bot';
+            if (S.ranked && S.rankBot) { p2.diff = S.rankBot; p2.mod = S.rankMod || ''; }
+            else p2.mod = '';
+            p2.name = (BOT_NAMES[p2.diff] || 'Hard Bot') + (p2.mod ? ' · ' + MOD_NAMES[p2.mod] : '');
         } else if (S.opponentName) {
             p2.name = S.opponentName;
         }
@@ -4662,7 +4705,7 @@ function endGame(winnerText, winnerRole = null) {
         S.rewardShown = true; if (!S.stats) S.stats = newStats();
         const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
-        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.online, online: !!S.online, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
+        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, online: !!S.rankedQ, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
     }
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
@@ -4871,6 +4914,7 @@ function guestSmooth() {
     for (const g of items) if (g.st !== 'held' && !g.act && g.st !== 'zone') { g.x += g.vx * 0.5; g.y += g.vy * 0.5; g.rot += (g.spin || 0) * 0.5; }
 }
 export function applySnapshot(s) {
+    if (S.replay) return;                                 // watching a replay: ignore the live feed
     trackSnapRate();
     const mine = s.m ? fighters : [p2, p1];               // snapshot index -> local fighter
     s.f.forEach((d, i) => {
@@ -4935,7 +4979,7 @@ export function applySnapshot(s) {
     // effects, sounds, particles the host produced since the last snapshot
     for (const e of s.ev) {
         if (e.k === 'f' && e.e[0] === 'killcam') applyKillCam(e.e[3], e.e[4]);
-        if (e.k === 'f') fxEvents.push({ type: e.e[0], x: e.e[1], y: e.e[2], a: e.e[3], b: e.e[4], c: e.e[5] || 0 });
+        if (e.k === 'f') { fxEvents.push({ type: e.e[0], x: e.e[1], y: e.e[2], a: e.e[3], b: e.e[4], c: e.e[5] || 0 }); if (recBuf.fx.length < 80) recBuf.fx.push(e.e.slice(0, 6)); }
         else if (e.k === 'a') { try { audio[e.m](...e.a); } catch (err) { /* sound not available */ } }
         else if (e.k === 'p') createParticles(...e.e);
         else if (e.k === 'b') koBeams.push({ startX: e.e[0], startY: e.e[1], targetX: STAGE.x + STAGE.width / 2, targetY: STAGE.y, alpha: 1.0, width: 32 });
@@ -4977,7 +5021,7 @@ function applyReplayFrame(fr) {
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone) {
-    if (!S.rec || S.rec.length < 30 || S.online) return false;
+    if (!S.rec || S.rec.length < 30) return false;
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     dramaticZoom.active = false;
     S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
@@ -4996,7 +5040,7 @@ export function step() {
         if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y }); S.kcHold = null; }
         return;
     }
-    if (S.gameState === 'playing' && !S.online && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
+    if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
     const bubble = S.online !== 'guest' && items.length > 0;       // the clock bubble slows every projectile, item and ENEMY fighter inside it (not its owner or their team)
     for (const f of fighters) {
         if (!f.active) continue;
