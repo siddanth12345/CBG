@@ -2452,7 +2452,7 @@ class Fighter {
                 ? `KO'd by ${h.by.name || 'a foe'} (${h.by.char}) with ${MOVE_NAMES[h.type] || String(h.type).toLowerCase()} at ${Math.round(this.damage)}%${h.combo >= 3 ? ` · hit ${h.combo} of a combo` : ''}`
                 : `You fell out at ${Math.round(this.damage)}%`);
         }
-        const timerMode = !!(S.match && S.match.mode === 'timer');
+        const timerMode = !!(S.match && S.match.mode === 'timer' && !S.sudden);
         if (!timerMode) this.stocks--;
         this.deaths++;
         if (S.online !== 'guest') {                         // kill credit: whoever hit this fighter in the last 6 s (self-KO costs a point)
@@ -3410,32 +3410,94 @@ function itemInteractions() {
     }
 }
 
-/** timer matches: most kills wins (fewest deaths breaks a tie) */
+/** pull the kill box in toward the stage. t is frames since sudden death started. */
+function applySuddenBlast(t) {
+    const b = S.sdBase;
+    if (!b) return;
+    const u = Math.min(1, (t || 0) / (60 * 26));
+    const e = u * u * (3 - 2 * u);
+    const L = STAGE.x - 160, R = STAGE.x + STAGE.width + 160;
+    const T = STAGE.y - 280, B = STAGE.y + 280;
+    BLAST_ZONES.left = b.left + (L - b.left) * e;
+    BLAST_ZONES.right = b.right + (R - b.right) * e;
+    BLAST_ZONES.top = b.top + (T - b.top) * e;
+    BLAST_ZONES.bottom = b.bottom + (B - b.bottom) * e;
+}
+let cdTimer = null;
+function runCountdown() {
+    if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+    S.gameState = 'countdown';
+    S.cdN = 3;
+    const screen = document.getElementById('countdownScreen');
+    const text = document.getElementById('countdownText');
+    if (screen) screen.classList.remove('hidden');
+    if (text) text.textContent = '3';
+    let count = 3;
+    cdTimer = setInterval(() => {
+        count--;
+        if (count > 0) { S.cdN = count; if (text) text.textContent = String(count); }
+        else if (count === 0) { S.cdN = 0; if (text) text.textContent = 'GO!'; }
+        else {
+            clearInterval(cdTimer); cdTimer = null;
+            S.cdN = -1;
+            if (screen) screen.classList.add('hidden');
+            if (S.gameState === 'countdown') S.gameState = 'playing';
+        }
+    }, 1000);
+}
+/** tied for the most kills: only they come back, at 240%, and the blast zone closes in */
+function beginSuddenDeath(tied) {
+    S.sudden = true;
+    S.sdT = 0;
+    S.timeLeft = 60 * 60;
+    const a = ARENAS[S.arena] || ARENAS.normal;
+    S.sdBase = { left: a.bz.left, right: a.bz.right, top: a.bz.top, bottom: a.bz.bottom };
+    Object.assign(BLAST_ZONES, S.sdBase);
+    orbs.length = 0; drops.length = 0; pillars.length = 0; zapTrails.length = 0;
+    whirlpools.length = 0; tornadoes.length = 0; winds.length = 0;
+    const set = new Set(tied);
+    const n = Math.max(1, tied.length), span = STAGE.width * 0.7;
+    tied.forEach((f, i) => {
+        f.out = false; f.stocks = 1;
+        f.startX = STAGE.x + STAGE.width * 0.15 + (n > 1 ? span * i / (n - 1) : span / 2);
+        f.reset(false);
+        f.damage = 240; f.stocks = 1; f.out = false;
+        f.invincibleTimer = 40; f.spawnT = 0;
+        f.y = STAGE.y - f.height / 2; f.grounded = true; f.vx = f.vy = 0;
+    });
+    for (const f of fighters) {
+        if (!f.active || set.has(f)) continue;
+        f.out = true; f.stocks = 0; f.vx = f.vy = 0; f.isShielding = false; f.fActive = false; f.sx = null;
+        f.x = STAGE.x + STAGE.width / 2; f.y = STAGE.y - 40;
+    }
+    try { notify('SUDDEN DEATH'); } catch (e) { /* hud */ }
+    runCountdown();
+}
+/** timer matches: most kills wins. A tie for first is sudden death, not a draw. */
 function finishTimer() {
-    if (!S.match || S.gameState !== 'playing') return;
-    const live = fighters.filter(f => f.active);
+    if (!S.match || S.gameState !== 'playing' || S.sudden) return;
+    const live = fighters.filter(f => f.active && !f.out);
     const keyOf = (f) => S.match.teams && f.team ? 't:' + f.team : 'p:' + f.slot;
-    const score = new Map(), deaths = new Map(), members = new Map();
+    const score = new Map(), members = new Map();
     for (const f of live) {
         const k = keyOf(f);
-        score.set(k, (score.get(k) || 0) + f.kills); deaths.set(k, (deaths.get(k) || 0) + f.deaths);
+        score.set(k, (score.get(k) || 0) + (f.kills || 0));
         if (!members.has(k)) members.set(k, []);
         members.get(k).push(f);
     }
-    let best = -Infinity, bestD = Infinity, winners = [];
+    let best = -Infinity, winners = [];
     for (const [k, sc] of score) {
-        const d = deaths.get(k);
-        if (sc > best || (sc === best && d < bestD)) { best = sc; bestD = d; winners = [k]; }
-        else if (sc === best && d === bestD) winners.push(k);
+        if (sc > best) { best = sc; winners = [k]; }
+        else if (sc === best) winners.push(k);
     }
     const wf = winners.flatMap(k => members.get(k) || []);
+    if (winners.length > 1 && wf.length >= 2) { beginSuddenDeath(wf); return; }
     S.winnerSlots = wf.map(f => f.slot);
-    const draw = winners.length > 1;
     const w = wf[0];
-    S.winnerLabel = draw ? 'DRAW' : (S.match.teams && w.team ? `${TEAM_NAMES[w.team]} TEAM` : String(w.name).toUpperCase());
-    S.iWon = !draw && S.winnerSlots.includes(S.mySlot || 0);
+    S.winnerLabel = w ? (S.match.teams && w.team ? `${TEAM_NAMES[w.team]} TEAM` : String(w.name).toUpperCase()) : 'NOBODY';
+    S.iWon = !!(w && S.winnerSlots.includes(S.mySlot || 0));
     triggerDramaticZoom(w || p1);
-    endGame(draw ? 'DRAW!' : (S.iWon ? 'YOU WIN!' : `${S.winnerLabel} WINS!`), 'lobby');
+    endGame(!w ? 'DRAW!' : (S.iWon ? 'YOU WIN!' : `${S.winnerLabel} WINS!`), 'lobby');
 }
 
 // ============================================================================
@@ -4421,11 +4483,10 @@ function renderRoster() {
     el.style.display = 'flex';
     const timer = S.match.mode === 'timer';
     if (timer) {
-        const sec = Math.max(0, Math.ceil((S.timeLeft || 0) / 60));
-        const txt = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+        const txt = S.sudden ? 'SUDDEN DEATH' : (() => { const sec = Math.max(0, Math.ceil((S.timeLeft || 0) / 60)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); })();
         tm.style.display = 'block';
         if (tm.textContent !== txt) tm.textContent = txt;
-        tm.style.color = sec <= 10 ? '#fb7185' : '#e2e8f0';
+        tm.style.color = S.sudden || (!S.sudden && Math.ceil((S.timeLeft || 0) / 60) <= 10) ? '#fb7185' : '#e2e8f0';
     } else tm.style.display = 'none';
     const rows = fighters.filter(f => f.active).map(f => {
         const pips = timer ? 'K ' + f.kills : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
@@ -4544,7 +4605,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4702,6 +4763,8 @@ export function applyTrainPrefs() {
 
 const gameOverModal = document.getElementById('gameOverModal');
 function endGame(winnerText, winnerRole = null) {
+    if (S.sdBase) { Object.assign(BLAST_ZONES, S.sdBase); S.sdBase = null; }
+    S.sudden = false; S.sdT = 0; S.cdN = -1;
     if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') {
         S.rewardShown = true; if (!S.stats) S.stats = newStats();
         const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
@@ -4855,6 +4918,7 @@ export function snapshot() {
         o: orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0 })),
         it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
+        sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
         ev,
     };
 }
@@ -4963,6 +5027,20 @@ export function applySnapshot(s) {
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
     for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
     if (s.tl) S.timeLeft = s.tl;
+    if (s.sd) {
+        S.sudden = true;
+        S.sdT = s.sdt || 0;
+        if (!S.sdBase) { const a = ARENAS[S.arena] || ARENAS.normal; S.sdBase = { left: a.bz.left, right: a.bz.right, top: a.bz.top, bottom: a.bz.bottom }; }
+        applySuddenBlast(S.sdT);
+        const screen = document.getElementById('countdownScreen'), text = document.getElementById('countdownText');
+        if (s.cd >= 0) {
+            if (screen) screen.classList.remove('hidden');
+            if (text) text.textContent = s.cd === 0 ? 'GO!' : String(s.cd);
+        } else if (screen && S.gameState !== 'playing') screen.classList.add('hidden');
+    } else if (S.sudden) {
+        S.sudden = false; S.sdT = 0;
+        if (S.sdBase) Object.assign(BLAST_ZONES, S.sdBase);
+    }
     S.screenShake = Math.max(S.screenShake, s.sh || 0);
     // game state
     if (s.gs === 'gameover') {
@@ -5041,6 +5119,7 @@ export function step() {
         if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y }); S.kcHold = null; }
         return;
     }
+    if (S.sudden && S.online !== 'guest' && (S.gameState === 'playing' || S.gameState === 'countdown')) { S.sdT = (S.sdT || 0) + 1; applySuddenBlast(S.sdT); }
     if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
     const bubble = S.online !== 'guest' && items.length > 0;       // the clock bubble slows every projectile, item and ENEMY fighter inside it (not its owner or their team)
     for (const f of fighters) {
@@ -5074,7 +5153,7 @@ export function step() {
             if (a !== b && !(S.match.teams && a.team && a.team === b.team)) checkCombatCollisions(a, b);
         }
         itemInteractions();
-        if (S.match.mode === 'timer' && S.online !== 'guest' && S.gameState === 'playing' && --S.timeLeft <= 0) finishTimer();
+        if (!S.sudden && S.match.mode === 'timer' && S.online !== 'guest' && S.gameState === 'playing' && --S.timeLeft <= 0) finishTimer();
     } else if (S.gameState === 'playing') {
         flushBuffered();
         drive(p1, { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') });
