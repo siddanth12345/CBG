@@ -963,10 +963,20 @@ class Fighter {
         }
         this.updateSwing();
 
-        if (this.x < BLAST_ZONES.left || this.x > BLAST_ZONES.right ||
-            this.y < BLAST_ZONES.top || this.y > BLAST_ZONES.bottom) {
-            this.takeKO();
+        // the kill barrier reacts as soon as the body touches it (not only the centre). A protected fighter (spawn / kill-cam i-frames) cannot be KO'd, so the barrier hits them instead:
+        // +250% damage and a hard shove back to the middle of the arena (also the safety net for any glitch that leaves someone outside)
+        const hw = (this.width || 40) / 2, hh = (this.height || 70) / 2, B = BLAST_ZONES;
+        if (this.x - hw < B.left || this.x + hw > B.right || this.y - hh < B.top || this.y + hh > B.bottom) {
+            if (this.invincibleTimer > 0 || this.spawnT > 0) {
+                if (!(this._bzCool > 0)) {
+                    const cx = (B.left + B.right) / 2, cy = (B.top + B.bottom) / 2, dx = cx - this.x, dy = cy - this.y, d = Math.hypot(dx, dy) || 1;
+                    this.damage += 250; this.interrupt && this.interrupt();
+                    this.vx = dx / d * 26; this.vy = dy / d * 26; this.hitstun = Math.max(this.hitstun, 30); this._bzCool = 40;
+                    S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true); fx('hit', this.x, this.y, 25, Math.atan2(dy, dx));
+                }
+            } else this.takeKO();
         }
+        if (this._bzCool > 0) this._bzCool--;
     }
 
     // ------------------------------------------------------------ swings (J attack, Blink slash)
