@@ -65,7 +65,7 @@ export class MetaUI {
             const today = todaysChallenges();
             const ladder = TIERS.map((x, k) => {
                 const cur = x.name === t.name, reached = M.rating >= x.min, hi = TIERS[k + 1] ? TIERS[k + 1].min : x.min + 400;
-                const pct = reached ? Math.max(0, Math.min(100, Math.round((M.rating - x.min) / (hi - x.min) * 100))) : 0;
+                const pct = reached ? Math.max(0, Math.min(100, Math.round((M.rating - (k === 0 ? 1000 : x.min)) / (hi - (k === 0 ? 1000 : x.min)) * 100))) : 0;
                 const bots = `${BOT_NAMES[x.bot]}${x.mods.length ? ' + styles: ' + x.mods.map(m => MOD_NAMES[m]).join(', ') : ''}`;
                 return `<div style="${card}${cur ? `border:2px solid ${x.color};box-shadow:0 0 14px ${x.color}55;` : ''}opacity:${reached ? 1 : 0.7}"><span style="font-size:22px;color:${x.color}">${reached ? '◆' : '◇'}</span><div style="flex:1"><b style="color:${x.color}">${x.name}</b> <small>${x.min}+ rating</small>${cur ? ' <b style="color:#fde047">· YOU ARE HERE</b>' : ''}<br><small>Opponent: ${bots}</small>${cur && next ? `<div style="height:5px;border-radius:3px;background:rgba(148,163,184,.25);margin-top:5px"><i style="display:block;height:100%;width:${pct}%;border-radius:3px;background:${x.color}"></i></div>` : ''}</div></div>`;
             }).join('');

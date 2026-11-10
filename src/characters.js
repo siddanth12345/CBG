@@ -125,7 +125,7 @@ export const BRIEF = {
         U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s as an invisible shadow: harmless, straight through walls, and you can still be hit out of it.'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
-        M: ['Shadow Edge', 'Passive. Melee hits on a foe who is facing away are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 5 s; only he sees himself, glowing yellow. Bots cannot see him either: hard bots gamble on where he is.'],
+        M: ['Shadow Edge', 'Passive. Melee hits on a foe who faces the same way he does (stunned foes: the way they faced before the stun) are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 5 s; only he sees himself, glowing yellow. Bots cannot see him either: hard bots gamble on where he is.'],
     },
     terra: {
         N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],

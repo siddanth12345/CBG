@@ -591,6 +591,7 @@ class Fighter {
     }
 
     update() {
+        if (!(this.hitstun > 0 || this.clashStunTimer > 0 || this.dizzyTimer > 0)) this._freeFace = this.facing;      // remembered for Umbra's backstab: which way they faced before being stunned
         if (this.spawnT > 0) {                                          // 1 s pre-spawn: hold still in the light while it plays, then drop in
             this.spawnT--; this.vx = this.vy = 0; this.y = STAGE.y - 300; this.grounded = false; this.isHanging = false;
             this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2);
@@ -4448,11 +4449,14 @@ function checkCombatCollisions(attacker, defender) {
         if (hb.fire) burnStick(attacker);
     }
 }
-/** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who is facing away (or is in the air / mid-attack) is a backstab: +40% damage, +20% knockback,
+/** Umbra's passive SHADOW EDGE (neutral melee): hitting a foe who faces the same way Umbra does (stunned foes: the way they faced before the stun) is a backstab: +40% damage, +20% knockback,
  *  and a successful backstab makes him 1.7x faster and invisible for 5 s. */
 function umbraEdge(att, def, hb) {
     if (att.char !== 'umbra' || (hb.type || 'J') !== 'J' || att.attackKind === 'DOWN') return hb;
-    const behind = (def.facing || 1) * (att.x - def.x) < 0;
+    // backstab = the foe's model faces the same way Umbra does (looking away from him); a stunned foe counts as facing the way they were before the stun
+    const stunned = def.hitstun > 0 || def.clashStunTimer > 0 || def.dizzyTimer > 0;
+    const defFace = (stunned && def._freeFace) ? def._freeFace : (def.facing || 1);
+    const behind = defFace === (att.facing || 1);
     if (!behind) return hb;
     bump(att, 'backstabs');
     if (att.cloakT > 0) att._boostWait = true;                 // a backstab while already invisible: refresh the invisibility, and the NEXT hit deals 1.5x damage
@@ -4876,7 +4880,7 @@ export function applyRemote(ev, slot = 1) {
     }
 }
 
-const FKEYS = Object.keys(new Fighter(0, 0, '#000', 'k')).filter(k => !['color', 'name', 'isAI', 'startX', 'width', 'height', 'home', 'heldItem', 'lastHitBy', 'burnBy', 'swingHitSet', '_acc', '_since', '_slowK', '_upd'].includes(k));
+const FKEYS = Object.keys(new Fighter(0, 0, '#000', 'k')).filter(k => !['color', 'name', 'isAI', 'startX', 'width', 'height', 'home', 'heldItem', 'lastHitBy', 'burnBy', 'swingHitSet', '_acc', '_since', '_slowK', '_upd', 'px', 'py'].includes(k));
 const REFS = ['grabHolding', 'grabbedBy', 'grabVictim', 'suplexTarget', 'bombBy'];
 const SWING_NAMES = Object.keys(SWING);
 const r2 = (v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v;
@@ -4890,9 +4894,10 @@ function packFighter(f) {
         if (REFS.includes(k)) { o[k] = idxOf(f[k]); continue; }
         const v = f[k];
         if (k === 'swing') o[k] = v ? SWING_NAMES.find(n => SWING[n] === v) || null : null;
-        else if (k === 'ghosts') o[k] = v.slice(-8).map(g => ({ x: r2(g.x), y: r2(g.y), alpha: r2(g.alpha), color: g.color }));
+        else if (k === 'ghosts') o[k] = v.slice(-6).map(g => ({ x: r2(g.x), y: r2(g.y), alpha: r2(g.alpha), color: g.color }));
         else if (k === 'activeHitbox') o[k] = v ? { ...v, x: r2(v.x), y: r2(v.y) } : null;
-        else if (k === 'cd' || k === 'activeMove' || k === 'sx') o[k] = v ? { ...v } : v;
+        else if (k === 'cd' && v) { const q = {}; for (const n in v) q[n] = v[n] > 0 ? Math.ceil(v[n] / 6) * 6 : 0; o[k] = q; }   // cooldowns in 0.1 s steps: far fewer changes to send
+        else if (k === 'activeMove' || k === 'sx') o[k] = v ? { ...v } : v;
         else if (typeof v === 'number') o[k] = r2(v);
         else o[k] = v;
     }

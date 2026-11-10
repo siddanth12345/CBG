@@ -437,7 +437,7 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
   #startScreen{flex-direction:column;justify-content:flex-end;background:linear-gradient(0deg,rgba(4,8,18,.97) 0,rgba(4,8,18,.92) 42%,rgba(4,8,18,.5) 62%,rgba(4,8,18,0) 80%)}
   .cbg-menu{width:100%;max-height:68%;justify-content:flex-start;padding:10px 14px 14px;gap:7px}
   .cbg-grid{grid-template-columns:repeat(2,1fr)}
-  .cbg-cap{right:auto;left:14px;top:62px;bottom:auto;text-align:left}
+  .cbg-cap{right:auto;left:14px;top:124px;bottom:auto;text-align:left}
   .cbg-vig{background:radial-gradient(ellipse at 50% 30%,rgba(0,0,0,0) 55%,rgba(0,0,0,.4) 100%)}
 }
 @media (max-height:520px) and (min-aspect-ratio:1/1){
