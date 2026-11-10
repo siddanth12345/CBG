@@ -228,7 +228,7 @@ export class View {
     /** Position the camera for this frame (without shake). */
     placeCamera(dt = 0.016) {
         const d0 = this.fitDistance();
-        const following = S.gameState === 'playing' || S.gameState === 'countdown';
+        const following = S.gameState === 'playing' || S.gameState === 'countdown' || !!S.replay;
         let goalDist = d0;
         const goal = this.v2.set(0, 0, 0);
         if (following) goalDist = this.followGoal(goal);
@@ -246,7 +246,7 @@ export class View {
             dist = d0 / dramaticZoom.currentZoom;
         }
         if (S.kcT > 0 && S.kcFull && fighters[S.kcDef]) {                // kill cam: push in on the victim
-            const e = smooth(clamp01(Math.min((1.7 - S.kcT) / 0.25, S.kcT / 0.35))), v = fighters[S.kcDef];
+            const e = smooth(clamp01(Math.min(((S.kcDur || 1.2) - S.kcT) / 0.2, S.kcT / 0.25))), v = fighters[S.kcDef];
             target.x += (wx(v.x) - target.x) * e * 0.85; target.y += (wy(v.y) - target.y) * e * 0.85;
             dist /= 1 + 1.1 * e;
         }

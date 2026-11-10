@@ -616,7 +616,7 @@ export class Effects {
                 case 'killcam': {         // a = attacker index, b = victim index: black, red and blue sparks around the victim for the slow-motion moment
                     const colors = ['#312e81', '#ef4444', '#38bdf8'], vid = e.b;
                     const sp = this.sparks, self = this;
-                    const ent = { obj: new THREE.Object3D(), t: 0, dur: 1.7, k: 0, step: () => {
+                    const ent = { obj: new THREE.Object3D(), t: 0, dur: 1.2, k: 0, step: () => {
                         const f = fighters[vid]; if (!f) return;
                         ent.k++;
                         if (ent.k % 2 === 0) for (const c of colors) self.sparks(new THREE.Vector3(wx(f.x), wy(f.y), 0), c, 5, 110, 0.5);

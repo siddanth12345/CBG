@@ -122,7 +122,7 @@ export const BRIEF = {
     umbra: {
         N: ['Void Orb', 'Hold F for a slow orb that bends a little toward your opponent.'],
         S: ['Shadow Step', 'Tap side F. After a short purple startup you appear behind the nearest person and stab.'],
-        U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s as an invisible shadow: invincible, harmless, and straight through walls.'],
+        U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s as an invisible shadow: harmless, straight through walls, and you can still be hit out of it.'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
         M: ['Shadow Edge', 'Passive. Melee hits on a foe who is facing away are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 5 s; only he sees himself, glowing yellow. Bots cannot see him either: hard bots gamble on where he is.'],

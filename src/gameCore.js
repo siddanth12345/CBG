@@ -479,7 +479,7 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
-        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
+        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this._stunAfter = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
            // cloakT: Umbra is invisible to everyone but himself
            // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -541,7 +541,7 @@ class Fighter {
         this.isShielding = false;
         this.shieldHealth = this.maxShieldHealth;
         this.dizzyTimer = 0; this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0;
-        this.clashStunTimer = 0;
+        this.clashStunTimer = 0; this._stunAfter = 0;
         this.hitstun = 0;
         this.invincibleTimer = Math.max(120 + perkOf(this, 'spawn'), this._kcInv > 0 ? 180 : 0); this._kcInv = 0; this.ghostT = 0;      // 3 s of i-frames after a kill-cam KO
 
@@ -885,6 +885,7 @@ class Fighter {
 
         if (this.hitstun > 0) {
             this.hitstun--;
+            if (this.hitstun === 0 && this._stunAfter > 0) { this.clashStunTimer = this._stunAfter; this._stunAfter = 0; }
             this.vx *= 0.98;
             this.vy = Math.min(this.vy + WORLD.gravity * 0.75, WORLD.terminalVelocity);
             this.x += this.vx;
@@ -1156,7 +1157,7 @@ class Fighter {
                 return;
             }
             this.activeMove = { type: 'SPIRAL', t: 3 };
-            if (sp.ghost) { this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.cloakT = Math.max(this.cloakT, 3); }        // Umbra's Shadow Flight: an invisible shadow, untouchable, harmless, passes through walls
+            if (sp.ghost) { this.cloakT = Math.max(this.cloakT, 3); }                  // Shadow Flight: invisible and passes through the stage, but he can be hit out of it        // Umbra's Shadow Flight: an invisible shadow, untouchable, harmless, passes through walls
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
@@ -3542,22 +3543,36 @@ function emberCounter(em, foe) {
     return true;
 }
 
-/** Kill cam: a hit that will send the victim out of the blast zone. Slow motion for everyone; the two fighters involved also get the zoom + blue-screen overlay */
-function willKO(def) {
+/** Kill cam ("final blow"): when a hit will really knock the victim out, play freezes completely for a moment (zoom + blue screen for the two involved),
+ *  then the hit's velocity is released. The prediction follows the knockback, the whole stun (hit-stun + any stun after it) and then asks whether the victim could
+ *  still get back with their own jumps from where the stun leaves them. */
+const KC_DUR = 1.2;                                          // seconds of real time (72 frozen steps)
+export function willKO(def) {
     let x = def.x, y = def.y, vx = def.vx, vy = def.vy;
-    const spike = vy > 10, sx0 = STAGE.x - 260, sx1 = STAGE.x + STAGE.width + 260;
-    let far = false;                                         // still well away from the stage when the hit-stun ends?
-    for (let i = 0; i < 150; i++) {
-        if (i === 62) far = x < sx0 || x > sx1 || y < STAGE.y - 1000;
-        const py = y; x += vx; y += vy; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity * 3); vx *= WORLD.airFriction;
-        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top) return true;
-        if (y > BLAST_ZONES.bottom) return spike || i >= 62 && far || i < 62 && (x < sx0 || x > sx1);       // a slight shove off the lower edge can be recovered from: only spikes / far-out launches count
-        if (py <= STAGE.y && y > STAGE.y && x > STAGE.x && x < STAGE.x + STAGE.width) return false;      // lands on the stage
+    const hs = Math.max(0, def.hitstun), H = hs + Math.max(0, def.clashStunTimer) + Math.max(0, def._stunAfter || 0);          // the whole time they cannot act
+    const sx0 = STAGE.x, sx1 = STAGE.x + STAGE.width, top = STAGE.y, bot = STAGE.y + STAGE.height, hh = (def.height || 80) / 2, hw = (def.width || 50) / 2;
+    for (let i = 0; i < H; i++) {
+        const py = y, px = x;
+        if (i < hs) { vx *= 0.98; vy = Math.min(vy + WORLD.gravity * 0.75, WORLD.terminalVelocity); }                                   // tumbling
+        else { vx = 0; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity); }                                                    // stunned: no sideways movement at all
+        x += vx; y += vy;
+        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top || y > BLAST_ZONES.bottom) return true;                // gone before they can do anything
+        const feet = y + hh, pfeet = py + hh;
+        if (x > sx0 - hw && x < sx1 + hw && feet > top && pfeet < bot + 40) {                                                           // ran into the stage block (feet / body, not the centre)
+            if (pfeet <= top + 3) { if (i >= hs) return false; y = top - hh; vy = -Math.abs(vy) * 0.35; vx *= 0.9; }                    // lands on top (bounces while still ragdolled)
+            else if (px <= sx0 - hw || px >= sx1 + hw) { x = px; vx = -vx * 0.5; }                                                      // bounces off the side wall
+            else { y = py; vy = Math.abs(vy) * 0.3; }                                                                                  // bonks the underside
+        }
     }
-    return false;
+    // control is back: only a victim who is far beyond what their jumps and a recovery move can reach counts (they can always cancel upward speed by diving)
+    const ch = charOf(def.char), jumps = Math.max(1, ch.jumps || 3), walk = ch.walk || 1;
+    const dyBelow = Math.max(0, y - top) + Math.max(0, vy) * 12;
+    const dxOut = Math.max(0, sx0 - x, x - sx1) + (((x < sx0 && vx < -4) || (x > sx1 && vx > 4)) ? Math.abs(vx) * 6 : 0);
+    const reachY = 2250 + jumps * 100, reachX = 1550 + jumps * 100 * walk;
+    return dyBelow > reachY || dxOut > reachX || dyBelow / reachY + dxOut / reachX > 1.25;
 }
 function applyKillCam(ai, di) {
-    S.kcT = 1.7; S.kcDef = di; S.kcAtt = ai;
+    S.kcT = KC_DUR; S.kcDur = KC_DUR; S.kcDef = di; S.kcAtt = ai;
     const me = S.demo ? -1 : (S.match ? S.mySlot : 0);
     S.kcFull = !S.demo && (me === ai || me === di);
 }
@@ -3566,6 +3581,8 @@ function startKillCam(att, def) {
     if (def.stocks <= 0 || def.out || !willKO(def)) return;
     def._kcInv = 400;
     const ai = idxOf(att), di = idxOf(def);
+    S.kcHold = { f: def, x: def.x, y: def.y, vx: def.vx, vy: def.vy, hitstun: def.hitstun };                // exactly this is released after the freeze
+    S.kcPause = Math.round(KC_DUR * 60);
     applyKillCam(ai, di);
     fx('killcam', def.x, def.y, ai, di, 1);
 }
@@ -3706,7 +3723,7 @@ function launch(attacker, defender, hb) {
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
-    defender.hitstun = 60;
+    defender.hitstun = hb.hs || 60; defender._stunAfter = hb.stunAfter || 0;
     defender.grounded = false;
 
     S.screenShake = Math.min(25, Math.floor(kbForce));
@@ -3988,7 +4005,7 @@ function enterWhirl(t) {
 }
 function burstOut(w, f) {
     f.buryT = 0; f._wantOut = false; f._wpT = 150; f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; f.grounded = false;
-    launch(w.owner, f, { damage: 0, bkb: 9.5, kbg: 0.9, angle: -1.0, x: w.x, y: f.y }); f.clashStunTimer = Math.max(f.clashStunTimer, 30);        // stunned like the up melee        // knockback only
+    launch(w.owner, f, { damage: 0, bkb: 13, kbg: 0.9, angle: -1.35, x: w.x, y: f.y, hs: 32, stunAfter: 36 });        // thrown upward, then 0.6 s stun
     fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 16); S.screenShake = Math.max(S.screenShake, 5);
 }
 /** Tide jumps (or is thrown) out of the pool: everyone buried in it bursts out, and foes close by get knocked away (no damage) */
@@ -3997,7 +4014,7 @@ function popOut(w, t) {
         if (!isAlive(f)) continue;
         if (w.caught && w.caught.has(f)) { w.caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
         if (f.invincibleTimer > 0 || f._wpT > 0) continue;
-        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) { f._wpT = 60; launch(t, f, { damage: 0, bkb: 11, kbg: 0.95, angle: -0.8, x: w.x, y: f.y }); f.clashStunTimer = Math.max(f.clashStunTimer, 30); }
+        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) { f._wpT = 60; launch(t, f, { damage: 0, bkb: 13, kbg: 0.95, angle: -1.3, x: w.x, y: f.y, hs: 32, stunAfter: 36 }); }
     }
     fx('gust', w.x, w.y, w.r * 1.3, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playHit(true);
 }
@@ -4486,7 +4503,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.kcT = 0; S.lastKO = null; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4962,6 +4979,7 @@ function applyReplayFrame(fr) {
 export function startReplay(onDone) {
     if (!S.rec || S.rec.length < 30 || S.online) return false;
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
+    dramaticZoom.active = false;
     S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null };
     return true;
 }
@@ -4974,6 +4992,10 @@ function tickReplay() {
 }
 export function step() {
     if (S.replay) { tickReplay(); return; }
+    if (S.kcPause > 0) {                                     // final blow: everything is frozen, then the hit's velocity is released unchanged
+        if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y }); S.kcHold = null; }
+        return;
+    }
     if (S.gameState === 'playing' && !S.online && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
     const bubble = S.online !== 'guest' && items.length > 0;       // the clock bubble slows every projectile, item and ENEMY fighter inside it (not its owner or their team)
     for (const f of fighters) {

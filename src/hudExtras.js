@@ -25,7 +25,7 @@ export function tickExtras(S, fighters, me) {
     ensure();
     const playing = S.gameState === 'playing';
     box.style.display = playing ? 'block' : 'none';
-    { const on = playing && S.kcT > 0 && S.kcFull; kc.style.display = on ? 'block' : 'none'; if (on) { const k = Math.min(1, S.kcT / 0.4, (1.7 - S.kcT) / 0.15); kc.style.opacity = (0.55 + 0.45 * Math.sin(S.kcT * 40)) * k; } }
+    { const on = playing && S.kcT > 0 && S.kcFull; kc.style.display = on ? 'block' : 'none'; if (on) { const k = Math.min(1, S.kcT / 0.4, ((S.kcDur || 1.2) - S.kcT) / 0.15); kc.style.opacity = (0.55 + 0.45 * Math.sin(S.kcT * 40)) * k; } }
     if (!playing) return;
 
     combo.innerHTML = '';
