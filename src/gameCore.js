@@ -4600,7 +4600,7 @@ function startMatchSequence(mode, cfg) {
         p1.name = displayName() || p1.name || 'Player';
         if (p2.isAI) {
             p2.diff = S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : S.gameMode === 'hard' ? 'hard' : (p2.diff || 'hard');
-            if (S.ranked && S.rankBot) { p2.diff = S.rankBot; p2.mod = S.rankMod || ''; }
+            if (S.rankBot && (S.ranked || S.freeBot)) { p2.diff = S.rankBot; p2.mod = S.rankMod || ''; }
             else p2.mod = '';
             p2.name = (BOT_NAMES[p2.diff] || 'Hard Bot') + (p2.mod ? ' · ' + MOD_NAMES[p2.mod] : '');
         } else if (S.opponentName) {
@@ -4632,9 +4632,10 @@ function startMatchSequence(mode, cfg) {
         aiDiffLabel.textContent = "Medium Bot";
         aiDescText.textContent = "Uses every move, but reacts slower and doesn't learn your habits";
     } else if (S.gameMode === 'hard') {
-        modeLabel.textContent = "MODE: HARD"
-        aiDiffLabel.textContent = "Hard Bot";
-        aiDescText.textContent = "Learns your habits • Core zoning • Ledge Guard & Counter-Rolls";
+        const rb = (S.rankBot && (S.ranked || S.freeBot) && SKILL[S.rankBot]) ? S.rankBot : null;
+        modeLabel.textContent = rb ? "MODE: " + rb.toUpperCase() : "MODE: HARD";
+        aiDiffLabel.textContent = rb ? p2.name : "Hard Bot";
+        aiDescText.textContent = rb ? "Tougher stats, faster reactions • Fighting style: " + (MOD_NAMES[p2.mod] || '—') : "Learns your habits • Core zoning • Ledge Guard & Counter-Rolls";
     } else if (S.gameMode === 'online') {
         modeLabel.textContent = "MODE: ONLINE 1v1";
         aiDiffLabel.textContent = S.opponentName || 'Opponent';

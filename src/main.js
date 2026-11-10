@@ -41,7 +41,7 @@ const toasts = new Toasts($('luminary-root'));
 const borgsUI = new BorgsUI({ root: $('luminary-root'), toasts, onInviteSent: () => lobby.open('Invite sent. Waiting for your friend to join…') });
 const metaUI = new MetaUI({
     root: $('luminary-root'), shopBtn: $('shopBtnStart'), dailyBtn: $('dailyBtnStart'),
-    onRanked: () => { audio.init(); const b = botFor(getMeta().rating); S.ranked = true; S.rankBot = b.bot; S.rankMod = b.mod; startMatchSequence(['easy', 'medium', 'hard'].includes(b.bot) ? b.bot : 'hard'); },
+    onRanked: () => { audio.init(); const b = botFor(getMeta().rating); S.ranked = true; S.freeBot = false; S.rankBot = b.bot; S.rankMod = b.mod; startMatchSequence(['easy', 'medium', 'hard'].includes(b.bot) ? b.bot : 'hard'); },
     onRankedOnline: () => { audio.init(); S.ranked = false; leaveRoom(false); backToMenu(); lobby.open(); joinQueue(true); },
 });
 const charUI = new CharUI({
@@ -276,7 +276,11 @@ if (trainMenuBtn) trainMenuBtn.addEventListener('click', () => trainUI.open());
 
 
 for (const [id, mode] of [['easyModeBtn', 'easy'], ['mediumModeBtn', 'medium'], ['hardModeBtn', 'hard'], ['trainingModeBtn', 'training']]) {
-    $(id).addEventListener('click', () => { audio.init(); S.ranked = false; S.rankBot = null; startMatchSequence(mode); });
+    $(id).addEventListener('click', () => { audio.init(); S.ranked = false; S.freeBot = false; S.rankBot = null; startMatchSequence(mode); });
+}
+for (const [id, bot] of [['expertModeBtn', 'expert'], ['masterModeBtn', 'master'], ['apexModeBtn', 'apex']]) {
+    const el = $(id); if (!el) continue;
+    el.addEventListener('click', () => { audio.init(); S.ranked = false; S.freeBot = true; S.rankBot = bot; S.rankMod = ['rusher', 'zoner', 'turtle', 'trickster'][Math.floor(Math.random() * 4)]; startMatchSequence('hard'); });
 }
 
 // ------------------------------------------------------------------ loop
