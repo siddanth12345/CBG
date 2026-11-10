@@ -3415,7 +3415,7 @@ function itemInteractions() {
 function applySuddenBlast(t) {
     const b = S.sdBase;
     if (!b) return;
-    const u = Math.min(1, (t || 0) / (60 * 26));
+    const u = Math.min(1, (t || 0) / (60 * 13));   // closes twice as fast
     const e = u * u * (3 - 2 * u);
     const L = STAGE.x - 160, R = STAGE.x + STAGE.width + 160;
     const T = STAGE.y - 280, B = STAGE.y + 280;

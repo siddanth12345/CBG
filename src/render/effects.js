@@ -3,7 +3,7 @@
 // animation-driven effects (slash crescents, punch rings, dash ghosts) are spawned by
 // the fighter models through the small API at the bottom of this class.
 import * as THREE from 'three';
-import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX } from '../gameCore.js';
+import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX, BLAST_ZONES } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
 import { getHitboxes } from '../gfx.js';
 import { FireTrail } from './fireTrail.js';
@@ -129,6 +129,14 @@ export class Effects {
         this.flames = new FireTrail(scene);
         this.starGeo = starGeometry(8, 0.2);
         this.starGeo4 = starGeometry(4, 0.16);
+        this.sdN = 160;
+        this.sdMesh = new THREE.InstancedMesh(this.starGeo4, new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, blending: ADD, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
+        }), this.sdN);
+        this.sdMesh.frustumCulled = false; this.sdMesh.renderOrder = 6; this.sdMesh.count = 0;
+        this.sdMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.sdN * 3), 3);
+        scene.add(this.sdMesh);
+        this.sdPhase = 0;
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
@@ -802,7 +810,61 @@ export class Effects {
         g.scale.setScalar(Math.max(1, r));
     }
 
+    /** Ember cluster sparkles riding the sudden-death kill box as it closes */
+    suddenWall(dt) {
+        const mesh = this.sdMesh;
+        if (!mesh) return;
+        if (!S.sudden) { if (mesh.count) mesh.count = 0; return; }
+        const bz = BLAST_ZONES;
+        const segs = [
+            [bz.left, bz.top, bz.right, bz.top],
+            [bz.right, bz.top, bz.right, bz.bottom],
+            [bz.right, bz.bottom, bz.left, bz.bottom],
+            [bz.left, bz.bottom, bz.left, bz.top],
+        ];
+        const lens = segs.map(s => Math.hypot(s[2] - s[0], s[3] - s[1]));
+        const per = lens.reduce((a, b) => a + b, 0) || 1;
+        this.sdPhase = (this.sdPhase + dt * 140) % per;
+        const M = this.tmpM, Q = this.tmpQ, Sc = this.tmpS, C = this.tmpC, V = this.tmpV;
+        const cols = ['#fb923c', '#fde047', '#f97316', '#fef08a'];
+        const n = this.sdN;
+        for (let i = 0; i < n; i++) {
+            let d = (this.sdPhase + (i / n) * per) % per;
+            let x = bz.left, y = bz.top, k = 0;
+            for (; k < 4; k++) {
+                if (d <= lens[k]) break;
+                d -= lens[k];
+            }
+            const seg = segs[Math.min(k, 3)], L = lens[Math.min(k, 3)] || 1, u = d / L;
+            x = seg[0] + (seg[2] - seg[0]) * u;
+            y = seg[1] + (seg[3] - seg[1]) * u;
+            const wob = Math.sin(this.sdPhase * 0.02 + i * 1.7) * 18;
+            const nx = seg[3] - seg[1], ny = seg[0] - seg[2];
+            const nl = Math.hypot(nx, ny) || 1;
+            x += nx / nl * wob; y += ny / nl * wob;
+            const sz = 16 + (i % 5) * 7 + Math.sin(this.sdPhase * 0.05 + i) * 4;
+            V.set(wx(x), wy(y), 8);
+            Q.identity(); Q.setFromAxisAngle(this.tmpV2 || (this.tmpV2 = new THREE.Vector3(0, 0, 1)), (i * 0.4 + this.sdPhase * 0.01) % 6.28);
+            Sc.set(sz, sz, 1);
+            M.compose(V, Q, Sc);
+            mesh.setMatrixAt(i, M);
+            C.set(cols[i % 4]).multiplyScalar(1.6 + (i % 3) * 0.35);
+            mesh.setColorAt(i, C);
+        }
+        mesh.count = n;
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        if (Math.random() < 0.85) {
+            const i = Math.floor(Math.random() * n);
+            const e = new THREE.Matrix4();
+            mesh.getMatrixAt(i, e);
+            const p = new THREE.Vector3().setFromMatrixPosition(e);
+            this.sparks(p, Math.random() < 0.6 ? '#fb923c' : '#fde047', 2, 80, 0.4);
+        }
+    }
+
     update(dt, models) {
+        this.suddenWall(dt);
         this.#consumeEvents();
         const M = this.tmpM, Q = this.tmpQ, V = this.tmpV, Sc = this.tmpS, C = this.tmpC;
 
