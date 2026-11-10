@@ -335,7 +335,7 @@ function tickMusic(force) {
     try {
         const key = S.gameState + '|' + (S.arena || '') + '|' + (S.theme || '') + '|' + !!(S.match);
         const want = (S.gameState === 'start' || S.demo) ? 'title'
-            : (S.gameState === 'playing' || S.gameState === 'countdown')
+            : (S.gameState === 'playing' || S.gameState === 'countdown' || !!S.replay)
                 ? (S.match
                     ? audio.musicForMap(S.match.map || (S.theme === 'horizon' ? (S.arena === 'lobby' ? 'bighorizon' : 'horizon') : (S.arena === 'lobby' ? 'big' : 'frontier')))
                     : (S.gameMode === 'training' ? 'training'

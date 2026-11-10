@@ -38,6 +38,8 @@ export class FireTrail {
         scene.add(this.pts);
     }
 
+    clear() { this.p.length = 0; this.state.clear(); this.pts.geometry.setDrawRange(0, 0); }
+
     /** call every frame for a rolling / charging Ember.  pos = ball centre (render units), r = ball radius, c = charge 0..1, vel = ball velocity in render units per second */
     feed(id, pos, r, c, vx, vy, dt, charging) {
         let s = this.state.get(id); if (!s) { s = { wx: 0, wy: 0, acc: 0, last: 0 }; this.state.set(id, s); }

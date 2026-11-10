@@ -456,7 +456,7 @@ export class FighterModel {
         const p = newPose();
         const t = this.t;
         const speedX = Math.abs(f.vx);
-        const playing = S.gameState === 'playing' || S.gameState === 'countdown' || !!S.demo;
+        const playing = S.gameState === 'playing' || S.gameState === 'countdown' || !!S.demo || !!S.replay;      // a replay plays every animation as if live
         this.visFacing = f.facing;
         this.pose_special = null;
 
@@ -467,7 +467,7 @@ export class FighterModel {
             p.rHx = 10; p.lHx = -6; p.rK = 22; p.lK = 14; p.lean = 3; p.headX = -3;
             return p;
         }
-        if (S.gameState === 'gameover') {
+        if (S.gameState === 'gameover' && !S.replay) {
             if (f.stocks > 0) { // victory pose
                 const b = Math.sin(t * 7);
                 p.dy = Math.abs(b) * 2.5; p.rSx = 172 + b * 6; p.lSx = 150 - b * 8; p.rSz = 18; p.lSz = 28; p.rE = 12; p.lE = 40;
@@ -793,7 +793,7 @@ export class FighterModel {
         // loser of a finished match is gone (blown out of the arena)
         const cloaked = f.cloakT > 0, mineCloak = cloaked && f === viewerFighter();        // a cloaked Umbra: nobody but he can see himself (glowing yellow)
         this.mineCloak = mineCloak;
-        const hidden = (S.gameState === 'gameover' && f.stocks <= 0) || f.active === false || f.out === true || (cloaked && !mineCloak) || f.buryT > 0;
+        const hidden = (S.gameState === 'gameover' && !S.replay && f.stocks <= 0) || f.active === false || f.out === true || (cloaked && !mineCloak) || f.buryT > 0;
         this.root.visible = !hidden;
         if (hidden) { this.#hideExtras(); return; }
 

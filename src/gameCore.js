@@ -15,7 +15,7 @@ import { isDown, neutralForced } from './controls.js';
 import { ITEM_TYPES } from './items.js';
 import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
 
-export const S = { screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
+export const S = { fxClear: 0, screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();
 /** everything the host has produced since the last network snapshot (effects, sounds, particles) */
 export const outbox = [];
@@ -4182,23 +4182,27 @@ function updateWhirlpools() {
 const winds = []; let windId = 0;
 function spawnWind(z) {
     if (z._windCd > 0 || winds.some(w => w.owner === z)) return;
-    const w = { id: ++windId, x: z.x + z.facing * 30, y: z.y, dir: z.facing, len: 560, r: 78, life: 300, pushed: false, owner: z };
-    winds.push(w); fx('helix', w.x, w.y, w.dir * w.len, 300, w.id); audio.playZap();
+    const aim = aimOf(z), ang = Math.atan2(aim.y - z.y, aim.x - z.x), dx = Math.cos(ang), dy = Math.sin(ang);      // the tube points through the aim pip, in any direction
+    if (Math.abs(dx) > 0.2) z.facing = dx >= 0 ? 1 : -1;
+    const w = { id: ++windId, x: z.x + dx * 30, y: z.y + dy * 30, ang, dx, dy, len: 560, r: 78, life: 300, pushed: false, owner: z };
+    winds.push(w); fx('helix', w.x, w.y, ang, w.len, w.id); audio.playZap();
 }
 function updateWinds() {
     for (const f of fighters) if (f._windCd > 0) f._windCd--;
     for (let i = winds.length - 1; i >= 0; i--) {
         const w = winds[i], o = w.owner;
         if (--w.life <= 0 || !isAlive(o)) { fx('helixend', 0, 0, 0, 0, w.id); if (o) o._windCd = 180; winds.splice(i, 1); continue; }
+        const inTube = (px, py, pad) => { const rx = px - w.x, ry = py - w.y, along = rx * w.dx + ry * w.dy, perp = Math.abs(rx * w.dy - ry * w.dx); return along > -20 && along < w.len && perp < w.r + pad; };
         for (const f of fighters) {
             if (!f.active || !isAlive(f)) continue;
-            const along = (f.x - w.x) * w.dir;
-            if (along < -20 || along > w.len || Math.abs(f.y - w.y) > w.r + f.height * 0.4) continue;
+            if (!inTube(f.x, f.y, f.height * 0.4)) continue;
             if (f.isHanging || f.buryT > 0 || f.grabbedBy) continue;
-            f.vy = Math.max(f.vy - 2.4, -15); f.vx += w.dir * 0.5; f.grounded = false;
+            const vd = f.vx * w.dx + f.vy * w.dy;                                  // the current carries them along the tube (toward the pip), not upward
+            if (vd < 15) { f.vx += w.dx * 2.4; f.vy += w.dy * 2.4; }
+            if (w.dy < -0.25) f.grounded = false;
             if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); }       // vanishes 2 s after the first thing is pushed (the user included)
         }
-        for (const q of orbs) { const along = (q.x - w.x) * w.dir; if (along > -20 && along < w.len && Math.abs(q.y - w.y) < w.r + 20) { q.vy -= 0.9; if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); } } }
+        for (const q of orbs) { if (inTube(q.x, q.y, 20)) { q.vx += w.dx * 0.9; q.vy += w.dy * 0.9; if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); } } }
     }
 }
 
@@ -4625,7 +4629,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5125,11 +5129,12 @@ function applyReplayFrame(fr) {
 export function startReplay(onDone) {
     if (!S.rec || S.rec.length < 30) return false;
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
+    S.fxClear++; whirlpools.length = 0; tornadoes.length = 0; winds.length = 0; pillars.length = 0; zapTrails.length = 0; particles.length = 0;       // nothing from the live match is left on screen
     dramaticZoom.active = false;
     S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
     return true;
 }
-export function stopReplay() { if (S.replay) { const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; if (d) d(); } }
+export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; if (d) d(); } }
 function tickReplay() {
     const R = S.replay; R.i += 1;
     const n = Math.floor(R.i);

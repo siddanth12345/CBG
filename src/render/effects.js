@@ -666,9 +666,9 @@ export class Effects {
                     break;
                 }
                 case 'twisterend': { const en = this._byId && this._byId.get('tw' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.25); break; }
-                case 'helix': {           // Zephyr's wind current: a = +/- length (sign = direction), b = life frames, c = id. Two intertwined strands like a DNA helix.
-                    const len = Math.abs(e.a || 500), dirx = (e.a || 1) < 0 ? -1 : 1, dur = Math.max(0.3, (e.b || 300) / 60), RAD = 62, N = 54;
-                    const g = new THREE.Group(); g.position.copy(pos);
+                case 'helix': {           // Zephyr's wind current (omnidirectional): see below. Two intertwined strands like a DNA helix.
+                    const len = Math.abs(e.b || 560), dirx = 1, dur = 5, RAD = 62, N = 54;      // a = aim angle (sim rad, y down), b = length, c = id: the tube points through the aim pip
+                    const g = new THREE.Group(); g.position.copy(pos); g.rotation.z = -(e.a || 0);
                     const sg = new THREE.SphereGeometry(5.2, 8, 6), mA = new THREE.MeshBasicMaterial({ color: new THREE.Color('#e0f2fe').multiplyScalar(1.6), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false }), mB = new THREE.MeshBasicMaterial({ color: new THREE.Color('#86efac').multiplyScalar(1.6), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false });
                     const A = [], B = [], rungs = [];
                     for (let i = 0; i < N; i++) { const a = new THREE.Mesh(sg, mA), b = new THREE.Mesh(sg, mB); g.add(a, b); A.push(a); B.push(b); }
@@ -863,7 +863,18 @@ export class Effects {
         }
     }
 
+    /** drop every lingering effect (a match ended, a replay started or stopped, a new round began) */
+    clearAll() {
+        for (const f of this.timed) { this.scene.remove(f.obj); try { f.free && f.free(); } catch (e) { /* already freed */ } }
+        this.timed.length = 0; if (this._byId) this._byId.clear();
+        this.sparks_.length = 0;
+        if (this.flames && this.flames.clear) this.flames.clear();
+        fxEvents.length = 0;
+    }
+
     update(dt, models) {
+        if (this._fxClear !== S.fxClear) { this._fxClear = S.fxClear; this.clearAll(); }
+        if (this.timed.length > 140) for (let i = 0; i < this.timed.length - 140; i++) this.timed[i].t = Math.max(this.timed[i].t, this.timed[i].dur - 0.05);      // too many at once: let the oldest finish now
         this.suddenWall(dt);
         this.#consumeEvents();
         const M = this.tmpM, Q = this.tmpQ, V = this.tmpV, Sc = this.tmpS, C = this.tmpC;

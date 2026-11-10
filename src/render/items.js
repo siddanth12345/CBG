@@ -192,7 +192,7 @@ export class ItemsView {
         // balloons towed by fighters who picked one up
         fighters.forEach((f, i) => {
             const b = this.balloons[i]; if (!b) return;
-            if (!f.active || f.out || !f.balloon || (S.gameState === 'gameover' && f.stocks <= 0)) { b.g.visible = false; b.str.visible = false; return; }
+            if (!f.active || f.out || !f.balloon || (S.gameState === 'gameover' && !S.replay && f.stocks <= 0)) { b.g.visible = false; b.str.visible = false; return; }
             const m = models && models[i];
             const tug = m ? clamp01(1 - m.tugT / 0.5) : 0;
             const bob = Math.sin(t * 2.6 + i) * 4;

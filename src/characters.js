@@ -95,7 +95,7 @@ export const BRIEF = {
         U: ['Jet Stream', 'Tap up F to fly where you aim for 0.9 s. The air you tore through becomes a current that sweeps foes along. No damage.'],
         DG: ['Roaming Twister', 'On the ground, down F sends a tornado rolling forward for 2.5 s. It lifts and spins foes, then flings them out forward.'],
         DA: ['Cyclone Drill', 'In the air, down F corkscrews straight down with small hits and a final impact. No knockback at the end.'],
-        M: ['Wind Current', 'Passive. Neutral melee also sends a helix of wind where you face (5 s). It lifts everything it touches, you included, and vanishes 2 s after the first push. 3 s cooldown after it ends.'],
+        M: ['Wind Current', 'Passive. Neutral melee also sends a wind tube (a helix of air, 5 s) through your aim pip, in any direction. It carries everything inside it toward the pip, you included, and vanishes 2 s after the first push. 3 s cooldown after it ends.'],
     },
     ember: {
         N: ['Flamethrower', 'Hold F and aim a stream of fire. A longer hold means a longer flame and a stronger end burst.'],
