@@ -3189,7 +3189,8 @@ const BOT_STATS = {
     master: { dmg: 0.16, taken: -0.18, kbTaken: -0.12, cd: -0.22, walk: 0.06 },
     apex:   { dmg: 0.28, taken: -0.28, kbTaken: -0.20, cd: -0.35, walk: 0.10 },
 };
-const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0) + ((f.isAI && f.diff && BOT_STATS[f.diff] && S.gameMode !== 'training') ? (BOT_STATS[f.diff][stat] || 0) : 0);
+export const APEX_TUNE = { luminent: 1.95, zephyr: 1.95, ember: 1.95, umbra: 1.95, volt: 1.95 };   // per-character multiplier on the Apex stat bundle (from tools tuning run; capped at 1.95)
+const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0) + ((f.isAI && f.diff && BOT_STATS[f.diff] && S.gameMode !== 'training') ? (BOT_STATS[f.diff][stat] || 0) * (f.diff === 'apex' ? (APEX_TUNE[f.char] || 1) : 1) : 0);
 /** match stats of the human player (for coins, daily challenges, the ladder) */
 const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
 const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
