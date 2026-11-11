@@ -144,7 +144,16 @@ function lobbyTick() {
 }
 export function setLobbySetting(k, v) {
     if (Online.role !== 'host' || Online.lobby.started) return;
+    if (k === 'mode' && v === 'sudden') {
+        Online.lobby.settings.mode = 'sudden';
+        Online.lobby.settings.stocks = 1;
+        Online.lobby.settings.startDamage = 200;
+        lobbyPush();
+        return;
+    }
     if (k === 'startDamage') v = Math.max(0, Math.min(249, Math.round(+v) || 0));
+    if (Online.lobby.settings.mode === 'sudden' && k === 'startDamage') v = 200;
+    if (Online.lobby.settings.mode === 'sudden' && k === 'stocks') v = 1;
     if (k === 'timeLimit') v = Math.max(1, Math.min(10, Math.round(+v) || 5));
     if (k === 'items') v = cleanItems(v);
     if (k === 'map') v = cleanMap(v);
@@ -188,7 +197,7 @@ export function beginLobbyMatch() {
     const L = Online.lobby;
     if (L.members.length < 2) { Online.note = 'You need at least 2 players'; Online.onChange(); return false; }
     L.started = true;
-    const cfg = { players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })), teams: L.settings.teams, startDamage: Math.min(249, +L.settings.startDamage || 0), stocks: +L.settings.stocks || 3, mode: L.settings.mode === 'timer' ? 'timer' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: resolveMap(L.settings.map), items: cleanItems(L.settings.items) };
+    const cfg = { players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })), teams: L.settings.teams, startDamage: L.settings.mode === 'sudden' ? 200 : Math.min(249, +L.settings.startDamage || 0), stocks: L.settings.mode === 'sudden' ? 1 : (+L.settings.stocks || 3), mode: L.settings.mode === 'timer' ? 'timer' : L.settings.mode === 'sudden' ? 'sudden' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: resolveMap(L.settings.map), items: cleanItems(L.settings.items) };
     S.online = 'host'; S.opponentName = null;
     NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
     Online.t.send({ t: 'start', cfg });

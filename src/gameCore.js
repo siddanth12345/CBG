@@ -629,7 +629,7 @@ class Fighter {
             else {
                 this.bleedT--;
                 if (++this.bleedTick % 18 === 0) {
-                    this.damage += 1; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
+                    if (!S.sdNoDmg) this.damage += 1; if (this._bleedBy) { this.lastHitBy = this._bleedBy; this.lastHitT = 0; }
                     dripBlood(this.x, this.y - 10); fx('burn', this.x, this.y - 20, 0, 0, 'blood'); audio.playHit(false);
                 }
             }
@@ -644,7 +644,7 @@ class Fighter {
         if (this.burnT > 0) {                                  // burning: 1 tick every 0.2 s (12 frames)
             this.burnT--;
             if (this.burnT % 12 === 0 && this.stocks > 0) {
-                this.damage += this.burnDmg || 1;
+                if (!S.sdNoDmg) this.damage += this.burnDmg || 1;
                 if (this.burnBy) { this.lastHitBy = this.burnBy; this.lastHitT = 0; }
                 fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 5);
             }
@@ -696,7 +696,7 @@ class Fighter {
         if (this.bombN > 0) {                                  // Ember's cluster bomb burn: 5 ticks of 2 over 3 s; each tick freezes the victim 0.2 s but their velocity carries on afterwards
             if (this.stocks <= 0 || this.out) this.bombN = 0;
             else if (++this.bombT % 36 === 0) {
-                this.damage += 2; if (this.bombBy) { this.lastHitBy = this.bombBy; this.lastHitT = 0; }
+                if (!S.sdNoDmg) this.damage += 2; if (this.bombBy) { this.lastHitBy = this.bombBy; this.lastHitT = 0; }
                 this.bombN--; this.tickFreezeT = 12; fx('burn', this.x, this.y - 30); createParticles(this.x, this.y, '#fb923c', 6); audio.playHit(false);
             }
         }
@@ -829,7 +829,7 @@ class Fighter {
             if (this.gripMode && this.gripT > 0) {              // the grip burns: 5 ticks of 0.4 (2 damage over 0.5 s)
                 this.gripT--;
                 if (this.gripT % 6 === 0 && this.grabHolding) {
-                    const v = this.grabHolding; v.damage += 0.4; v.lastHitBy = this; v.lastHitT = 0; fx('burn', v.x, v.y - 20); createParticles(v.x, v.y, '#fb923c', 4);
+                    const v = this.grabHolding; if (!S.sdNoDmg) v.damage += 0.4; v.lastHitBy = this; v.lastHitT = 0; fx('burn', v.x, v.y - 20); createParticles(v.x, v.y, '#fb923c', 4);
                 }
             }
 
@@ -1411,7 +1411,7 @@ class Fighter {
                         if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
                         if (f._rollCarry !== this && !(Math.abs(f.x - this.x) <= hw && Math.abs(f.y - this.y) <= hh)) continue;
                         x.redTickHit.add(f);
-                        f.damage += 2;
+                        if (!S.sdNoDmg) f.damage += 2;
                         f.lastHitBy = this; f.lastHitT = 0;
                         createParticles(f.x, f.y, '#fb923c', 4);
                         fx('hit', f.x, f.y, 4, -0.5);
@@ -3414,7 +3414,7 @@ function itemInteractions() {
                 audio.playShield(); f.shieldHealth = Math.max(0, f.shieldHealth - 10); fx('block', it.x, it.y);
             } else if (it.type === 'FIRESTICK') {                                      // thrown like a spear: pins whoever it hits and carries them
                 if (f.stuckTo === it.id) continue;
-                f.interrupt(); f.damage += 15; f.lastHitBy = it.owner || f; f.lastHitT = 0;
+                f.interrupt(); if (!S.sdNoDmg) f.damage += 15; f.lastHitBy = it.owner || f; f.lastHitT = 0;
                 f.stuckTo = it.id; f.vx = f.vy = 0; f.hitstun = Math.max(f.hitstun, 3);
                 S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true); fx('hit', f.x, f.y, 15, dirx > 0 ? -0.2 : Math.PI + 0.2);
                 burnItem(it);
@@ -3432,11 +3432,12 @@ function itemInteractions() {
 function applySuddenBlast(t) {
     const b = S.sdBase;
     if (!b) return;
-    const u = Math.min(1, (t || 0) / (60 * 13));   // closes twice as fast
+    const u = Math.min(1, (t || 0) / (60 * 26));   // half the previous close speed (26 s)
     const e = u * u * (3 - 2 * u);
-    const cx = STAGE.x + STAGE.width / 2, hw = (STAGE.width + 320) * 0.5 / 2;       // final box: half as wide as before (centred on the stage) and 1.5x as tall
+    const cx = STAGE.x + STAGE.width / 2, hw = (STAGE.width + 320) * 0.75 / 2;      // final box 1.5x the last size, still centred
+    const hh = 420 * 1.5;
     const L = cx - hw, R = cx + hw;
-    const T = STAGE.y - 420, B = STAGE.y + 420;
+    const T = STAGE.y - hh, B = STAGE.y + hh;
     BLAST_ZONES.left = b.left + (L - b.left) * e;
     BLAST_ZONES.right = b.right + (R - b.right) * e;
     BLAST_ZONES.top = b.top + (T - b.top) * e;
@@ -3464,9 +3465,10 @@ function runCountdown() {
         }
     }, 1000);
 }
-/** tied for the most kills: only they come back, at 240%, and the blast zone closes in */
+/** tied for the fewest deaths: only they come back, at 200%, and the blast zone closes in */
 function beginSuddenDeath(tied) {
     S.sudden = true;
+    S.sdNoDmg = true;          // timer sudden death: only the kill barrier deals damage
     S.sdT = 0;
     S.timeLeft = 60 * 60;
     const a = ARENAS[S.arena] || ARENAS.normal;
@@ -3480,7 +3482,7 @@ function beginSuddenDeath(tied) {
         f.out = false; f.stocks = 1;
         f.startX = STAGE.x + STAGE.width * 0.15 + (n > 1 ? span * i / (n - 1) : span / 2);
         f.reset(false);
-        f.damage = 240; f.stocks = 1; f.out = false;
+        f.damage = 200; f.stocks = 1; f.out = false;
         f.invincibleTimer = 40; f.spawnT = 0;
         f.y = STAGE.y - f.height / 2; f.grounded = true; f.vx = f.vy = 0;
     });
@@ -3492,7 +3494,7 @@ function beginSuddenDeath(tied) {
     try { notify('SUDDEN DEATH'); } catch (e) { /* hud */ }
     runCountdown();
 }
-/** timer matches: most kills wins. A tie for first is sudden death, not a draw. */
+/** timer matches: fewest deaths wins. A tie for first is sudden death. */
 function finishTimer() {
     if (!S.match || S.gameState !== 'playing' || S.sudden) return;
     const live = fighters.filter(f => f.active && !f.out);
@@ -3500,13 +3502,13 @@ function finishTimer() {
     const score = new Map(), members = new Map();
     for (const f of live) {
         const k = keyOf(f);
-        score.set(k, (score.get(k) || 0) + (f.kills || 0));
+        score.set(k, (score.get(k) || 0) + (f.deaths || 0));
         if (!members.has(k)) members.set(k, []);
         members.get(k).push(f);
     }
-    let best = -Infinity, winners = [];
+    let best = Infinity, winners = [];
     for (const [k, sc] of score) {
-        if (sc > best) { best = sc; winners = [k]; }
+        if (sc < best) { best = sc; winners = [k]; }
         else if (sc === best) winners.push(k);
     }
     const wf = winners.flatMap(k => members.get(k) || []);
@@ -3711,6 +3713,7 @@ function startKillCam(att, def) {
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
+    if (S.sdNoDmg) hb = { ...hb, damage: 0 };                       // timer sudden death: hits do not add percent
     if (attacker && attacker !== defender && hb.damage !== undefined) {                          // perks
         const m = (1 + perkOf(attacker, 'dmg') + (attacker.stocks === 1 ? perkOf(attacker, 'last') : 0)) * (1 + perkOf(defender, 'taken'));
         const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
@@ -3891,7 +3894,7 @@ function explodeOrb(o) {
 
         const res = o.shieldPass ? 'hit' : interaction('CORE', t);
         if (res === 'hit' && o.noKb) {                       // Tide's bubble: damage only, no knockback, no stun, no hit-reaction
-            t.damage += dmg; t.lastHitBy = o.owner; t.lastHitT = 0; fx('hit', t.x, t.y, 6, 0); createParticles(t.x, t.y, '#7dd3fc', 8);
+            if (!S.sdNoDmg) t.damage += dmg; t.lastHitBy = o.owner; t.lastHitT = 0; fx('hit', t.x, t.y, 6, 0); createParticles(t.x, t.y, '#7dd3fc', 8);
         } else if (res === 'hit') {
             launch(o.owner, t, {
                 damage: dmg, bkb: o.bkb !== undefined ? o.bkb : (10 + 8 * o.charge) / 2, kbg: o.kbg !== undefined ? o.kbg : 1.1 / 2,
@@ -3981,7 +3984,7 @@ function updateDrops() {
                 d.hit.add(t);
                 const res = interaction('SPIRAL', t, true);
                 if (res === 'hit' && d.fly) {            // the Up-F sword spears them and drags them down with it
-                    t.interrupt(); t.damage += d.dmg; t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t);
+                    t.interrupt(); if (!S.sdNoDmg) t.damage += d.dmg; t.lastHitBy = d.owner; t.lastHitT = 0; t.hitstun = Math.max(t.hitstun, 4); d.caught.push(t);
                     S.screenShake = Math.max(S.screenShake, 8); audio.playSpear(); createParticles(t.x, t.y, '#e2e8f0', 12); fx('hit', t.x, t.y, 12, Math.PI / 2);
                 } else if (res === 'hit') launch(d.owner, t, { damage: d.dmg, bkb: d.bkb, kbg: d.kbg, angle: -1.25, mirror: true, x: d.x, y: d.y });
                 else if (res === 'shield') { audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
@@ -4110,7 +4113,7 @@ function updateTornadoes() {
             f.x += (t.x + Math.cos(a) * 52 * (1 - 0.3 * lift) - f.x) * 0.45;
             f.y += (t.y - 36 - lift * 190 - Math.sin(n * 0.09) * 40 * lift - f.y) * 0.25;
             f.vx = 0; f.vy = 0; f.hitstun = Math.max(f.hitstun, 4); f.grounded = false; pushOutOfStage(f, wox, woy); f.px = f.x; f.py = f.y;
-            if (n % 15 === 0) { f.damage += 0.8; f.lastHitBy = t.owner; f.lastHitT = 0; audio.playHit(false); createParticles(f.x, f.y, '#e0f2fe', 5); }
+            if (n % 15 === 0) { if (!S.sdNoDmg) f.damage += 0.8; f.lastHitBy = t.owner; f.lastHitT = 0; audio.playHit(false); createParticles(f.x, f.y, '#e0f2fe', 5); }
             if (n >= 100) { t.caught.delete(f); f._inTwister = false; launch(t.owner, f, { damage: 5, bkb: 10, kbg: 0.95, angle: t.vx >= 0 ? -0.75 : Math.PI + 0.75, x: f.x, y: f.y }); }
         }
     }
@@ -4508,14 +4511,15 @@ function renderRoster() {
     if (!S.match || S.gameState === 'start') { if (el.style.display !== 'none') el.style.display = 'none'; tm.style.display = 'none'; return; }
     el.style.display = 'flex';
     const timer = S.match.mode === 'timer';
-    if (timer) {
-        const txt = S.sudden ? 'SUDDEN DEATH' : (() => { const sec = Math.max(0, Math.ceil((S.timeLeft || 0) / 60)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); })();
+    const sdMode = S.match.mode === 'sudden';
+    if (timer || sdMode) {
+        const txt = (S.sudden || sdMode) ? 'SUDDEN DEATH' : (() => { const sec = Math.max(0, Math.ceil((S.timeLeft || 0) / 60)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); })();
         tm.style.display = 'block';
         if (tm.textContent !== txt) tm.textContent = txt;
-        tm.style.color = S.sudden || (!S.sudden && Math.ceil((S.timeLeft || 0) / 60) <= 10) ? '#fb7185' : '#e2e8f0';
+        tm.style.color = (S.sudden || sdMode) || (!S.sudden && Math.ceil((S.timeLeft || 0) / 60) <= 10) ? '#fb7185' : '#e2e8f0';
     } else tm.style.display = 'none';
     const rows = fighters.filter(f => f.active).map(f => {
-        const pips = timer ? 'K ' + f.kills : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
+        const pips = timer && !S.sudden ? ('D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
         const nm = String(f.name).replace(/[<>&"]/g, '');
         return `<div style="display:flex;gap:8px;align-items:center;background:rgba(8,12,24,.72);border-left:4px solid ${f.color};padding:4px 8px;border-radius:8px;min-width:190px;opacity:${f.out ? .45 : 1}${f.slot === (S.mySlot || 0) ? ';outline:1px solid #fff6' : ''}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</span><span style="color:${f.damage > 120 ? '#fb7185' : f.damage > 60 ? '#fbbf24' : '#fff'}">${Math.floor(f.damage)}%</span><span style="color:${f.color};letter-spacing:1px">${pips}</span></div>`;
     }).join('');
@@ -4631,14 +4635,15 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
         const lim = clampN(+cfg.timeLimit || 5, 1, 10);
+        const sdPick = cfg.mode === 'sudden';
         S.match = {
-            teams: !!cfg.teams, startDamage: clampN(+cfg.startDamage || 0, 0, 249), stocks: cfg.stocks || 3,
-            mode: cfg.mode === 'timer' ? 'timer' : 'stock', timeLimit: lim,
+            teams: !!cfg.teams, startDamage: sdPick ? 200 : clampN(+cfg.startDamage || 0, 0, 249), stocks: sdPick ? 1 : (cfg.stocks || 3),
+            mode: cfg.mode === 'timer' ? 'timer' : sdPick ? 'sudden' : 'stock', timeLimit: lim,
             items: ic.on ? { on: true, types: (ic.types || []).filter(t => ITEM_TYPES.includes(t)), interval: clampN(+ic.interval || 15, 5, 60) } : { on: false, types: [], interval: 15 },
         };
         S.timeLeft = Math.round(lim * 3600);
@@ -4675,6 +4680,12 @@ function startMatchSequence(mode, cfg) {
             f.startY = STAGE.y - 120;
             f.reset(true); f.shieldHold = 0; f.remoteAim = null;
         });
+        if (S.match.mode === 'sudden') {
+            S.sudden = true; S.sdNoDmg = false; S.sdT = 0;
+            const a = ARENAS[S.arena] || ARENAS.normal;
+            S.sdBase = { left: a.bz.left, right: a.bz.right, top: a.bz.top, bottom: a.bz.bottom };
+            Object.assign(BLAST_ZONES, S.sdBase);
+        }
     } else {
     p1.char = getMyChar();
     p2.char = S.online === 'host' ? (S.peerChar || DEFAULT_CHAR) : S.online === 'guest' ? DEFAULT_CHAR : getMyChar();   // bots wear the character you have equipped
@@ -4709,7 +4720,7 @@ function startMatchSequence(mode, cfg) {
     const aiDescText = document.getElementById('aiDescText');
 
     if (S.gameMode === 'lobby') {
-        modeLabel.textContent = S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL';
+        modeLabel.textContent = (S.match.mode === 'sudden' ? 'SUDDEN DEATH • ' : S.match.mode === 'timer' ? 'TIMER • ' : '') + (S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL');
     } else if (S.gameMode === 'easy') {
         modeLabel.textContent = "MODE: EASY";
         aiDiffLabel.textContent = "Easy Bot";
