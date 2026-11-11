@@ -14,6 +14,9 @@ const BOTS = [
     { id: 'easy', label: 'Easy Bot' },
     { id: 'medium', label: 'Medium Bot' },
     { id: 'hard', label: 'Hard Bot' },
+    { id: 'expert', label: 'Expert Bot' },
+    { id: 'master', label: 'Master Bot' },
+    { id: 'apex', label: 'Apex Bot' },
 ];
 
 function snap() {

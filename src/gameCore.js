@@ -3207,7 +3207,7 @@ const BOT_STATS = {
     apex:   { dmg: 0.28, taken: -0.28, kbTaken: -0.20, cd: -0.35, walk: 0.10 },
 };
 export const APEX_TUNE = { luminent: 1.95, zephyr: 1.95, ember: 1.95, umbra: 1.95, volt: 1.95 };   // per-character multiplier on the Apex stat bundle (from tools tuning run; capped at 1.95)
-const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0) + ((f.isAI && f.diff && BOT_STATS[f.diff] && S.gameMode !== 'training') ? (BOT_STATS[f.diff][stat] || 0) * (f.diff === 'apex' ? (APEX_TUNE[f.char] || 1) : 1) : 0);
+const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'guest') ? perkStat(perksFor(f.char), stat) : 0) + ((f.isAI && f.diff && BOT_STATS[f.diff]) ? (BOT_STATS[f.diff][stat] || 0) * (f.diff === 'apex' ? (APEX_TUNE[f.char] || 1) : 1) : 0);
 /** match stats of the human player (for coins, daily challenges, the ladder) */
 const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
 const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
@@ -4790,7 +4790,7 @@ export function applyTrainPrefs() {
     const bt = t.botType || 'static';
     p2.isAI = true;
     if (bt === 'static') { p2.diff = null; p2.name = 'Static Bot'; }
-    else { p2.diff = bt; p2.name = bt === 'easy' ? 'Easy Bot' : bt === 'medium' ? 'Medium Bot' : 'Hard Bot'; }
+    else { p2.diff = bt; p2.name = BOT_NAMES[bt] || 'Hard Bot'; }
     p2.char = charOf(t.botChar || t.char || getMyChar()).id;
     p2.maxJumps = charOf(p2.char).jumps; p2.jumpsLeft = p2.maxJumps;
     try { assignTagNames(); } catch (e) { /* ok */ }
