@@ -299,7 +299,7 @@ function onlineGameOver() {
 $('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(Online.rankedQ); });
 
 function frame(now) {
-    S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online);
+    S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online);
     { const rb = $('replayBtn'); if (rb) rb.classList.toggle('hidden', !(S.gameState === 'gameover' && !S.replay && S.rec && S.rec.length >= 30)); }
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;

@@ -90,8 +90,8 @@ export const BRIEF = {
         L: ['Landing stomp', 'Every time Bulwark lands from the air he stomps: 3 damage, light knockback, a small radius, and 0.3 s of get-up animation.'],
     },
     zephyr: {
-        N: ['Gale Burst', 'Hold F for a close wind blast. It shoves everyone around you away. No projectile.'],
-        S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back.'],
+        N: ['Gale Burst', 'Hold F for a big wind blast (twice the old size) that shoves everyone around you away. Fully charged, it goes off by itself 1 s later. Afterwards you are tired for 0.6 s and the charge is on cooldown for 1 s more.'],
+        S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back. 0.6 s cooldown.'],
         U: ['Jet Stream', 'Tap up F to fly where you aim for 0.9 s. The air you tore through becomes a current that sweeps foes along. No damage.'],
         DG: ['Roaming Twister', 'On the ground, down F sends a tornado rolling forward for 2.5 s. It lifts and spins foes, then flings them out forward.'],
         DA: ['Cyclone Drill', 'In the air, down F corkscrews straight down with small hits and a final impact. No knockback at the end.'],

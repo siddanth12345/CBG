@@ -1014,7 +1014,8 @@ class Fighter {
 
     // ------------------------------------------------------------ F specials: per-frame state
     updateSpecials() {
-        if (this.fActive) this.chargeFrames = Math.min(120, this.chargeFrames + (this.char === 'tide' && this.chargeFrames >= HOLD_TO_CORE ? 2 : this.char === 'volt' && this.chargeFrames >= HOLD_TO_CORE ? 2.75 : 1));   // Tide's Core twice as fast, Volt's fully charged 0.7 s after pressing charges 2x faster
+        if (this.fActive && this.char === 'zephyr' && this.chargeFrames >= CHARGE_MAX + 60 && !this.sx && this.cd.CORE <= 0) this.fRelease('NEUTRAL', this.x, this.y);      // fully charged for 1 s: it goes off by itself
+        if (this.fActive) this.chargeFrames = Math.min(this.char === 'zephyr' ? 130 : 120, this.chargeFrames + (this.char === 'tide' && this.chargeFrames >= HOLD_TO_CORE ? 2 : this.char === 'volt' && this.chargeFrames >= HOLD_TO_CORE ? 2.75 : 1));   // Tide's Core twice as fast, Volt's fully charged 0.7 s after pressing charges 2x faster
         if (this.fActive && !this.sx && spec(this.char, 'S').kind === 'roll' && this.cd.BLINK <= 0 && this.canRollStart()) {
             const dr = this === p1 && !(S.online === 'guest') ? mouse.direction : this.fDirPress;
             if (dr === 'SIDE_LEFT' || dr === 'SIDE_RIGHT') { if (!this.grounded) this.airSpecials++; this.startRollCharge(dr === 'SIDE_LEFT' ? -1 : 1); }
@@ -1092,7 +1093,7 @@ class Fighter {
                     damage: lerpR(sp.dmg, x.c), bkb: lerpR(sp.bkb, x.c), kbg: sp.kbg, angle: -0.8 };
                 fx('explosion', this.x, this.y, R, x.c, STYLE_OF[this.char]); fx('gust', this.x, this.y, R, 1, STYLE_OF[this.char]); S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
             }
-            if (x.t >= sp.frames + 8) { this.sx = null; this.activeMove = null; }
+            if (x.t >= sp.frames + 8) { this.sx = null; this.activeMove = null; if (this.char === 'zephyr') { this.actionLock = Math.max(this.actionLock, 36); this.cd.CORE = Math.max(this.cd.CORE, 36 + 60); } }      // Zephyr: tired 0.6 s, then the charge is on cooldown for 1 s
         } else if (x.k === 'breath') {
             const sp = spec(this.char, 'N');
             this.activeMove = { type: 'CORE', t: 3 };
@@ -3020,7 +3021,7 @@ class AIBot extends Fighter {
         const charge = lv === 'hard' ? 0.4 + Math.random() * 0.6 : lv === 'medium' ? Math.random() * 0.7 : Math.random() * 0.4;
         const cdOk = (k) => this.cd[k] <= 0;
         if (cdOk('CORE')) {
-            if (N.kind === 'burst' && adx < 190 && Math.abs(dy) < 130) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
+            if (N.kind === 'burst' && adx < 290 && Math.abs(dy) < 200) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
             else if (N.kind === 'breath' && dist < (lv === 'hard' && ch === 'ember' ? 190 : 360)) add(3, 'N', () => this.useSpecial('CORE', t.x, t.y, charge));
             else if (N.kind === 'thunder' && g && dist > 220 && dist < 900) add(2, 'N', () => this.useSpecial('CORE', t.x, t.y, lv === 'hard' ? 0.6 + Math.random() * 0.4 : charge));
         }
@@ -3044,7 +3045,7 @@ class AIBot extends Fighter {
                     add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
                 } else if (S1.kind === 'bubble' && adx > 90 && adx < 740 && Math.abs(dy) < 190) {
                     add(5.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
-                } else if (S1.kind === 'tp' && adx < dd + 180 && Math.abs(dy) < 160) {
+                } else if (S1.kind === 'tp' && (adx < dd + 180 && Math.abs(dy) < 160)) {
                     add(5.8, 'S', () => this.useSpecial('BLINK', t.x, t.y));
                 } else if (adx > 70 && adx < 560 && Math.abs(dy) < 170) {
                     add(4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
@@ -3058,23 +3059,24 @@ class AIBot extends Fighter {
         }
         if (cdOk('SPIRAL')) {
             const uw = lv === 'hard' ? 7.0 : 3.0;   // hard: Up-F weight matches Side-F combo pressure
-            if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            if (U.ghost) { if (dist > 650) add(uw * 0.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y)); }      // Umbra's Shadow Flight does no damage: only worth it to close a big gap
+            else if (U.kind === 'bolt' && dist < (U.dist || 320) + 60 && dy < 90) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
             else if (U.kind === 'rocket' && dist > 90 && dist < 480) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
             else if (U.kind === 'erupt' && adx < 150 && dy < -40 && dy > -320) add(uw, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
             else if (U.kind === 'rise' && adx < 150 && dy < -30 && dy > -230) add(uw * 0.9, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
-            else if (lv === 'hard' && dist < 400) add(uw * 0.55, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
+            else if (lv === 'hard' && dist < 400 && !U.ghost) add(uw * 0.55, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
         }
         if (cdOk('SUPLEX') && g) {
             const reach = DG.atTarget ? 620 : Math.max(170, STAGE.width * (DG.w || 0.1) * 0.5 + 40);
             if (adx < reach && Math.abs(dy) < 130) add(3, 'DG', () => this.useSpecial('SUPLEX', t.x, t.y));
         }
-        if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
+        if (cdOk('HEADBUTT') && !g && dy > 60 && this.y < STAGE.y - 100 && adx < (DA.vx ? 260 : ch === 'umbra' ? 55 : 110)) add(3, 'DA', () => { this.facing = dx > 0 ? 1 : -1; return this.useSpecial('HEADBUTT', t.x, t.y); });
         // hard: Side-F combo pressure ≈ Up-F (same weight class)
         if (this.level === 'hard' && cdOk('BLINK') && (t.hitstun > 0 || t.clashStunTimer > 0 || (t.lastHitBy === this && t.lastHitT < 50))) {
             const c = this.char === 'ember' ? (0.25 + Math.random() * 0.4) : 0;
             add(7.5, 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
         }
-        if (this.level === 'hard' && cdOk('SPIRAL') && (t.hitstun > 0 || (t.lastHitBy === this && t.lastHitT < 40))) {
+        if (this.level === 'hard' && cdOk('SPIRAL') && !spec(ch, 'U').ghost && (t.hitstun > 0 || (t.lastHitBy === this && t.lastHitT < 40))) {
             add(7.5, 'U', () => this.useSpecial('SPIRAL', t.x, t.y));
         }
         if (!opts.length) return false;
@@ -4789,7 +4791,9 @@ const gameOverModal = document.getElementById('gameOverModal');
 function endGame(winnerText, winnerRole = null) {
     if (S.sdBase) { Object.assign(BLAST_ZONES, S.sdBase); S.sdBase = null; }
     S.sudden = false; S.sdT = 0; S.cdN = -1;
-    if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') {
+    const customMatch = !!S.match && !S.viaQueue && !S.ranked && !S.rankedQ;           // custom matches (lobby or private room) give no coins, challenges or rating
+    if (customMatch && S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') { S.rewardShown = true; try { notify('Custom match: no coins or rating'); } catch (e) { /* hud */ } }
+    else if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') {
         S.rewardShown = true; if (!S.stats) S.stats = newStats();
         const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
