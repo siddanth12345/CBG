@@ -57,9 +57,9 @@ export const CHARS = {
 };
 
 // knockback taken scales with speed: the slowest walker (Terra) takes 0.6x, the fastest (Zephyr) 1.5x, proportional in between.
-// jumps in the air: 3 minimum, 5 maximum; slow tanks recover worst, the fastest has the most.
+// jumps in the air: 3 minimum, 5 maximum (Luminent and Bulwark 4); slow tanks recover worst, the fastest has the most.
 const BAL_KB = { terra: 1.2, ember: 0.88, umbra: 0.9, bulwark: 1.1, tide: 0.94, volt: 0.9, zephyr: 0.95 };      // bot round-robin 2026-11-10 (hard vs hard, 20 each): Terra .80, Bulwark .75, Luminent .70, Tide .60, Umbra .38, Zephyr .33, Ember .25, Volt .23
-const JUMPS = { luminent: 3, bulwark: 3, zephyr: 5, ember: 4, tide: 4, volt: 4, umbra: 4, terra: 3 };
+const JUMPS = { luminent: 4, bulwark: 4, zephyr: 5, ember: 4, tide: 4, volt: 4, umbra: 4, terra: 3 };
 for (const c of Object.values(CHARS)) {
     const w = c.walk;
     c.kb = Math.round((w < 1 ? 1 - 0.4 * (1 - w) / 0.38 : 1 + 0.5 * (w - 1) / 0.35) * 1000) / 1000;

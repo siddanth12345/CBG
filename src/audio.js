@@ -138,6 +138,7 @@ export class SoundEngine {
         this._musicKey = null;
     }
     musicForMap(map) {
+        map = String(map || '').replace(/H$/, '');            // hazard versions use the music of the base map
         if (map === 'horizon') return 'horizon';
         if (map === 'bighorizon') return 'horizon_big';
         if (map === 'big') return 'frontier_big';

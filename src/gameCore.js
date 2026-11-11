@@ -124,6 +124,7 @@ const ARENAS = {
     },
 };
 export function setArena(kind, theme = 'frontier') {
+    S.hazMap = null;
     const a = ARENAS[kind] || ARENAS.normal;
     Object.assign(WORLD, a.world);
     Object.assign(STAGE, a.stage);
@@ -135,8 +136,9 @@ export function setArena(kind, theme = 'frontier') {
 }
 /** map ids: frontier (small), big (big Frontier), horizon (small), bighorizon, and the random picks rand / randS / randB */
 export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon'];
-export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
-export const cleanMap = (m) => (MAP_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
+export const HAZ_IDS = ['frontierH', 'bigH', 'horizonH', 'bighorizonH'];      // the same four maps with a hazard: small (€) = lightning storm, big (¥) = geysers
+export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
+export const cleanMap = (m) => (MAP_IDS.includes(m) || HAZ_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
 export function resolveMap(m) {
     m = cleanMap(m);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -147,7 +149,10 @@ export function resolveMap(m) {
 }
 export function setArenaByMap(m) {
     m = resolveMap(m);
-    setArena(m === 'frontier' || m === 'horizon' ? 'normal' : 'lobby', m === 'horizon' || m === 'bighorizon' ? 'horizon' : 'frontier');
+    const base = m.replace(/H$/, '');
+    setArena(base === 'frontier' || base === 'horizon' ? 'normal' : 'lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : 'frontier');
+    S.hazMap = HAZ_IDS.includes(m) ? ((base === 'frontier' || base === 'horizon') ? 'storm' : 'geyser') : null;
+    resetHazards();
     return m;
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -1634,6 +1639,7 @@ class Fighter {
             pierce: sp.look === 'boulder' || sp.pierce === true,
         });                                                   // flies straight along the aim (Umbra's curves a little, Terra's arcs)
         this.setMove('CORE', 24);
+        if (this.char === 'luminent') this.actionLock = Math.max(this.actionLock, 12);          // Luminent: 0.2 s tired after the Core leaves his hand
         this.specialKind = 'CORE'; this.specialT = 0; this.specialDur = 24;
         audio.playDash();
         fx('core', this.x, this.y, charge, Math.atan2(dy, dx));
@@ -4090,6 +4096,41 @@ function updatePillars() {
     }
 }
 
+// ------------------------------------------------------------ map hazards: (€) maps get a lightning storm, (¥) maps get geysers. Host-only; guests just see the effects and the hits.
+const HAZ = { t: 0, list: [] };
+function resetHazards() { HAZ.t = 0; HAZ.list.length = 0; }
+function hazardHit(f, h) {
+    f.interrupt && f.interrupt();
+    const storm = h.kind === 'storm', dir = f.x >= h.x ? 1 : -1;
+    f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
+    f.hitstun = Math.max(f.hitstun, storm ? 28 : 22); fx('hit', f.x, f.y, 25, dir > 0 ? -0.6 : Math.PI + 0.6); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
+}
+function updateHazards() {
+    if (!S.hazMap || S.online === 'guest' || S.gameState !== 'playing' || S.kcPause > 0) return;
+    HAZ.t++;
+    const storm = S.hazMap === 'storm', style = storm ? 'volt' : 'water';
+    if (HAZ.t > 180 && HAZ.t % (storm ? 210 : 170) === 0) {
+        const alive = fighters.filter(isAlive), lo = STAGE.x + 70, hi = STAGE.x + STAGE.width - 70, xs = [];
+        if (storm) xs.push(alive.length && Math.random() < 0.6 ? Math.max(lo, Math.min(hi, alive[Math.floor(Math.random() * alive.length)].x)) : lo + Math.random() * (hi - lo));
+        else { const cols = [0.18, 0.5, 0.82].sort(() => Math.random() - 0.5).slice(0, 2); for (const c of cols) xs.push(STAGE.x + STAGE.width * c); }
+        for (const x of xs) {
+            const h = { kind: storm ? 'storm' : 'geyser', x, w: storm ? 90 : 120, h: storm ? 760 : 380, dmg: storm ? 13 : 8, t: 0, warn: storm ? 55 : 50, hit: new Set() };
+            HAZ.list.push(h); fx('pillar', x, STAGE.y, h.w, h.h, style); createParticles(x, STAGE.y - 6, storm ? '#fde047' : '#7dd3fc', 8);
+        }
+    }
+    for (let i = HAZ.list.length - 1; i >= 0; i--) {
+        const h = HAZ.list[i]; h.t++;
+        if (h.t === h.warn) { fx('pillar', h.x, STAGE.y, h.w, h.h, style + '!'); audio.playZap(); S.screenShake = Math.max(S.screenShake, 6); }
+        if (h.t >= h.warn && h.t < h.warn + 8) {
+            for (const f of fighters) {
+                if (!isAlive(f) || h.hit.has(f) || f.invincibleTimer > 0) continue;
+                if (Math.abs(f.x - h.x) < h.w / 2 + f.width / 2 && f.y < STAGE.y + 40 && f.y > STAGE.y - h.h) { h.hit.add(f); hazardHit(f, h); }
+            }
+        }
+        if (h.t >= h.warn + 8) HAZ.list.splice(i, 1);
+    }
+}
+
 const tornadoes = [];
 /** Zephyr's Roaming Twister: a tornado rolls across the ground; foes it touches are lifted and spun round inside it, and when it ends (or they have spun long enough) they are flung out forward. */
 function updateTornadoes() {
@@ -4635,7 +4676,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5189,7 +5230,7 @@ export function step() {
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
-        updateWhirlpools(); updateTornadoes(); updateWinds();
+        updateWhirlpools(); updateTornadoes(); updateWinds(); updateHazards();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
         const live2 = fighters.filter(isAlive);
@@ -5209,7 +5250,7 @@ export function step() {
         }
         if (p2._upd) p2.update();
 
-        updateWhirlpools(); updateTornadoes(); updateWinds();
+        updateWhirlpools(); updateTornadoes(); updateWinds(); updateHazards();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
 
