@@ -503,7 +503,7 @@ export class Effects {
                         const mesh = new THREE.Mesh(new THREE.BoxGeometry(seg.length() + w * 0.6, w, w), m); mesh.position.copy(a0).add(b0).multiplyScalar(0.5); mesh.rotation.z = Math.atan2(seg.y, seg.x); g.add(mesh); mats.push(m);
                     }
                     g.renderOrder = 6; this.scene.add(g);
-                    this.timed.push({ obj: g, t: 0, dur: 1.1, step: (u) => { const fl = 0.65 + 0.35 * Math.random(); for (const m of mats) m.opacity = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * fl; }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } });
+                    this.timed.push({ obj: g, t: 0, dur: 0.4, step: (u) => { const fl = 0.65 + 0.35 * Math.random(); for (const m of mats) m.opacity = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * fl; }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } });
                     for (let i = 0; i <= n; i++) this.sparks(pts[i], '#93c5fd', 3, 160, 0.4);
                     break;
                 }

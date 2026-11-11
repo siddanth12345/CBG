@@ -1810,7 +1810,7 @@ class Fighter {
         this.setMove('SPIRAL', 12);
         for (let i = 1; i <= 6; i++) this.ghosts.push({ x: fx0 + (this.x - fx0) * i / 7, y: fy0 + (this.y - fy0) * i / 7, alpha: 0.8 - i * 0.09, color: '#fde047' });
         fx('blink', fx0, fy0, this.x, this.y); fx('gust', this.x, this.y, 120, 0, STYLE_OF[this.char]);
-        zapTrails.push({ x1: fx0, y1: fy0, x2: this.x, y2: this.y, life: 30, owner: this, hit: new Set(), push: 24 }); fx('zigzag', fx0, fy0, this.x, this.y, 'volt');
+        zapTrails.push({ x1: fx0, y1: fy0, x2: this.x, y2: this.y, life: 24, owner: this, hit: new Set(), push: 24 }); fx('zigzag', fx0, fy0, this.x, this.y, 'volt');
         S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
     }
 
@@ -1858,7 +1858,7 @@ class Fighter {
             this.ghosts.push({ x: fromX + (this.x - fromX) * i / 7, y: fromY, alpha: 0.75 - i * 0.08, color: '#a78bfa' });
         }
         fx('blink', fromX, fromY, this.x, this.y);
-        if (sp.trail) { zapTrails.push({ x1: fromX, y1: fromY, x2: this.x, y2: this.y, life: 66, owner: this, hit: new Set() }); fx('zigzag', fromX, fromY, this.x, this.y, 'volt'); }
+        if (sp.trail) { zapTrails.push({ x1: fromX, y1: fromY, x2: this.x, y2: this.y, life: 24, owner: this, hit: new Set() }); fx('zigzag', fromX, fromY, this.x, this.y, 'volt'); }
         this.attackKind = d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT';
         this.attackTimer = ATTACK_FRAMES;
         this.attackSerial++;
