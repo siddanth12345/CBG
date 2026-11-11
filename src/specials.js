@@ -28,7 +28,7 @@ export const SP = {
         DA: { kind: 'dive', name: 'Anvil Drop', desc: 'A fast, heavy plunge. No small hits, one 24-damage impact. Knockback is soft (0.3×).', cd: 140, vy: 30, hitDmg: 0, every: 99, impactDmg: 24, impactW: 0.16, stun: false, bkb: 3.6, kbg: 0.33, ang: -1.3, lock: 30 },
     },
     zephyr: {
-        N: { kind: 'burst', name: 'Gale Burst', desc: 'No projectile: a big blast of wind (2x the old size) that shoves everyone around you away. 7 to 12. Fully charged, it goes off by itself 1 s later. After it you are tired for 0.6 s, then the charge is on a 1 s cooldown.', cd: 70,
+        N: { kind: 'burst', name: 'Gale Burst', desc: 'No projectile: a big blast of wind (2x the old size) that shoves everyone around you away. 7 to 12. Fully charged, it goes off by itself 1 s later. After it you are tired for 0.7 s, then the charge is on a 4 s cooldown.', cd: 70,
              frames: 12, every: 12, R: [220, 320], dmg: [7, 12], bkb: [8, 10], kbg: 0.85, radial: true },
         S: { kind: 'dash', name: 'Gust Dash', desc: 'A very fast long dash. It slices through foes (5), spins at the end with a gust that flings them away (6) and you bounce back out.', cd: 36, dist: 320, frames: 8, armor: false, dmg: 5, bkb: 5, kbg: 0.5, w: 84, h: 80, ang: 0.15, multi: true, lock: 14, rebound: 6, end: { w: 210, h: 160, radial: true, dmg: 6, bkb: 7, kbg: 0.85 } },
         U: { kind: 'rocket', jet: true, name: 'Jet Stream', desc: 'Become the wind: fly where you aim (steer as you go) for 0.9 s at jet speed, no attack. The air you tore through becomes a current for a moment: foes who touch it are swept along the way you flew (no damage, no stun).', cd: 110, frames: 54, speed: 13, turn: 0.2 },

@@ -1093,7 +1093,7 @@ class Fighter {
                     damage: lerpR(sp.dmg, x.c), bkb: lerpR(sp.bkb, x.c), kbg: sp.kbg, angle: -0.8 };
                 fx('explosion', this.x, this.y, R, x.c, STYLE_OF[this.char]); fx('gust', this.x, this.y, R, 1, STYLE_OF[this.char]); S.screenShake = Math.max(S.screenShake, 8); audio.playHit(true);
             }
-            if (x.t >= sp.frames + 8) { this.sx = null; this.activeMove = null; if (this.char === 'zephyr') { this.actionLock = Math.max(this.actionLock, 36); this.cd.CORE = Math.max(this.cd.CORE, 36 + 60); } }      // Zephyr: tired 0.6 s, then the charge is on cooldown for 1 s
+            if (x.t >= sp.frames + 8) { this.sx = null; this.activeMove = null; if (this.char === 'zephyr') { this.actionLock = Math.max(this.actionLock, 42); this.cd.CORE = Math.max(this.cd.CORE, 42 + 240); } }      // Zephyr: tired 0.7 s, then the charge is on cooldown for 4 s
         } else if (x.k === 'breath') {
             const sp = spec(this.char, 'N');
             this.activeMove = { type: 'CORE', t: 3 };

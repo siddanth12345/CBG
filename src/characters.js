@@ -58,7 +58,7 @@ export const CHARS = {
 
 // knockback taken scales with speed: the slowest walker (Terra) takes 0.6x, the fastest (Zephyr) 1.5x, proportional in between.
 // jumps in the air: 3 minimum, 5 maximum; slow tanks recover worst, the fastest has the most.
-const BAL_KB = { terra: 1.12, ember: 0.94, umbra: 0.94, bulwark: 1.04, tide: 0.94 };
+const BAL_KB = { terra: 1.2, ember: 0.88, umbra: 0.9, bulwark: 1.1, tide: 0.94, volt: 0.9, zephyr: 0.95 };      // bot round-robin 2026-11-10 (hard vs hard, 20 each): Terra .80, Bulwark .75, Luminent .70, Tide .60, Umbra .38, Zephyr .33, Ember .25, Volt .23
 const JUMPS = { luminent: 3, bulwark: 3, zephyr: 5, ember: 4, tide: 4, volt: 4, umbra: 4, terra: 3 };
 for (const c of Object.values(CHARS)) {
     const w = c.walk;
@@ -90,7 +90,7 @@ export const BRIEF = {
         L: ['Landing stomp', 'Every time Bulwark lands from the air he stomps: 3 damage, light knockback, a small radius, and 0.3 s of get-up animation.'],
     },
     zephyr: {
-        N: ['Gale Burst', 'Hold F for a big wind blast (twice the old size) that shoves everyone around you away. Fully charged, it goes off by itself 1 s later. Afterwards you are tired for 0.6 s and the charge is on cooldown for 1 s more.'],
+        N: ['Gale Burst', 'Hold F for a big wind blast (twice the old size) that shoves everyone around you away. Fully charged, it goes off by itself 1 s later. Afterwards you are tired for 0.7 s and the charge is on cooldown for 4 s more.'],
         S: ['Gust Dash', 'Tap side F for a very fast dash that slices, then a gust, then you bounce back. 0.6 s cooldown.'],
         U: ['Jet Stream', 'Tap up F to fly where you aim for 0.9 s. The air you tore through becomes a current that sweeps foes along. No damage.'],
         DG: ['Roaming Twister', 'On the ground, down F sends a tornado rolling forward for 2.5 s. It lifts and spins foes, then flings them out forward.'],
