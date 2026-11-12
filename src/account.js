@@ -6,6 +6,7 @@
 // Two backends: Supabase (when src/net/config.js is filled in) or a local one (this browser only) so the
 // whole flow can be used and tested with no server.
 import { getClient, supabaseConfigured } from './net/supa.js';
+import { EMAILJS_SERVICE, EMAILJS_TEMPLATE, EMAILJS_KEY } from './net/config.js';
 import { exportBindings, importBindings, setBindingsPersister } from './controls.js';
 import * as Borgs from './friends.js';
 
@@ -79,6 +80,9 @@ const LocalBackend = {
         return { userId: a.id, username: a.username };
     },
     async signOut() { try { localStorage.removeItem(LS_SESSION); } catch (e) { /* ignore */ } },
+    async emailOf(u) { const a = rd(LS_ACCOUNTS, {})[String(u).toLowerCase()]; return a && a.emailVerified && a.email ? a.email : ''; },
+    async setVerifiedEmail(userId, email) { const all = rd(LS_ACCOUNTS, {}); for (const k in all) if (all[k].id === userId) { all[k].email = email; all[k].emailVerified = true; } wr(LS_ACCOUNTS, all); },
+    async resetPassword(u, pw) { const all = rd(LS_ACCOUNTS, {}), a = all[String(u).toLowerCase()]; if (!a) return false; a.salt = Math.random().toString(36).slice(2); a.hash = await sha(a.salt + pw); wr(LS_ACCOUNTS, all); return true; },
     async load(userId) { const a = Object.values(rd(LS_ACCOUNTS, {})).find(x => x.id === userId); return a ? a.data : {}; },
     async save(userId, data) {
         const all = rd(LS_ACCOUNTS, {});
@@ -223,4 +227,63 @@ export function recordResult(win) {
     if (ACC.status !== 'user' && ACC.status !== 'guest') return;
     if (win) stats.wins++; else stats.losses++;
     persist(); afterChange();
+}
+
+
+// ------------------------------------------------------------------ e-mail verification + forgot password
+// An e-mail only counts once its 6-digit code has been typed back (sign-up never connects one by itself). Recovery only works for accounts with a verified e-mail.
+const pending = new Map();                                     // purpose:key -> { hash, exp, tries, email, sentAt }
+export const emailReady = () => !!(EMAILJS_SERVICE && EMAILJS_TEMPLATE && EMAILJS_KEY);
+const supportsMail = () => backend.name === 'local';
+const maskEmail = (e) => e.replace(/^(.).*(@.*)$/, (m, a, d) => a + '***' + d);
+async function mail(email, code, username, purpose) {
+    if (!emailReady()) return { test: true, code };
+    try {
+        const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ service_id: EMAILJS_SERVICE, template_id: EMAILJS_TEMPLATE, user_id: EMAILJS_KEY, template_params: { to_email: email, code, username, purpose } }) });
+        return r.ok ? { sent: true } : { error: 'The e-mail could not be sent. Try again in a minute.' };
+    } catch (e) { return { error: 'Could not reach the e-mail service.' }; }
+}
+async function issue(key, email, username, purpose) {
+    const old = pending.get(key);
+    if (old && Date.now() - old.sentAt < 30000) return { error: 'Wait a few seconds before asking for another code.' };
+    const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000)), salt = Math.random().toString(36).slice(2);
+    pending.set(key, { salt, hash: await sha(salt + code), exp: Date.now() + 10 * 60000, tries: 0, email, sentAt: Date.now() });
+    const r = await mail(email, code, username, purpose);
+    if (r.error) { pending.delete(key); return r; }
+    return { ok: true, test: !!r.test, code: r.code, to: maskEmail(email) };
+}
+async function check(key, code) {
+    const p = pending.get(key);
+    if (!p || Date.now() > p.exp) { pending.delete(key); return { error: 'That code expired. Ask for a new one.' }; }
+    if (++p.tries > 5) { pending.delete(key); return { error: 'Too many wrong tries. Ask for a new code.' }; }
+    if (p.hash !== await sha(p.salt + String(code).trim())) return { error: 'Wrong code.' };
+    pending.delete(key); return { ok: true, email: p.email };
+}
+/** signed-in player: the verified e-mail of this account ('' = none) */
+export async function myEmail() { return ACC.status === 'user' && supportsMail() ? await backend.emailOf(ACC.username) : ''; }
+/** connect an e-mail: step 1, send the code */
+export async function requestEmailCode(email) {
+    if (ACC.status !== 'user') return { error: 'Log in to an account first.' };
+    if (!supportsMail()) return { error: 'E-mail recovery is only available with the built-in account store.' };
+    if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "That email doesn't look right." };
+    return issue('verify:' + ACC.userId, email, ACC.username, 'verify your e-mail');
+}
+/** connect an e-mail: step 2, type the code back */
+export async function confirmEmailCode(code) {
+    const r = await check('verify:' + ACC.userId, code); if (r.error) return r;
+    await backend.setVerifiedEmail(ACC.userId, r.email); return { ok: true, email: r.email };
+}
+/** log-in screen: does this username have a verified e-mail? (decides whether "Forgot password?" is offered) */
+export async function recoveryAvailable(username) { try { return supportsMail() && !!username && !!(await backend.emailOf(username)); } catch (e) { return false; } }
+export async function requestResetCode(username) {
+    if (!supportsMail()) return { error: 'Password reset is only available with the built-in account store.' };
+    const em = await backend.emailOf(username);
+    if (!em) return { error: 'That account has no verified e-mail, so it cannot be recovered.' };
+    return issue('reset:' + username.toLowerCase(), em, username, 'reset your password');
+}
+export async function confirmReset(username, code, newPw) {
+    const err = validatePassword(newPw); if (err) return { error: err };
+    const r = await check('reset:' + username.toLowerCase(), code); if (r.error) return r;
+    return (await backend.resetPassword(username, newPw)) ? { ok: true } : { error: 'Could not change the password.' };
 }

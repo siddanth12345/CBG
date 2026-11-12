@@ -2,6 +2,8 @@
 import { Party, PARTY_MAX, createParty, joinParty, leaveParty, kickFromParty, partyGo } from './party.js';
 import { getBorgs, isOnlineName } from '../friends.js';
 import { inviteToParty } from './inbox.js';
+import { Online, joinRoom, spectateRoom, leaveRoom } from './online.js';
+import { S } from '../gameCore.js';
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -30,6 +32,12 @@ export class PartyUI {
         else if (a === 'join') await joinParty(this.joinCode);
         else if (a === 'leave') leaveParty(true);
         else if (a === 'kick') kickFromParty(b.dataset.id);
+        else if (a === 'joinmem') {
+            const act = Party.act[b.dataset.id];
+            if (S.gameState !== 'start') this.msg = 'Go back to the menu first.';
+            else if (act && act.k === 'training') { if (Online.role) leaveRoom(true); this.close(); await joinRoom(act.code); }
+            else if (act && act.k === 'match') { if (Online.role) leaveRoom(true); this.close(); await spectateRoom(act.code, act.slot || 0); }
+        }
         else if (a === 'invite') { const r = await inviteToParty(b.dataset.name, Party.code); this.msg = r.msg; }
         else if (a === 'go') { const r = await partyGo(b.dataset.kind); this.msg = r.msg; if (r.ok) this.close(); }
         this.render();
@@ -43,7 +51,14 @@ export class PartyUI {
               <p class="lm-status${/no |lost|full|removed|disband|letters|could/i.test(Party.note) ? ' bad' : ''}">${esc(Party.note || this.msg)}</p>`;
             return;
         }
-        const mem = Party.members.map((m, i) => `<div class="lm-prow"><b>${esc(m.name)}</b>${i === 0 ? '<i>leader</i>' : ''}<span class="lm-sp"></span>${leader && i > 0 ? `<button class="lm-btn lm-btn-ghost lm-mini" data-a="kick" data-id="${esc(m.id)}">Kick</button>` : ''}</div>`).join('');
+        const doing = (m) => {
+            if (m.id === Party.myId) return '';
+            const a = Party.act[m.id] || { k: 'menu' };
+            const label = { menu: 'the menu', training: 'Training', tutorial: 'the Tutorial', match: a.kind || 'a match', spec: 'a match (watching)', solo: 'a game' }[a.k] || 'the menu';
+            const can = (a.k === 'training' && a.h && a.code) || (a.k === 'match' && a.code);
+            return `<small class="lm-doing">In: ${esc(label)}</small>${can ? `<button class="lm-btn lm-mini" data-a="joinmem" data-id="${esc(m.id)}">Join party member in: ${esc(label)}</button>` : ''}`;
+        };
+        const mem = Party.members.map((m, i) => `<div class="lm-prow"><b>${esc(m.name)}</b>${i === 0 ? '<i>leader</i>' : ''}<span class="lm-sp"></span>${doing(m)}${leader && i > 0 ? `<button class="lm-btn lm-btn-ghost lm-mini" data-a="kick" data-id="${esc(m.id)}">Kick</button>` : ''}</div>`).join('');
         const inParty = new Set(Party.members.map(m => m.name.toLowerCase()));
         const inv = leader ? getBorgs().filter(b => isOnlineName(b.name) && !inParty.has(b.name.toLowerCase())).map(b => `<div class="lm-prow"><span class="lm-dot" style="background:#22c55e"></span><b>${esc(b.name)}</b><span class="lm-sp"></span><button class="lm-btn lm-mini" data-a="invite" data-name="${esc(b.name)}"${Party.members.length >= PARTY_MAX ? ' disabled' : ''}>Invite</button></div>`).join('') || '<p class="lm-note">No borgs online to invite.</p>' : '';
         this.body.innerHTML = `<div class="lm-codebar"><div class="lm-code"><span>PARTY CODE</span><b>${esc(Party.code)}</b></div></div>

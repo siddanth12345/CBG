@@ -46,11 +46,11 @@ body, html {
 .lm-head h2{font-family:Teko,Inter,sans-serif;font-size:30px;letter-spacing:.06em;text-transform:uppercase;color:#22d3ee;line-height:1}
 .lm-x{width:32px;height:32px;border-radius:8px;color:#94a3b8;font-size:16px}
 .lm-x:hover{background:#16263a;color:#fff}
-.lm-tabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;border-bottom:1px solid #16263a;scrollbar-width:thin}
+.lm-tabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;touch-action:pan-x;flex-shrink:0;border-bottom:1px solid #16263a;scrollbar-width:thin}
 .lm-tab{flex:none;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;color:#94a3b8;border:1px solid #1e293b;white-space:nowrap}
 .lm-tab:hover{color:#fff;border-color:#334155}
 .lm-tab.on{background:#0e7490;border-color:#22d3ee;color:#fff}
-.lm-body{padding:18px 22px;overflow-y:auto;min-height:0;flex:1;font-size:13px;line-height:1.55}
+.lm-body{padding:18px 22px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;min-height:0;flex:1;font-size:13px;line-height:1.55}
 .lm-title{font-family:Teko,Inter,sans-serif;font-size:26px;letter-spacing:.05em;text-transform:uppercase;color:#e2e8f0;margin-bottom:8px}
 .lm-lead{font-size:14px;color:#e2e8f0;margin-bottom:14px}
 .lm-lead b,.lm-card b,.lm-note b{color:#fff}
@@ -371,7 +371,7 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 
 /* Training menu */
 .lm-train-panel{width:min(560px,96vw);max-height:min(86vh,720px);display:flex;flex-direction:column}
-.lm-train-panel .lm-body{overflow-y:auto;padding:12px 14px 16px}
+.lm-train-panel .lm-body{overflow-y:auto;touch-action:pan-y;overscroll-behavior:contain;padding:12px 14px 16px}
 .lm-train-tabs{display:flex;gap:6px;padding:8px 14px 0;border-bottom:1px solid #1b2c44}
 .lm-train-tabs .lm-tab{flex:1;padding:8px 10px;border-radius:10px 10px 0 0;background:transparent;color:#94a3b8;font-weight:800;font-size:11px;letter-spacing:.06em;text-transform:uppercase;border:1px solid transparent}
 .lm-train-tabs .lm-tab.on{background:#0f1a2c;color:#67e8f9;border-color:#1b2c44;border-bottom-color:#0f1a2c}

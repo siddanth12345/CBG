@@ -2,7 +2,7 @@
 //   Host  : runs the real simulation (core.step), steers the guest's fighter from their inputs and
 //           streams snapshots.
 //   Guest : sends inputs, mirrors snapshots. See "Online play" in core.js.
-import { S, cleanMap, resolveMap, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter } from '../gameCore.js';
+import { S, cleanMap, resolveMap, startMatchSequence, applyRemote, applySnapshot, NETHOOK, resetSnapshotState, removeFighter, trainAttach, trainDetach, setArena } from '../gameCore.js';
 import { openTransport, hasRealtime } from './transport.js';
 import { isDown } from '../controls.js';
 import { displayName } from '../account.js';
@@ -32,6 +32,7 @@ export const Online = {
     slot: 1,              // my fighter slot (0 = host)
     myId: '',
     lobby: { members: [], settings: defaultSettings(), started: false },
+    cfg: null, trainOn: false, inTrain: false,   // cfg: the running custom match (late spectators get it); trainOn: a friend is in my training
     peerName: 'Opponent',
     t: null,
     lastRecv: 0,
@@ -52,11 +53,11 @@ function stopTimers() { clearInterval(pingTimer); clearInterval(watchTimer); pin
 /** ---- common ---- */
 export function leaveRoom(notify = true) {
     if (Online.t) {
-        if (notify) Online.t.send({ t: 'leave', id: Online.myId });
+        if (notify && Online.role !== 'spectator') Online.t.send({ t: 'leave', id: Online.myId });
         Online.t.close();
     }
     Online.t = null; Online.role = null; Online.code = ''; stopTimers(); bindChat(null);
-    NETHOOK.send = null; S.online = null; S.opponentName = null; lastHeld = '';
+    NETHOOK.send = null; S.online = null; S.opponentName = null; S.spectating = false; lastHeld = ''; Online.cfg = null; Online.trainOn = false; Online.inTrain = false;
     Online.lobby = { members: [], settings: defaultSettings(), started: false }; Online.slot = 1; clearInterval(lobbyTimer);
     set('idle');
 }
@@ -64,7 +65,7 @@ export function leaveRoom(notify = true) {
 function watch() {
     Online.lastRecv = performance.now();
     watchTimer = setInterval(() => {
-        if (Online.status !== 'connected' || (Online.role === 'host' && Online.mode === 'lobby')) return;
+        if (Online.status !== 'connected' || (Online.role === 'host' && (Online.mode === 'lobby' || Online.mode === 'train'))) return;
         if (performance.now() - Online.lastRecv > TIMEOUT_MS) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'Connection lost'); cb('Connection lost'); }
     }, 1000);
 }
@@ -84,6 +85,15 @@ export async function hostRoom(code, mode = 'pvp') {
         switch (m.t) {
             case 'hello':
                 if (Online.mode === 'lobby') { lobbyHello(m); break; }
+                if (Online.mode === 'train') {                       // a party member joins my training: they take over the dummy
+                    if (Online.trainOn) { t.send({ t: 'full', to: m.id }); break; }
+                    Online.trainOn = true; Online.peerName = (m.name || 'Guest').slice(0, 20); trainAttach(Online.peerName, m.char);
+                    NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
+                    t.send({ t: 'welcome', name: Online.name, mode: 'pvp', to: m.id, slot: 1, char: getMyChar() });
+                    t.send({ t: 'start', to: m.id, name: Online.name, train: { arena: S.arena, theme: S.theme } });
+                    set('connected', Online.peerName + ' joined your training');
+                    break;
+                }
                 if (Online.status === 'connected') { t.send({ t: 'full', to: m.id }); break; }
                 Online.peerName = (m.name || 'Guest').slice(0, 20); S.peerChar = charOf(m.char).id;
                 t.send({ t: 'welcome', name: Online.name, mode: 'pvp', to: m.id, slot: 1, char: getMyChar() });
@@ -95,7 +105,14 @@ export async function hostRoom(code, mode = 'pvp') {
             case 'rematch': if (Online.mode === 'lobby') { if (Online.lobby.started && S.gameState === 'gameover') beginLobbyMatch(); } else if (Online.status === 'connected') beginMatch(); break;
             case 'leave': {
                 if (Online.mode === 'lobby') { const mem = memberOf(m); if (mem) dropMember(mem); break; }
+                if (Online.mode === 'train') { if (Online.trainOn) { Online.trainOn = false; NETHOOK.send = null; trainDetach(); set('waiting', 'Your friend left the training'); } break; }
                 const cb = Online.onLeft; leaveRoom(false); set('closed', 'Opponent left'); cb('Opponent left'); break;
+            }
+            case 'spectate': {                                    // someone watches (a party member joining my match): send them what they need to start
+                const start = { t: 'start', to: m.id, spec: true, hn: Online.name, gn: Online.peerName };
+                if (Online.mode === 'lobby') { if (!Online.cfg) break; start.cfg = Online.cfg; }
+                else if (Online.mode !== 'pvp' || Online.status !== 'connected') break;
+                t.send(start); break;
             }
             case 'chat': onRemoteChat(m); break;
             case 'ping': { const mem = memberOf(m); if (mem) mem.seen = performance.now(); break; }
@@ -199,7 +216,7 @@ export function beginLobbyMatch() {
     if (L.members.length < 2) { Online.note = 'You need at least 2 players'; Online.onChange(); return false; }
     L.started = true;
     const cfg = { players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })), teams: L.settings.teams, startDamage: L.settings.mode === 'sudden' ? 200 : Math.min(249, +L.settings.startDamage || 0), stocks: L.settings.mode === 'sudden' ? 1 : (+L.settings.stocks || 3), mode: L.settings.mode === 'timer' ? 'timer' : L.settings.mode === 'sudden' ? 'sudden' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: resolveMap(L.settings.map), hazards: !!L.settings.hazards, items: cleanItems(L.settings.items) };
-    S.online = 'host'; S.opponentName = null;
+    S.online = 'host'; S.opponentName = null; Online.cfg = cfg;
     NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
     Online.t.send({ t: 'start', cfg });
     startMatchSequence('lobby', { ...cfg, mySlot: 0 });
@@ -236,7 +253,9 @@ export async function joinRoom(code) {
             case 'full': if (m.to === myId) { leaveRoom(false); set('closed', m.why || 'That room is full'); } break;
             case 'kick': if (m.to === myId) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'You were removed from the lobby'); cb('You were removed from the lobby'); } break;
             case 'lobby': if (welcomed) { Online.lobby = { members: m.members, settings: m.settings, started: m.started }; Online.onChange(); } break;
-            case 'start': if (m.cfg) { S.online = 'guest'; Online.lobby.started = true; resetSnapshotState(); startMatchSequence('lobby', { ...m.cfg, mySlot: Online.slot }); Online.onChange(); break; }
+            case 'start': if (m.to && m.to !== myId) break;
+                if (m.train) { Online.inTrain = true; Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); setArena(m.train.arena || 'normal', m.train.theme || 'frontier'); Online.onChange(); break; }
+                if (m.cfg) { S.online = 'guest'; Online.lobby.started = true; resetSnapshotState(); startMatchSequence('lobby', { ...m.cfg, mySlot: Online.slot }); Online.onChange(); break; }
                 Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); break;
             case 'snap': if (S.online === 'guest') applySnapshot(m.s); break;
             case 'leave': { const cb = Online.onLeft; leaveRoom(false); set('closed', 'The host left'); cb('The host left'); break; }
@@ -283,3 +302,34 @@ setInterval(() => {
     badge.style.color = local ? '#a78bfa' : p2p ? '#4ade80' : '#fbbf24';
     badge.textContent = '● ' + (local ? 'SAME BROWSER' : p2p ? 'DIRECT' : 'RELAY') + (i.rtt ? ' · ' + i.rtt + ' ms' : '');
 }, 1000);
+
+
+// ---- party: watch a friend's match. A spectator only listens (their own inputs are never sent) and sees through the friend's fighter.
+export async function spectateRoom(code, slot = 0) {
+    leaveRoom(false);
+    Online.name = displayName(); Online.viaQueue = false; Online.rankedQ = false;
+    code = (code || '').trim().toUpperCase();
+    if (!/^[A-Z]{4}$/.test(code)) { set('closed', 'Codes are 4 letters'); return false; }
+    Online.role = 'spectator'; Online.code = code;
+    set('joining', 'Connecting…');
+    try { Online.t = await openTransport(code); } catch (e) { Online.role = null; set('closed', e.message); return false; }
+    const t = Online.t, myId = Online.myId = Math.random().toString(36).slice(2, 8);
+    let started = false;
+    t.onmessage = (m) => {
+        Online.lastRecv = performance.now();
+        if (m.t === 'start' && m.to === myId && !started) {
+            started = true; S.online = 'guest'; S.spectating = true; resetSnapshotState();
+            if (m.cfg) { Online.lobby.started = true; startMatchSequence('lobby', { ...m.cfg, mySlot: slot }); }
+            else { S.opponentName = m.gn || 'Opponent'; startMatchSequence('online'); S.mySlot = slot === 0 ? 1 : 0; S.opponentName = m.gn; }
+            set('connected', 'Watching ' + (m.hn || 'the match'));
+        } else if (m.t === 'snap' && started && S.online === 'guest') applySnapshot(m.s);
+        else if (m.t === 'leave' && started) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'The match ended'); cb('The match ended'); }
+        else if (m.t === 'chat') onRemoteChat(m);
+    };
+    watch();
+    const ask = () => t.send({ t: 'spectate', id: myId, name: Online.name });
+    ask();
+    const retry = setInterval(() => { if (started || Online.role !== 'spectator') clearInterval(retry); else ask(); }, 600);
+    setTimeout(() => { if (!started && Online.role === 'spectator') { clearInterval(retry); leaveRoom(false); set('closed', 'That match is not running anymore'); } }, 10000);
+    return true;
+}

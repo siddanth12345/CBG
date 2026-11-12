@@ -13,11 +13,11 @@ import { LayoutEditor } from './layoutUI.js';
 import { UI } from './ui.js';
 import { TrainUI } from './trainUI.js';
 import { View } from './render/view.js';
-import { Online, leaveRoom, sendAct, sendHeld, requestRematch, joinRoom } from './net/online.js';
+import { Online, leaveRoom, sendAct, sendHeld, requestRematch, joinRoom, hostRoom } from './net/online.js';
 import { CustomUI } from './net/customUI.js';
 import { CharUI } from './charUI.js';
 import { PartyUI } from './net/partyUI.js';
-import { Party, joinParty } from './net/party.js';
+import { Party, joinParty, leaveParty } from './net/party.js';
 import { LobbyUI } from './net/lobbyUI.js';
 import { joinQueue } from './net/queue.js';
 import { ACC, initAccount, setProfileListener, recordResult } from './account.js';
@@ -56,6 +56,22 @@ const charUI = new CharUI({
 const custom = new CustomUI({ root: $('luminary-root'), openBtn: $('customBtnStart'), openBorgs: () => borgsUI.open('borgs') });
 const trainUI = new TrainUI({ root: $('luminary-root'), isGuideActive: () => ui.guide && ui.guide.active });
 const partyUI = new PartyUI({ root: $('luminary-root'), openBtn: $('partyBtnStart'), toasts });
+// party: tell the others what I am doing; training with a party opens a room they can join; watching/joining a friend works from the Party panel
+Party.myAct = () => {
+    if (Online.role === 'spectator') return { k: 'spec' };
+    if (Online.role && S.gameState !== 'start') {
+        if (Online.mode === 'train' || Online.inTrain) return { k: 'training', code: Online.code, h: Online.role === 'host' };
+        if (Online.status === 'connected') return { k: 'match', code: Online.code, slot: Online.slot, kind: Online.mode === 'lobby' ? 'Custom match' : '1v1' };
+    }
+    if (S.gameState === 'start') return { k: 'menu' };
+    if (ui.guide.active) return { k: 'tutorial' };
+    return S.gameMode === 'training' ? { k: 'training', code: '', h: false } : { k: 'solo' };
+};
+setInterval(() => {
+    const training = S.gameMode === 'training' && S.gameState !== 'start' && !S.online && !Online.role;
+    if (Party.role && training && !ui.guide.active) hostRoom(undefined, 'train');          // others in the party can now join my training
+    else if (Online.role === 'host' && Online.mode === 'train' && !Party.role) leaveRoom(true);    // left the party: close the training room
+}, 1000);
 Inbox.joinParty = (code) => { partyUI.open(); return joinParty(code); };
 Party.onGo = (m) => { if (Online.role) return; toasts.show({ text: m.kind === 'lobby' ? 'Your party is starting a custom match' : 'Your party is starting a 1v1', ttl: 4000 }); joinRoom(m.code); };
 const accountUI = new AccountUI({ root: $('luminary-root'), startScreen: $('startScreen'), openBorgs: () => borgsUI.open('borgs'), onChange: () => ui.refreshLabels() });
@@ -222,6 +238,9 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('wheel', (e) => {
     audio.init();
+    const tabs = e.target.closest && e.target.closest('.lm-tabs');
+    if (tabs && tabs.scrollWidth > tabs.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { tabs.scrollLeft += e.deltaY; e.preventDefault(); return; }       // wheel over a tab bar scrolls it sideways
+    if (e.target.closest && e.target.closest('.lm-modal, .lm-panel, .lm-train-panel, #menuDropdown')) return;      // panels scroll normally, they must not trigger a roll
     if (S.gameState !== 'playing' || mouse.touchMode) return;
     e.preventDefault();
     if (S.online === 'guest') { sendAct('roll'); return; }

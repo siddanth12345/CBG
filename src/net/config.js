@@ -27,3 +27,10 @@ export const RTC_ICE = [
 export const REALTIME_URL = 'https://c--c99ea759-61d6-495d-b33e-9852618688eb-prod.lovable.cloud';
 export const REALTIME_KEY = 'sb_publishable_vloFvJzxxIubERvZ94mWdg_NvwYhnsv';
 export const REALTIME_JS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js', 'https://unpkg.com/@supabase/supabase-js@2.57.4/dist/umd/supabase.js'];
+
+// Account e-mail (verification codes + "forgot password"). Codes are sent through EmailJS (https://www.emailjs.com, free tier):
+// create a service + a template that uses {{to_email}}, {{code}}, {{username}} and {{purpose}}, then paste the three ids here (the public key is meant to be public).
+// While these are empty the game runs in TEST MODE: no e-mail leaves the page and the code is shown on screen instead.
+export const EMAILJS_SERVICE = '';
+export const EMAILJS_TEMPLATE = '';
+export const EMAILJS_KEY = '';

@@ -4158,6 +4158,7 @@ const SPL_CYCLE = 900;
 const ease = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
 function splitAmt(t) { const c = t % SPL_CYCLE; return c < 360 ? 0 : c < 480 ? ease((c - 360) / 120) : c < 600 ? 1 : 1 - ease((c - 600) / 300); }
 export const splitClock = () => SPL.t;
+export const splitCuts = () => SPL.cuts;
 export function splitShake(t) { const c = t % SPL_CYCLE; return c >= 300 && c < 360 ? 0.4 + 0.6 * (c - 300) / 60 : c >= 360 && c < 480 ? 0.4 : c >= 600 && c < 900 ? 0.18 : 0; }
 function applySplit(carry = true) {
     if (!SPL.cuts.length) return;
@@ -4931,6 +4932,12 @@ function startMatchSequence(mode, cfg) {
 }
 
 /** Apply S.train to arena, p1/p2 characters, bot type */
+/** party training: a friend takes over the training dummy (p2) through the online room, and gives it back when they leave */
+export function trainAttach(name, char) {
+    S.online = 'host'; S.opponentName = name; S.peerChar = charOf(char).id;
+    p2.isAI = false; p2.diff = null; p2.char = S.peerChar; p2.name = name; p2.reset(true); p2.shieldHold = 0; p2.remoteAim = null; remote.helds = {}; resetSnapshotState();
+}
+export function trainDetach() { S.online = null; S.opponentName = null; applyTrainPrefs(); p2.reset(true); }
 export function applyTrainPrefs() {
     const t = ensureTrain();
     const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
@@ -5131,7 +5138,7 @@ function trackSnapRate() {
     }
     lastSnapAt = now;
 }
-const ownGuestFighter = () => S.match ? fighters[S.mySlot] : p1;
+const ownGuestFighter = () => S.spectating ? null : S.match ? fighters[S.mySlot] : p1;
 function guestSmooth() {
     const rt = performance.now() - interpMs;
     for (const f of (S.match ? fighters : [p1, p2])) {

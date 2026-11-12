@@ -2,7 +2,7 @@
 // a hazy sun, drifting clouds, floating islands, one giant waterfall and a huge castle very far off.
 // Collision is exactly Frontier's (the € and ¥ versions share the same rectangles); everything here is looks only.
 import * as THREE from 'three';
-import { STAGE, BLAST_ZONES, WORLD, splitShake, splitClock } from '../gameCore.js';
+import { STAGE, BLAST_ZONES, WORLD, splitShake, splitClock, splitCuts } from '../gameCore.js';
 import { wx, wy } from './space.js';
 
 // small seeded random so every client builds the same valley
@@ -303,6 +303,26 @@ export function buildHorizon(scene, { D }) {
     list.forEach((d, i) => { m4.makeScale(d.horiz ? DASH : TH, d.horiz ? TH : DASH, TH); m4.setPosition(d.x, d.y, 0); frame.setMatrixAt(i, m4); });
     root.add(frame);
 
+    // ---- the crack: jagged glowing lines on the top while the stage is about to split, and solid stone faces on every cut edge
+    const crackTex = ctex(128, 512, (g, w, h) => {
+        g.clearRect(0, 0, w, h);
+        const seed = rng(7), pts = []; let x = w / 2;
+        for (let y = 0; y <= h; y += 18) { x += (seed() - 0.5) * 44; x = Math.max(24, Math.min(w - 24, x)); pts.push([x, y]); }
+        const stroke = (col, lw, blur) => { g.shadowColor = '#ff9a3c'; g.shadowBlur = blur; g.strokeStyle = col; g.lineWidth = lw; g.lineJoin = 'miter'; g.beginPath(); pts.forEach(([a, b], i) => i ? g.lineTo(a, b) : g.moveTo(a, b)); g.stroke(); };
+        stroke('rgba(255,150,60,0.9)', 14, 22); stroke('#1b1410', 6, 0);
+        for (let i = 2; i < pts.length - 2; i += 2) { const [a, b] = pts[i], d = seed() < 0.5 ? -1 : 1; g.strokeStyle = '#1b1410'; g.lineWidth = 3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + d * (14 + seed() * 22), b + 8 + seed() * 14); g.stroke(); }
+    });
+    const stoneTex = ctex(256, 128, (g, w, h) => {
+        const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#e9e6df'); gr.addColorStop(0.5, '#c9c5bb'); gr.addColorStop(1, '#8f8c86'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+        const r2 = rng(11); g.strokeStyle = 'rgba(70,64,58,0.55)'; g.lineWidth = 2;
+        for (let i = 0; i < 9; i++) { let x = r2() * w, y = 0; g.beginPath(); g.moveTo(x, y); while (y < h) { x += (r2() - 0.5) * 26; y += 10 + r2() * 14; g.lineTo(x, y); } g.stroke(); }
+        g.fillStyle = 'rgba(255,255,255,0.18)'; for (let i = 0; i < 60; i++) g.fillRect(r2() * w, r2() * h, 2 + r2() * 5, 1 + r2() * 2);
+    });
+    const decals = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: crackTex, transparent: true, depthWrite: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.visible = false; m.renderOrder = 4; root.add(m); return m; });
+    const caps = [];
+    const capMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xffffff, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+    const getCap = (i) => { if (!caps[i]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(D, bodyH), capMat); m.visible = false; root.add(m); caps[i] = m; } return caps[i]; };
+
     // `stars` is only a handle the view toggles for quality / menu; Horizon has none
     const stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ transparent: true, opacity: 0 }));
     return {
@@ -325,6 +345,19 @@ export function buildHorizon(scene, { D }) {
                     c.g.position.set(cx + (wx(q.off) - wx(0)) + jx(k), jy(k), 0);
                 });
             } else if (clones.length) { stage.visible = true; clones.forEach(c => { c.g.visible = false; }); }
+            // crack lines on the top before it opens; stone faces on the cut edges while it is open
+            const cuts = splitCuts(), warn = cuts.length && !segs ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;
+            decals.forEach((d, i) => {
+                const on = warn > 0 && i < cuts.length; d.visible = on; if (!on) return;
+                d.position.set(cx - W / 2 + cuts[i] * W + jx(i + 9), topY + 0.8, 0); d.scale.set(70, D * 0.98, 1); d.material.opacity = 0.35 + 0.65 * warn;
+            });
+            const capY = topY - 6 - bodyH / 2;
+            for (let i = 0; i < 6; i++) {
+                const c = getCap(i), k = i >> 1, q = segs && segs[k], left = (i & 1) === 0;
+                const ok = q && (left ? k > 0 : k < segs.length - 1);
+                c.visible = !!ok; if (!ok) continue;
+                c.position.set((left ? wx(q.l) : wx(q.r)) + jx(k) + (left ? -0.6 : 0.6), capY + jy(k), 0); c.rotation.y = Math.PI / 2;
+            }
             if (STAGE.platforms.some(q => q.bx !== undefined)) platG.forEach((o, i) => o.g.position.set(wx(o.p.x + o.p.w / 2) + jx(i + 3), wy(o.p.y) + jy(i + 3), 0));
             for (const g of rocks) g.position.y = g.userData.base + Math.sin(t * g.userData.sp + g.userData.ph) * g.userData.amp;
         },

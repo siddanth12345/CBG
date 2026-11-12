@@ -1,7 +1,8 @@
 // The Borgs panel (friends): list with online dots, requests, and "add a borg by exact username".
 import { getBorgs, getRequests, onBorgs, removeBorg, isOnlineName, MAX_BORGS, removeIncoming } from './friends.js';
 import { ACC, displayName } from './account.js';
-import { sendBorgRequest, acceptRequest, declineRequest, cancelRequest, inviteBorg, inviteToLobby } from './net/inbox.js';
+import { sendBorgRequest, acceptRequest, declineRequest, cancelRequest, inviteBorg, inviteToLobby, inviteToParty } from './net/inbox.js';
+import { Party, createParty } from './net/party.js';
 import { Online } from './net/online.js';
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -36,6 +37,11 @@ export class BorgsUI {
         const { incoming, outgoing } = getRequests();
         if (a === 'remove') { removeBorg(name); return; }
         if (a === 'invite') { const r = await inviteBorg(name, '1v1'); this.say(r.msg, !r.ok); if (r.ok) { this.close(); this.onInviteSent(); } return; }
+        if (a === 'pinvite') {
+            if (!Party.role && !(await createParty())) { this.say(Party.note || 'Could not start a party.', true); return; }
+            if (Party.role !== 'leader') { this.say('Only the party leader can invite.', true); return; }
+            const r = await inviteToParty(name, Party.code); this.say(r.msg, !r.ok); return;
+        }
         if (a === 'lobbyinvite') { const r = await inviteToLobby(name); this.say(r.msg, !r.ok); return; }
         if (a === 'accept') { const r = await acceptRequest(incoming.find(x => x.id === id) || { id, from: name }); this.say(r.msg, !r.ok); return; }
         if (a === 'decline') declineRequest({ id });
@@ -60,6 +66,7 @@ export class BorgsUI {
                 const on = isOnlineName(b.name);
                 return `<div class="lm-row"><span class="lm-dot${on ? ' on' : ''}"></span><span class="lm-bname">${esc(b.name)}${b.splintered ? ' <i>(left)</i>' : ''}</span>
                     ${on && !b.splintered ? `<button class="lm-btn lm-btn-sm" data-act="${lobbyHost ? 'lobbyinvite' : 'invite'}" data-name="${esc(b.name)}">${lobbyHost ? 'Invite to lobby' : 'Invite to 1v1'}</button>` : ''}
+                    ${on && !b.splintered ? `<button class="lm-btn lm-btn-sm lm-btn-ghost" data-act="pinvite" data-name="${esc(b.name)}">Invite to party</button>` : ''}
                     <button class="lm-btn lm-btn-sm lm-btn-ghost" data-act="remove" data-name="${esc(b.name)}">Remove</button></div>`;
             }).join('');
             h += `<p class="lm-note">${bs.length} / ${MAX_BORGS} borgs. A green dot means they are online right now.</p>`;

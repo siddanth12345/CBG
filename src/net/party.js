@@ -11,11 +11,13 @@ const newCode = () => Array.from({ length: 4 }, () => CH[Math.floor(Math.random(
 export const Party = {
     role: null,                   // 'leader' | 'member' | null
     code: '', myId: '', members: [],   // [{ id, name }] leader first
-    note: '', t: null,
+    note: '', t: null, act: {},          // act: what each member is doing right now, by member id: { k: 'menu'|'training'|'tutorial'|'match'|'spec'|'solo', code, slot, h }
+    myAct: () => ({ k: 'menu' }),         // main.js fills this in
     onChange: () => {}, onGo: () => {},
 };
 let seen = {}, beat = 0, lastLeader = 0;
 const set = (note) => { Party.note = note || ''; Party.onChange(); };
+const sendAct = () => { if (Party.t) Party.t.send({ t: 'act', id: Party.myId, a: Party.myAct() }); };
 const roster = () => ({ t: 'roster', members: Party.members.map(m => ({ id: m.id, name: m.name })) });
 
 export function leaveParty(notify = true) {
@@ -24,7 +26,7 @@ export function leaveParty(notify = true) {
         Party.t.close();
     }
     clearInterval(beat); beat = 0;
-    Party.t = null; Party.role = null; Party.code = ''; Party.members = []; seen = {};
+    Party.t = null; Party.role = null; Party.code = ''; Party.members = []; Party.act = {}; seen = {};
     Party.onChange();
 }
 
@@ -42,14 +44,15 @@ export async function createParty() {
             }
             seen[m.id] = performance.now();
             Party.t.send({ t: 'welcome', to: m.id }); Party.t.send(roster()); Party.onChange();
-        } else if (m.t === 'ping' && seen[m.id] !== undefined) seen[m.id] = performance.now();
+        } else if (m.t === 'act' && m.a) { Party.act[m.id] = m.a; Party.onChange(); }
+        else if (m.t === 'ping' && seen[m.id] !== undefined) seen[m.id] = performance.now();
         else if (m.t === 'leave') { Party.members = Party.members.filter(x => x.id !== m.id); delete seen[m.id]; Party.t.send(roster()); Party.onChange(); }
     };
     beat = setInterval(() => {
         const now = performance.now();
         const before = Party.members.length;
         Party.members = Party.members.filter(x => x.id === 'leader' || now - (seen[x.id] || 0) < 9000);
-        Party.t.send(roster());
+        Party.t.send(roster()); sendAct();
         if (Party.members.length !== before) Party.onChange();
     }, 1500);
     set('Party created. Invite your borgs.');
@@ -70,6 +73,7 @@ export async function joinParty(code) {
         else if (m.t === 'roster' && welcomed) { lastLeader = performance.now(); Party.members = m.members; Party.onChange(); }
         else if (m.t === 'disband') { leaveParty(false); set('The party was disbanded'); }
         else if (m.t === 'kick' && m.to === Party.myId) { leaveParty(false); set('You were removed from the party'); }
+        else if (m.t === 'act' && m.a && welcomed) { Party.act[m.id] = m.a; Party.onChange(); }
         else if (m.t === 'go' && welcomed) Party.onGo(m);
     };
     const hello = () => Party.t && Party.t.send({ t: 'hello', id: Party.myId, name: displayName() });
@@ -78,7 +82,7 @@ export async function joinParty(code) {
     setTimeout(() => { if (!welcomed && Party.role === 'member') { leaveParty(false); set('No party with that code'); } }, 8000);
     beat = setInterval(() => {
         if (!Party.t) return;
-        Party.t.send({ t: 'ping', id: Party.myId });
+        Party.t.send({ t: 'ping', id: Party.myId }); if (welcomed) sendAct();
         if (welcomed && performance.now() - lastLeader > 9000) { leaveParty(false); set('Lost connection to the party'); }
     }, 2000);
     Party.onChange();

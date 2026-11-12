@@ -421,7 +421,7 @@ export class FighterModel {
             const c = document.createElement('canvas'); c.width = 768; c.height = 128;
             const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
-            s.scale.set(270, 42, 1); s.position.y = 72; s.visible = false; s.renderOrder = 21;
+            s.scale.set(270, 45, 1); s.position.y = 72; s.visible = false; s.renderOrder = 21;
             s.userData.canvas = c;
             this.root.add(s);
             return s;
@@ -987,9 +987,10 @@ export class FighterModel {
                 const g = c.getContext('2d');
                 g.clearRect(0, 0, c.width, c.height);
                 if (name) {
-                    g.font = '800 52px Inter, system-ui, sans-serif';
+                    let fs = 52; g.font = `800 ${fs}px Inter, system-ui, sans-serif`;
                     g.textAlign = 'center'; g.textBaseline = 'middle';
-                    const tw = Math.ceil(g.measureText(name).width);
+                    let tw = Math.ceil(g.measureText(name).width);
+                    if (tw > c.width - 80) { fs = Math.floor(fs * (c.width - 80) / tw); g.font = `800 ${fs}px Inter, system-ui, sans-serif`; tw = Math.ceil(g.measureText(name).width); }   // long names shrink to fit instead of being cut and squashed
                     const padX = 28, padY = 16;
                     const boxW = tw + padX * 2, boxH = 52 + padY * 2;
                     const bx = (c.width - boxW) / 2, by = (c.height - boxH) / 2;
@@ -1009,9 +1010,7 @@ export class FighterModel {
                     g.fillText(name, c.width / 2, c.height / 2 + 1);
                 }
                 this.lblName.material.map.needsUpdate = true;
-                // world scale ~3x previous (~90x14 -> ~270x42), width tracks name length a bit
-                const tw = name ? Math.min(320, 90 + name.length * 14) : 120;
-                this.lblName.scale.set(tw, 42, 1);
+                this.lblName.scale.set(270, 45, 1);        // always the canvas's own 6:1 shape, so the text is never stretched
             }
             this.lblName.visible = show && !!name;
             // hang/stun labels sit above the bigger name plate
