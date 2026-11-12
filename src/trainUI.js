@@ -23,6 +23,7 @@ function snap() {
     const t = ensureTrain();
     return {
         stage: t.stage || 'normal',
+        hazards: !!t.hazards,
         stun: t.stun ?? 30,
         lock: t.lock ?? 36,
         jumps: t.jumps,
@@ -38,6 +39,7 @@ function applySnap(s, live = true) {
     const t = ensureTrain();
     Object.assign(t, {
         stage: s.stage || 'normal',
+        hazards: !!s.hazards,
         stun: +s.stun || 30,
         lock: +s.lock || 36,
         jumps: s.jumps == null || s.jumps === '' ? null : +s.jumps,
@@ -191,6 +193,10 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.stage === 'horizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="horizon">€Horizon</button>
                     <button class="lm-btn lm-mini ${t.stage === 'bighorizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="bighorizon">¥Horizon</button>
                 </span></div>
+                <div class="lm-setrow"><span>Hazards</span><span>
+                    <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>
+                    <button class="lm-btn lm-mini ${t.hazards ? 'lm-btn-ghost' : ''}" data-hz="0">Off</button>
+                </span></div>
                 <div class="lm-setrow"><span>Stun (frames)</span><input data-k="stun" type="number" min="0" max="120" value="${t.stun}"></div>
                 <div class="lm-setrow"><span>Move cooldown (frames)</span><input data-k="lock" type="number" min="0" max="120" value="${t.lock}"></div>
                 <div class="lm-setrow"><span>Jumps (blank = character default)</span><input data-k="jumps" type="number" min="1" max="10" placeholder="default" value="${t.jumps == null ? '' : t.jumps}"></div>
@@ -230,6 +236,9 @@ export class TrainUI {
         if (this.msg) html += `<p class="lm-status">${esc(this.msg)}</p>`;
         this.body.innerHTML = html;
 
+        this.body.querySelectorAll('[data-hz]').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); ensureTrain().hazards = btn.dataset.hz === '1'; applySnap(snap(), true); this.render(); });
+        });
         // stage buttons via data-k on click path - wire stage buttons
         this.body.querySelectorAll('[data-v][data-k="stage"]').forEach(btn => {
             btn.addEventListener('click', (e) => {

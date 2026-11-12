@@ -22,6 +22,7 @@ export class View {
     constructor(canvas) {
         this.canvas = canvas;
         const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+        r.localClippingEnabled = true;            // the Horizon stage splits into clipped pieces
         this.pr = Math.min(window.devicePixelRatio || 1, 2);
         r.setPixelRatio(this.pr);
         this.q = 0; this.ft = 0; this.inMatch = undefined;

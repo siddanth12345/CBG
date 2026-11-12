@@ -636,6 +636,22 @@ export class Effects {
                 case 'pool': {            // Tide's whirlpool as ONE object that can be moved: a = radius, b = max life frames, c = id
                     this._poolId = e.c; fxEvents.unshift({ type: 'whirlpool', x: e.x, y: e.y, a: e.a, b: e.b, c: 'water' }); break;
                 }
+                case 'meteor': {          // a falling magma ball (Ember's fireball look): a, b = velocity per frame (game units), c = id
+                    const mt = magmaTextures(), g = new THREE.Group(), R = 44;
+                    const rock = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), new THREE.MeshStandardMaterial({ color: 0xffffff, map: mt.color, bumpMap: mt.height, bumpScale: 5, roughness: 0.92, metalness: 0.05, emissive: 0xffffff, emissiveMap: mt.glow, emissiveIntensity: 1.8 }));
+                    const glow = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(1.8), transparent: true, opacity: 0.4, blending: ADD, depthWrite: false, toneMapped: false }));
+                    glow.scale.setScalar(1.25); g.add(rock, glow); g.scale.setScalar(R); g.position.copy(pos); g.renderOrder = 6; this.scene.add(g);
+                    const vx = (e.a || 8) * 60, vy = -(e.b || 11) * 60;
+                    const ent = { obj: g, t: 0, dur: 8, step: () => {
+                        const dt = ent.t - (ent._l || 0); ent._l = ent.t;
+                        g.position.x += vx * dt; g.position.y += vy * dt; rock.rotation.x += dt * 4; rock.rotation.y += dt * 3;
+                        if (Math.random() < 0.8) this.spray(g.position.clone(), Math.atan2(-vy, -vx), Math.random() < 0.5 ? '#fb923c' : '#fde047', 1, 260, 0.16, 0.35);
+                        if (Math.random() < 0.4) this.sparks(g.position.clone(), '#fef3c7', 1, 120, 0.3);
+                    }, free: () => { rock.geometry.dispose(); rock.material.dispose(); glow.geometry.dispose(); glow.material.dispose(); } };
+                    this.timed.push(ent); (this._byId || (this._byId = new Map())).set('mt' + e.c, ent);
+                    break;
+                }
+                case 'meteorend': { const en = this._byId && this._byId.get('mt' + e.c); if (en) en.dur = en.t; break; }
                 case 'poolmove': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.obj.userData.px = pos.x; break; }
                 case 'poolend': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.3); break; }
                 case 'twister': {         // Zephyr's Roaming Twister: a = +/- radius (sign = travel direction), b = life frames, c = id. A visible spinning funnel with debris.

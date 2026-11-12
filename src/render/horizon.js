@@ -2,7 +2,7 @@
 // a hazy sun, drifting clouds, floating islands, one giant waterfall and a huge castle very far off.
 // Collision is exactly Frontier's (the € and ¥ versions share the same rectangles); everything here is looks only.
 import * as THREE from 'three';
-import { STAGE, BLAST_ZONES, WORLD } from '../gameCore.js';
+import { STAGE, BLAST_ZONES, WORLD, splitShake, splitClock } from '../gameCore.js';
 import { wx, wy } from './space.js';
 
 // small seeded random so every client builds the same valley
@@ -45,7 +45,7 @@ const glowTex = (inner, outer = 'rgba(255,255,255,0)') => ctex(256, 256, (g, w, 
 
 export function buildHorizon(scene, { D }) {
     const root = new THREE.Group(); scene.add(root);
-    const anim = [];
+    const anim = [], clones = [];
     const W = STAGE.width, H = STAGE.height;
     const topY = wy(STAGE.y), cx = wx(STAGE.x + W / 2);
     // the whole backdrop is designed for the small arena and scaled up with the big one
@@ -147,8 +147,9 @@ export function buildHorizon(scene, { D }) {
     const lk = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, pr * 0.22, pr * 2.3), mGold); lk.position.set(-W * 0.27, topY + pillarH + pr * 0.35, -D / 2 - pr * 1.6); stage.add(lk);
 
     // ------------------------------------------------------------ the soft platforms (same positions as Frontier)
+    const platG = [];
     for (const p of STAGE.platforms || []) {
-        const g = new THREE.Group(); g.position.set(wx(p.x + p.w / 2), wy(p.y), 0); root.add(g);
+        const g = new THREE.Group(); g.position.set(wx(p.x + p.w / 2), wy(p.y), 0); root.add(g); platG.push({ g, p });
         const th = 26, pd = D * 0.55;
         const sl = new THREE.Mesh(new THREE.BoxGeometry(p.w, th, pd), mSilver); sl.position.y = -th / 2; sl.castShadow = true; sl.receiveShadow = true; g.add(sl);
         const cp = new THREE.Mesh(new THREE.BoxGeometry(p.w + 6, 5, pd + 4), mMarble); cp.position.y = 1; g.add(cp);
@@ -308,6 +309,23 @@ export function buildHorizon(scene, { D }) {
         root, stage, topY, W, D, decor, stars, rocks, theme: 'horizon', sc, sky: scene.userData.horizonSky,
         update(t, dt) {
             for (const f of anim) f(t, dt);
+            // ---- the split hazard: the stage is drawn as up to three clipped copies that drift apart (with a shake)
+            const segs = STAGE.segs, shk = segs || platG.some(o => o.p.bx !== undefined) ? splitShake(splitClock()) : 0;
+            const jx = (k) => shk ? Math.sin(t * 61 + k * 2.3) * 5 * shk : 0, jy = (k) => shk ? Math.sin(t * 47 + k * 1.7) * 3 * shk : 0;
+            if (segs && segs.length) {
+                if (!clones.length) for (let k = 0; k < 3; k++) {
+                    const g = stage.clone(true), pl = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)];
+                    g.traverse((o) => { if (o.isMesh) { o.castShadow = false; const cl = (m) => { const c = m.clone(); c.clippingPlanes = pl; return c; }; o.material = Array.isArray(o.material) ? o.material.map(cl) : cl(o.material); } });
+                    root.add(g); clones.push({ g, pl });
+                }
+                stage.visible = false;
+                clones.forEach((c, k) => {
+                    const q = segs[k]; c.g.visible = !!q; if (!q) return;
+                    c.pl[0].constant = -wx(q.l); c.pl[1].constant = wx(q.r);
+                    c.g.position.set(cx + (wx(q.off) - wx(0)) + jx(k), jy(k), 0);
+                });
+            } else if (clones.length) { stage.visible = true; clones.forEach(c => { c.g.visible = false; }); }
+            if (STAGE.platforms.some(q => q.bx !== undefined)) platG.forEach((o, i) => o.g.position.set(wx(o.p.x + o.p.w / 2) + jx(i + 3), wy(o.p.y) + jy(i + 3), 0));
             for (const g of rocks) g.position.y = g.userData.base + Math.sin(t * g.userData.sp + g.userData.ph) * g.userData.amp;
         },
         ledgeY: topY,

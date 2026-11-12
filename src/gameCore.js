@@ -59,6 +59,7 @@ const WORLD = {
 function pushOutOfStage(f, ox, oy) {
     const L = STAGE.x, R = STAGE.x + STAGE.width, T = STAGE.y, B = STAGE.y + STAGE.height, hw = f.width / 2, hh = f.height / 2;
     if (f.x + hw <= L || f.x - hw >= R || f.y + hh <= T || f.y - hh >= B) return;
+    if (STAGE.segs && !STAGE.segs.some(q => f.x + hw > q.l && f.x - hw < q.r)) return;          // inside a gap of the split stage
     if (oy + hh <= T + 1) f.y = T - hh;
     else if (oy - hh >= B - 1) f.y = B + hh;
     else if (ox + hw <= L + 1) f.x = L - hw;
@@ -98,6 +99,9 @@ const BLAST_ZONES = {
     bottom: 2423
 };
 STAGE.platforms = [];                       // soft (one-way) platforms: { x, y, w } with x = left edge, y = top surface
+STAGE.segs = null;                          // Horizon hazard: while the stage is split, its solid pieces [{l, r, off}] (null = one piece)
+const SPL = { t: 0, cuts: [], base: null, off: [] };       // the Horizon split: clock, cut positions (0..1 of the stage), original stage x / width, current piece offsets
+const onStageX = (px, pad = 0) => STAGE.segs ? STAGE.segs.some(q => px > q.l - pad && px < q.r + pad) : (px > STAGE.x - pad && px < STAGE.x + STAGE.width + pad);
 
 /** the normal 1v1 / bot arena, and the custom-match arena: stage + kill zone 2.5x bigger, with Battlefield-style platforms */
 const ARENAS = {
@@ -124,7 +128,7 @@ const ARENAS = {
     },
 };
 export function setArena(kind, theme = 'frontier') {
-    S.hazMap = null;
+    SPL.base = null; SPL.cuts = []; SPL.t = 0; SPL.off = []; STAGE.segs = null;
     const a = ARENAS[kind] || ARENAS.normal;
     Object.assign(WORLD, a.world);
     Object.assign(STAGE, a.stage);
@@ -136,9 +140,9 @@ export function setArena(kind, theme = 'frontier') {
 }
 /** map ids: frontier (small), big (big Frontier), horizon (small), bighorizon, and the random picks rand / randS / randB */
 export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon'];
-export const HAZ_IDS = ['frontierH', 'bigH', 'horizonH', 'bighorizonH'];      // the same four maps with a hazard: small (€) = lightning storm, big (¥) = geysers
+export const HAZ_IDS = ['frontierH', 'bigH', 'horizonH', 'bighorizonH'];      // old ids of the hazard maps: hazards are an option now, these just load the plain map
 export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
-export const cleanMap = (m) => (MAP_IDS.includes(m) || HAZ_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
+export const cleanMap = (m) => HAZ_IDS.includes(m) ? m.replace(/H$/, '') : (MAP_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
 export function resolveMap(m) {
     m = cleanMap(m);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -151,7 +155,6 @@ export function setArenaByMap(m) {
     m = resolveMap(m);
     const base = m.replace(/H$/, '');
     setArena(base === 'frontier' || base === 'horizon' ? 'normal' : 'lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : 'frontier');
-    S.hazMap = HAZ_IDS.includes(m) ? ((base === 'frontier' || base === 'horizon') ? 'storm' : 'geyser') : null;
     resetHazards();
     return m;
 }
@@ -199,7 +202,7 @@ export const trainJumps = (f) => {
 export const DEFAULT_TRAIN = {
     stage: 'normal', // 'normal' | 'lobby' (big Frontier)
     stun: 30, lock: 36, jumps: null, airF: 2, walk: 1,
-    char: null, botType: 'static', botChar: null,
+    char: null, botType: 'static', botChar: null, hazards: false,
 };
 export function ensureTrain() {
     if (!S.train) S.train = { ...DEFAULT_TRAIN, char: null, botChar: null };
@@ -491,7 +494,7 @@ class Fighter {
         this.zapN = 0; this.zapT = 0; this.zapImmuneT = 0; this.swordGroundCd = false; this._swordRemain = 0; this.comboN = 0; this.comboT = 0; this.comboN = 0; this.comboT = 0;        // zapImmuneT: lightning trails ignore this fighter (1.3 s after a trail stun ends) // Volt's stuns on this fighter in the last 10 s (the 3rd one becomes a normal knockback instead)
         this.riposteT = 0; this.riposteAfter = 0; this.riposteCd = 0; this.stabT = 0;   // Bulwark's counter: open window / missed aftermath / cooldown / stab animation
         this.swordRide = false;              // Bulwark's Up-F: carried up on his floating sword
-        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this._stunAfter = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
+        this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this.slowT = 0; this._stunAfter = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
            // cloakT: Umbra is invisible to everyone but himself
            // backT: lying on the back after Bulwark's stab (frames left)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
@@ -619,6 +622,7 @@ class Fighter {
         if (this.buryT > 0) this.buryT--;
         if (this._kcInv > 0) this._kcInv--;
         if (this._wpT > 0) this._wpT--;
+        if (this.slowT > 0) this.slowT--;
         if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
@@ -1468,7 +1472,7 @@ class Fighter {
     dropAt(px, dr) {
         const y0 = this.y - 520, v = dr.speed || 26;
         let yl = Math.min(BLAST_ZONES.bottom, STAGE.y + 40), surface = false;                       // they keep falling until a stage / platform stops them, or they leave through the kill zone
-        if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > y0 && STAGE.y < yl) { yl = STAGE.y; surface = true; }
+        if (onStageX(px) && STAGE.y > y0 && STAGE.y < yl) { yl = STAGE.y; surface = true; }
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > y0 && pl.y < yl) { yl = pl.y; surface = true; }
         const frames = Math.max(2, Math.ceil((yl - y0) / v));
         drops.push({ x: px, y: y0, yl, off: 0, v, surface, owner: this, hit: new Set(), ...dr });
@@ -1492,7 +1496,7 @@ class Fighter {
         const v0 = 12.15, N = 16 + 2 * rem, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
         const yA = y0 - v0 * N / 2;
         let yl = Math.min(BLAST_ZONES.bottom, STAGE.y + 40), surface = false;
-        if (px > STAGE.x && px < STAGE.x + STAGE.width && STAGE.y > yA && STAGE.y < yl) { yl = STAGE.y; surface = true; }
+        if (onStageX(px) && STAGE.y > yA && STAGE.y < yl) { yl = STAGE.y; surface = true; }
         for (const pl of STAGE.platforms || []) if (px >= pl.x && px <= pl.x + pl.w && pl.y > yA && pl.y < yl) { yl = pl.y; surface = true; }
         const stop = yl - (surface ? SWORD_OFF : 0);
         let F = N + 1; while (yA + 0.5 * g * (F - N) * (F - N) < stop && F < 400) F++;
@@ -2099,6 +2103,12 @@ class Fighter {
     }
 
     checkStageCollision(bounce = false) {
+        if (!STAGE.segs) return this._stageCollide(bounce);
+        const x0 = STAGE.x, w0 = STAGE.width;                 // the split stage: collide with each solid piece in turn
+        for (const q of STAGE.segs) { STAGE.x = q.l; STAGE.width = q.r - q.l; this._stageCollide(bounce); }
+        STAGE.x = x0; STAGE.width = w0;
+    }
+    _stageCollide(bounce = false) {
         // Use actual frame motion (x - px) when vx/vy were zeroed by a special (rocket, dash, etc.)
         // so fast moves cannot tunnel through the stage or platforms.
         const mx = this.x - (this.px !== undefined ? this.px : this.x);
@@ -3306,7 +3316,7 @@ function releasePins(it, recharge) {
 
 function landOn(it) {
     const bottom = it.y + it.r, prevBottom = it.py + it.r;
-    if (it.x > STAGE.x - 6 && it.x < STAGE.x + STAGE.width + 6 && prevBottom <= STAGE.y + 4 && bottom >= STAGE.y) { it.y = STAGE.y - it.r; return true; }
+    if (onStageX(it.x, 6) && prevBottom <= STAGE.y + 4 && bottom >= STAGE.y) { it.y = STAGE.y - it.r; return true; }
     if (it.vy >= 0) for (const p of STAGE.platforms) {
         if (it.x > p.x && it.x < p.x + p.w && prevBottom <= p.y + 4 && bottom >= p.y) { it.y = p.y - it.r; return true; }
     }
@@ -4099,38 +4109,132 @@ function updatePillars() {
     }
 }
 
-// ------------------------------------------------------------ map hazards: (€) maps get a lightning storm, (¥) maps get geysers. Host-only; guests just see the effects and the hits.
-const HAZ = { t: 0, list: [] };
-function resetHazards() { HAZ.t = 0; HAZ.list.length = 0; }
+// ------------------------------------------------------------ stage hazards (an option for custom matches and training). Host-only; guests just see the effects and the hits.
+// Every map: lightning strikes + geysers (also on the platforms). Frontier: falling meteors. Horizon: the stage splits into pieces that drift apart and come back.
+const HAZ = { t: 0, list: [], met: [] };
+let metId = 0;
+function resetHazards() {
+    if (SPL.base) { STAGE.x = SPL.base.x; STAGE.width = SPL.base.w; for (const q of STAGE.platforms) if (q.bx !== undefined) { q.x = q.bx; delete q.bx; } }
+    HAZ.t = 0; HAZ.list.length = 0; HAZ.met.length = 0; SPL.base = null; SPL.cuts = []; SPL.t = 0; SPL.off = []; STAGE.segs = null;
+}
 function hazardHit(f, h) {
     f.interrupt && f.interrupt();
+    if (h.kind === 'meteor') {
+        f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
+        f.hitstun = Math.max(f.hitstun, 26); fx('hit', f.x, f.y, 25, -0.5); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
+        return;
+    }
     const storm = h.kind === 'storm', dir = f.x >= h.x ? 1 : -1;
     f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
     f.hitstun = Math.max(f.hitstun, storm ? 28 : 22); fx('hit', f.x, f.y, 25, dir > 0 ? -0.6 : Math.PI + 0.6); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
 }
-function updateHazards() {
-    if (!S.hazMap || S.online === 'guest' || S.gameState !== 'playing' || S.kcPause > 0) return;
-    HAZ.t++;
-    const storm = S.hazMap === 'storm', style = storm ? 'volt' : 'water';
-    if (HAZ.t > 180 && HAZ.t % (storm ? 210 : 170) === 0) {
-        const alive = fighters.filter(isAlive), lo = STAGE.x + 70, hi = STAGE.x + STAGE.width - 70, xs = [];
-        if (storm) xs.push(alive.length && Math.random() < 0.6 ? Math.max(lo, Math.min(hi, alive[Math.floor(Math.random() * alive.length)].x)) : lo + Math.random() * (hi - lo));
-        else { const cols = [0.18, 0.5, 0.82].sort(() => Math.random() - 0.5).slice(0, 2); for (const c of cols) xs.push(STAGE.x + STAGE.width * c); }
-        for (const x of xs) {
-            const h = { kind: storm ? 'storm' : 'geyser', x, w: storm ? 90 : 120, h: storm ? 760 : 380, dmg: storm ? 13 : 8, t: 0, warn: storm ? 55 : 50, hit: new Set() };
-            HAZ.list.push(h); fx('pillar', x, STAGE.y, h.w, h.h, style); createParticles(x, STAGE.y - 6, storm ? '#fde047' : '#7dd3fc', 8);
+/** every solid top a strike can come from: the stage piece(s) and the platforms */
+function hazSurfaces() {
+    const out = [];
+    const add = (l, r, y) => { l += 30; r -= 30; if (r < l) { const m = (l + r) / 2; l = r = m; } out.push({ x0: l, x1: r, y, w: r - l + 1 }); };
+    if (STAGE.segs) for (const q of STAGE.segs) add(q.l, q.r, STAGE.y); else add(STAGE.x + 40, STAGE.x + STAGE.width - 40, STAGE.y);
+    for (const q of STAGE.platforms) add(q.x, q.x + q.w, q.y);
+    return out;
+}
+const pickSurface = (ss) => { let n = Math.random() * ss.reduce((a, q) => a + q.w + 200, 0); for (const q of ss) { n -= q.w + 200; if (n <= 0) return q; } return ss[0]; };
+function spawnPillar(kind, x, y) {
+    const storm = kind === 'storm', h = { kind, x, y, w: storm ? 90 : 120, h: storm ? 760 : 380, dmg: storm ? 13 : 8, t: 0, warn: storm ? 55 : 50, hit: new Set() };
+    HAZ.list.push(h); fx('pillar', x, y, h.w, h.h, (storm ? 'volt' : 'water') + '@'); createParticles(x, y - 6, storm ? '#fde047' : '#7dd3fc', 8);
+}
+function meteorBurst(m, dmg = 12) {
+    fx('meteorend', m.x, m.y, 0, 0, m.id); fx('explosion', m.x, m.y, 100, 0.3, 'fire'); createParticles(m.x, m.y, '#fb923c', 16); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 11);
+    for (const f of fighters) if (isAlive(f) && f.invincibleTimer <= 0 && Math.hypot(f.x - m.x, f.y - m.y) < 110 + f.width * 0.4) hazardHit(f, { kind: 'meteor', x: m.x, dmg });
+}
+function spawnMeteor() {
+    const K = Math.max(1, WORLD.height / 2100), vx = 8.5, vy = 11.5, sy = STAGE.y - 1450 * K, alive = fighters.filter(isAlive);
+    let tx, ty;
+    if (alive.length && Math.random() < 0.55) { const f = alive[Math.floor(Math.random() * alive.length)]; tx = f.x + (Math.random() - 0.5) * 120; ty = f.y; }
+    else { const q = pickSurface(hazSurfaces()); tx = q.x0 + Math.random() * (q.x1 - q.x0); ty = q.y - 20; }
+    const T = Math.max(20, (ty - sy) / vy), m = { id: ++metId, x: tx - vx * T, y: sy, vx, vy, r: 44 };
+    HAZ.met.push(m); fx('meteor', m.x, m.y, vx, vy, m.id);
+}
+// ---- the Horizon split: 5 s whole, 5 s apart (1 s of shaking, then a smooth drift), 5 s coming back together
+const SPL_CYCLE = 900;
+const ease = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+function splitAmt(t) { const c = t % SPL_CYCLE; return c < 360 ? 0 : c < 480 ? ease((c - 360) / 120) : c < 600 ? 1 : 1 - ease((c - 600) / 300); }
+export const splitClock = () => SPL.t;
+export function splitShake(t) { const c = t % SPL_CYCLE; return c >= 300 && c < 360 ? 0.4 + 0.6 * (c - 300) / 60 : c >= 360 && c < 480 ? 0.4 : c >= 600 && c < 900 ? 0.18 : 0; }
+function applySplit(carry = true) {
+    if (!SPL.cuts.length) return;
+    if (!SPL.base) SPL.base = { x: STAGE.x, w: STAGE.width };
+    const X0 = SPL.base.x, W0 = SPL.base.w, fr = [0, ...SPL.cuts, 1], n = fr.length - 1, G = W0 * 0.085 * splitAmt(SPL.t);
+    const offs = []; for (let k = 0; k < n; k++) offs.push(n === 2 ? (k === 0 ? -G : G) : (k - 1) * G);
+    const prev = SPL.off.length === n ? SPL.off : new Array(n).fill(0);
+    const pieceOf = (bx) => { for (let k = 0; k < n; k++) if (bx < X0 + fr[k + 1] * W0) return k; return n - 1; };
+    if (carry) {
+        for (const f of fighters) {
+            if (!isAlive(f) || !f.grounded || f.isHanging) continue;
+            const bottom = f.y + f.height / 2;
+            if (Math.abs(bottom - STAGE.y) < 4) { const k = pieceOf(f.x - prev[pieceOf(f.x)]); f.x += offs[k] - prev[k]; }
         }
+        for (const q of STAGE.platforms) {
+            if (q.bx === undefined) q.bx = q.x;
+            const k = pieceOf(q.bx + q.w / 2), nx = q.bx + offs[k], d = nx - q.x;
+            if (d) for (const f of fighters) if (isAlive(f) && f.grounded && !f.isHanging && Math.abs(f.y + f.height / 2 - q.y) < 4 && f.x > q.x - 6 && f.x < q.x + q.w + 6) f.x += d;
+        }
+    }
+    for (const q of STAGE.platforms) { if (q.bx === undefined) q.bx = q.x; q.x = q.bx + offs[pieceOf(q.bx + q.w / 2)]; }
+    SPL.off = offs;
+    if (G < 0.01) { STAGE.segs = null; STAGE.x = X0; STAGE.width = W0; return; }
+    STAGE.segs = offs.map((o, k) => ({ l: X0 + fr[k] * W0 + o, r: X0 + fr[k + 1] * W0 + o, off: o }));
+    STAGE.x = STAGE.segs[0].l; STAGE.width = STAGE.segs[n - 1].r - STAGE.segs[0].l;
+}
+function updateHazards() {
+    if (!S.hazards || S.gameState !== 'playing' || S.kcPause > 0) return;
+    const horizon = S.theme === 'horizon';
+    if (S.online === 'guest') { if (horizon && SPL.cuts.length) { SPL.t++; applySplit(false); } return; }
+    HAZ.t++;
+    if (HAZ.t > 180 && HAZ.t % 210 === 0) {                                  // lightning: on a fighter's stage / platform (or anywhere)
+        const alive = fighters.filter(isAlive), ss = hazSurfaces();
+        let q = null, x = 0;
+        if (alive.length && Math.random() < 0.6) {
+            const f = alive[Math.floor(Math.random() * alive.length)];
+            q = ss.filter(z => f.x > z.x0 - 40 && f.x < z.x1 + 40 && z.y >= f.y - 40).sort((a, b) => a.y - b.y)[0];
+            if (q) x = Math.max(q.x0, Math.min(q.x1, f.x));
+        }
+        if (!q) { q = pickSurface(ss); x = q.x0 + Math.random() * (q.x1 - q.x0); }
+        spawnPillar('storm', x, q.y);
+    }
+    if (HAZ.t > 180 && HAZ.t % 260 === 120) {                                // geysers: two at once, from the stage or the platforms
+        const ss = hazSurfaces(), used = new Set();
+        for (let i = 0; i < 2; i++) { const q = pickSurface(ss); if (used.has(q) && ss.length > 1) continue; used.add(q); spawnPillar('geyser', q.x0 + Math.random() * (q.x1 - q.x0), q.y); }
     }
     for (let i = HAZ.list.length - 1; i >= 0; i--) {
         const h = HAZ.list[i]; h.t++;
-        if (h.t === h.warn) { fx('pillar', h.x, STAGE.y, h.w, h.h, style + '!'); audio.playZap(); S.screenShake = Math.max(S.screenShake, 6); }
+        if (h.t === h.warn) { fx('pillar', h.x, h.y, h.w, h.h, (h.kind === 'storm' ? 'volt' : 'water') + '!@'); audio.playZap(); S.screenShake = Math.max(S.screenShake, 6); }
         if (h.t >= h.warn && h.t < h.warn + 8) {
             for (const f of fighters) {
                 if (!isAlive(f) || h.hit.has(f) || f.invincibleTimer > 0) continue;
-                if (Math.abs(f.x - h.x) < h.w / 2 + f.width / 2 && f.y < STAGE.y + 40 && f.y > STAGE.y - h.h) { h.hit.add(f); hazardHit(f, h); }
+                if (Math.abs(f.x - h.x) < h.w / 2 + f.width / 2 && f.y < h.y + 40 && f.y > h.y - h.h) { h.hit.add(f); hazardHit(f, h); }
             }
         }
         if (h.t >= h.warn + 8) HAZ.list.splice(i, 1);
+    }
+    if (!horizon) {                                                          // Frontier: meteors fall diagonally from the top left
+        if (HAZ.t > 240 && HAZ.t % 170 === 0) spawnMeteor();
+        const surf = [{ l: STAGE.x, r: STAGE.x + STAGE.width, y: STAGE.y }, ...STAGE.platforms.map(q => ({ l: q.x, r: q.x + q.w, y: q.y }))];
+        for (let i = HAZ.met.length - 1; i >= 0; i--) {
+            const m = HAZ.met[i], py = m.y; m.x += m.vx; m.y += m.vy;
+            let boom = fighters.some(f => isAlive(f) && f.invincibleTimer <= 0 && Math.hypot(f.x - m.x, f.y - m.y) < m.r + f.width * 0.4);
+            if (!boom) for (const q of surf) if (m.x > q.l - 10 && m.x < q.r + 10 && py + m.r <= q.y && m.y + m.r >= q.y) { boom = true; break; }
+            if (boom) { meteorBurst(m); HAZ.met.splice(i, 1); }
+            else if (m.y > BLAST_ZONES.bottom || m.x > BLAST_ZONES.right + 400) { fx('meteorend', m.x, m.y, 0, 0, m.id); HAZ.met.splice(i, 1); }
+        }
+    } else {                                                                 // Horizon: the stage splits at random places
+        SPL.t++;
+        const c = SPL.t % SPL_CYCLE;
+        if (c === 300) {
+            SPL.off = [];
+            SPL.cuts = Math.random() < 0.5 ? [0.3 + Math.random() * 0.4] : [0.2 + Math.random() * 0.2, 0.6 + Math.random() * 0.2];
+            SPL.cuts = SPL.cuts.map(v => Math.round(v * 1000) / 1000);
+        }
+        if (c >= 300 && c < 360 && c % 6 === 0) S.screenShake = Math.max(S.screenShake, 2 + 3 * (c - 300) / 60);
+        if (SPL.cuts.length) applySplit();
     }
 }
 
@@ -4172,20 +4276,23 @@ function enterWhirl(t) {
     }
     return false;
 }
-function burstOut(w, f) {
-    f.buryT = 0; f._wantOut = false; f._wpT = 150; f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; f.grounded = false;
-    launch(w.owner, f, { damage: 0, bkb: 13, kbg: 0.9, angle: -1.35, x: w.x, y: f.y, hs: 32, stunAfter: 36 });        // thrown upward, then 0.6 s stun
-    fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 16); S.screenShake = Math.max(S.screenShake, 5);
-}
-/** Tide jumps (or is thrown) out of the pool: everyone buried in it bursts out, and foes close by get knocked away (no damage) */
+/** The whirlpool disappears (timer ran out, or Tide jumped out): a burst through the whole pool hitbox that ignores i-frames, knocks everyone inside (buried or not) away
+ *  like Zephyr's tornado release (no damage), and leaves Tide stunned 0.6 s and slowed to half walk speed for 1 s */
 function popOut(w, t) {
     for (const f of foesOf(t)) {
         if (!isAlive(f)) continue;
-        if (w.caught && w.caught.has(f)) { w.caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
-        if (f.invincibleTimer > 0 || f._wpT > 0) continue;
-        if (Math.abs(f.x - w.x) < w.r * 1.5 + f.width / 2 && Math.abs(f.y - w.y) < w.r + f.height) { f._wpT = 60; launch(t, f, { damage: 0, bkb: 13, kbg: 0.95, angle: -1.3, x: w.x, y: f.y, hs: 32, stunAfter: 36 }); }
+        const buried = !!(w.caught && w.caught.has(f)), inside = Math.abs(w.x - f.x) <= w.r + f.width * 0.35 && w.y - f.y <= w.r + f.height * 0.5 && f.y <= w.y + f.height;
+        if (!buried && !inside) continue;
+        if (buried) w.caught.delete(f);
+        const dir = f.x > w.x + 2 ? 1 : f.x < w.x - 2 ? -1 : (t.facing || 1);
+        f.buryT = 0; f._wantOut = false; f._wpN = 0; f._wpT = 0; f.invincibleTimer = 0; f.zapImmuneT = 0;
+        if (buried) { f.y = Math.min(f.y, w.y - f.height * 0.5); f.px = f.x; f.py = f.y; }
+        f.grounded = false;
+        launch(t, f, { damage: 0, bkb: 10, kbg: 0.95, angle: -0.75, x: dir > 0 ? f.x - 1 : f.x + 1, y: f.y });
+        fx('gust', f.x, w.y, 110, 0, 'water'); createParticles(f.x, w.y - 20, '#7dd3fc', 12);
     }
-    fx('gust', w.x, w.y, w.r * 1.3, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playHit(true);
+    if (isAlive(t)) { t.clashStunTimer = Math.max(t.clashStunTimer, 36); t.slowT = 60; }
+    fx('gust', w.x, w.y, w.r * 1.6, 0, 'water'); createParticles(w.x, w.y - 20, '#7dd3fc', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playHit(true);
 }
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
@@ -4660,7 +4767,7 @@ export function startDemo(map, chars) {
     if (S.gameState !== 'start' && !S.demo) return null;
     S.demo = true; S.gameMode = 'demo'; S.online = null; audio.muted = true;
     S.match = { teams: false, startDamage: 0, stocks: 99, mode: 'stock', timeLimit: 5, items: { on: false, types: [], interval: 15 } };
-    S.matchCfg = null; S.mySlot = 2; S.winnerRole = null;
+    S.matchCfg = null; S.mySlot = 2; S.winnerRole = null; S.hazards = false;
     const m = setArenaByMap(map || 'rand');
     const pool = DEMO_CHARS.slice(), pick = () => pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
     const cs = chars || [pick(), pick()];
@@ -4694,9 +4801,10 @@ function startMatchSequence(mode, cfg) {
         S.itemTimer = Math.round(S.match.items.interval * 30);
         S.mySlot = cfg.mySlot || 0;
         S.matchCfg = cfg;
+        S.hazards = !!cfg.hazards;
         cfg.map = setArenaByMap(cfg.map);                     // a random pick is resolved here (the host's choice is sent to guests already resolved)
     } else {
-        S.match = null; S.mySlot = 0; S.matchCfg = null;
+        S.match = null; S.mySlot = 0; S.matchCfg = null; S.hazards = S.gameMode === 'training' && !!ensureTrain().hazards;
         if (S.gameMode === 'easy' || S.gameMode === 'medium' || S.gameMode === 'hard') setArenaByMap('rand');     // bot modes: a random map every game
         else if (S.arena !== 'normal' || S.theme !== 'frontier') setArena('normal');
         for (let i = 2; i < fighters.length; i++) fighters[i].active = false;
@@ -4828,6 +4936,7 @@ export function applyTrainPrefs() {
     const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
     const kind = (stg === 'lobby' || stg === 'bighorizon') ? 'lobby' : 'normal', theme = (stg === 'horizon' || stg === 'bighorizon') ? 'horizon' : 'frontier';
     if (S.arena !== kind || S.theme !== theme) { setArena(kind, theme); placeDuel(true); }
+    if (!!S.hazards !== !!t.hazards) { S.hazards = !!t.hazards; resetHazards(); S.fxClear++; }
     if (t.char) { p1.char = charOf(t.char).id; }
     else p1.char = getMyChar();
     p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;
@@ -4899,7 +5008,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (1 + perkOf(f, 'walk'));   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (f.slowT > 0 ? 0.5 : 1) * (1 + perkOf(f, 'walk'));   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -5002,7 +5111,7 @@ export function snapshot() {
         o: orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0 })),
         it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
-        sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
+        sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0, sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
         ev,
     };
 }
@@ -5050,7 +5159,7 @@ function guestSmooth() {
                 const dir = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
                 f._held = dir !== 0 && dir === f._heldDir ? f._held + 1 : (dir !== 0 ? 1 : 0); f._heldDir = dir;
                 const free = f.grounded && !f.sx && !f.activeMove && !f.isShielding && !f.attackTimer;
-                const walk = 8.5 * charOf(f.char).walk * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1);
+                const walk = 8.5 * charOf(f.char).walk * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (f.slowT > 0 ? 0.5 : 1);
                 const lead = free && dir ? Math.max(0, dir * walk * Math.min(lat, f._held) - (f.vx || 0) * Math.min(lat, f._held)) : 0;
                 const tx = last.x + (f.vx || 0) * lat + lead, ty = last.y + (f.vy || 0) * lat * 0.6;
                 f._px = f._px === undefined ? tx : f._px + (tx - f._px) * 0.5; f._py = f._py === undefined ? ty : f._py + (ty - f._py) * 0.5;
@@ -5111,6 +5220,7 @@ export function applySnapshot(s) {
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
     for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
     if (s.tl) S.timeLeft = s.tl;
+    if (s.sp) { SPL.t = s.sp[0]; SPL.cuts = s.sp.slice(1); applySplit(false); }
     if (s.sd) {
         S.sudden = true;
         S.sdT = s.sdt || 0;
@@ -5152,7 +5262,7 @@ export function applySnapshot(s) {
 const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0 });
+    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
     if (rec.length > REC_FRAMES) rec.shift();
 }
 function applyReplayFrame(fr) {
@@ -5180,6 +5290,7 @@ function applyReplayFrame(fr) {
     S.screenShake = fr.sh || 0;
     for (const e of fr.fx || []) { fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 }); }
     for (const q of fr.pt || []) createParticles(q[0], q[1], q[2], q[3]);
+    if (fr.sp) { SPL.t = fr.sp[0]; SPL.cuts = fr.sp.slice(1); applySplit(false); }
     if (fr.bz) { BLAST_ZONES.left = fr.bz[0]; BLAST_ZONES.right = fr.bz[1]; BLAST_ZONES.top = fr.bz[2]; BLAST_ZONES.bottom = fr.bz[3]; S.sudden = !!fr.sd; S.sdT = fr.sdt || 0; }     // the closing kill barrier
     for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
     if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; } else S.kcT = 0;
