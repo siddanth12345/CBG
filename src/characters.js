@@ -110,7 +110,7 @@ export const BRIEF = {
         U: ['Geyser', 'Tap up F and a water pillar under you lifts you. People in it are stunned, not flung. Then you get a short aim boost.'],
         DG: ['Whirlpool', 'On the ground, down F makes a pool that pulls people to the centre. No damage. Only one at a time.'],
         DA: ['Splash Dive', 'In the air, down F plunges into a wide splash that shoves people aside.'],
-        M: ['Dive In', 'Neutral melee while standing on your own whirlpool: dive into it and steer it at walking speed for 2 s. Anyone it catches is pulled underground inside it, and everyone bursts out (knockback, no damage) when it ends or when they jump.'],
+        M: ['Dive In', 'Neutral melee while standing on your own whirlpool: dive into it and steer it at walking speed for 2 s. Anyone it catches is pulled underground inside it, and nobody can jump out: everyone bursts out (knockback, no damage) the moment the pool disappears, when it times out or when you jump out.'],
     },
     volt: {
         N: ['Enlightened', 'Hold F, then release to hang in the air and steer a lightning ball (mouse or joystick). It explodes when it hits, ends, or you get hit.'],

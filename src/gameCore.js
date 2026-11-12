@@ -325,6 +325,9 @@ const SWING = {
     // neutral melee: a sword spin around the body (both sides, air and ground) that only launches UP
     JAB:  { type: 'J', a: 5, b: 15, w: 150, h: 74, damage: 7, bkb: 13, kbg: 1.05, multi: true, path: () => ({ x: 0, y: -4 }),
             angle: () => -Math.PI / 2 },
+    // Luminent / Umbra / Volt neutral melee: half the knockback, thrown away from the attacker (toward where the foe is)
+    JABR: { type: 'J', a: 5, b: 15, w: 150, h: 74, damage: 7, bkb: 6.5, kbg: 0.525, multi: true, radial: true, path: () => ({ x: 0, y: -4 }),
+            angle: () => -Math.PI / 2 },
     UP:   { type: 'J', a: 4, b: 11, w: 75, h: 55, damage: 8,  bkb: 12, kbg: 1.25, chargeable: true, path: arc(56, 10, 150),
             angle: () => -Math.PI / 2 },
     DOWN: { type: 'J', a: 4, b: 11, w: 75, h: 55, damage: 9,  bkb: 13, kbg: 1.25, chargeable: true, path: arc(54, 25, -110),
@@ -1010,7 +1013,7 @@ class Fighter {
         }
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
-            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), type: sw.type,
+            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), radial: !!sw.radial, type: sw.type,
             multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0, burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : null,
         };
@@ -2383,13 +2386,13 @@ class Fighter {
             case 'SIDE_LEFT': kind = 'SIDE_LEFT'; this.facing = -1; break;
             case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; this.facing = 1; break;
         }
-        if (kind === 'JAB' && this.char === 'tide' && enterWhirl(this)) return true;        // Tide's neutral melee on his whirlpool: dive in
-        if (kind === 'JAB' && this.char === 'zephyr') spawnWind(this);                         // Zephyr's passive: a wind current
+        if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
         this.attackSerial++;
         this.attackTimer = ATTACK_FRAMES;
-        this.swing = SWING[kind];
+        this.swing = (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
         this.swingHit = false;
+        if (kind === 'JAB' && this.char === 'zephyr') { spawnWind(this); this.swingHit = true; }   // Zephyr's neutral only sends out the wind tube: no hitbox
         this.swingHitSet = this.swing.multi ? new Set() : null;
         this.attackHeld = !!(hold && this.swing.chargeable);
         this.meleeCharge = 0;
@@ -4192,7 +4195,7 @@ function updateWhirlpools() {
             const h = t._in || {};
             if (!isAlive(t) || t._wantOut || --w.rideT <= 0 || t.hitstun > 0) {
                 w.rider = null; t.buryT = 0; t._wantOut = false; t.y = w.y - t.height * 0.5 - 6; t.vy = -8; t.vx = 0; t.px = t.x; t.py = t.y; t.invincibleTimer = Math.max(t.invincibleTimer, 20);
-                popOut(w, t); w.life = Math.min(w.life, 40);
+                w.life = 0;                                      // Tide out = the pool disappears right now (the closing burst below frees everyone in it)
             } else {
                 const spd = 17 * charOf(t.char).walk * (t.bleedT > 0 ? 0.3 : 1), d = (h.right ? 1 : 0) - (h.left ? 1 : 0);
                 if (d) { w.x = Math.max(STAGE.x + 20, Math.min(STAGE.x + STAGE.width - 20, w.x + d * spd)); t.facing = d; }
@@ -4212,7 +4215,7 @@ function updateWhirlpools() {
             if (!isAlive(f)) { caught.delete(f); continue; }
             if (caught.has(f)) {                            // buried: carried along under the pool until they jump out (or it ends)
                 f._wpN = (f._wpN || 0) + 1;
-                if (f._wantOut || f._wpN > 240 || (f.isAI && f._wpN > 70)) { caught.delete(f); f._wpN = 0; burstOut(w, f); continue; }
+                f._wantOut = false;                              // they can't jump out: they stay until the pool disappears
                 f.x = w.x; f.y = w.y + 8; f.px = f.x; f.py = f.y; f.vx = 0; f.vy = 0; f.buryT = 3; f.hitstun = Math.max(f.hitstun, 3); f.invincibleTimer = Math.max(f.invincibleTimer, 3); f.grounded = false; f.clashStunTimer = 0;
                 continue;
             }
