@@ -4983,7 +4983,7 @@ function endGame(winnerText, winnerRole = null) {
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
         try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, online: !!S.rankedQ, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
     }
-    if (S.clipsPend && S.clipsPend.length) { for (const c of S.clipsPend) finishClip(c); S.clipsPend = []; }
+    if (S.clipsPend && S.clipsPend.length) { S.clipsPend[S.clipsPend.length - 1].final = true; for (const c of S.clipsPend) finishClip(c); S.clipsPend = []; }      // the KO that ended the match is already slowed by the game itself
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
     document.getElementById('winnerText').textContent = winnerText;
@@ -5363,7 +5363,7 @@ export function startReplay(onDone, clip) {
 export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
 function tickReplay() {
     const R = S.replay, c = R.clip;
-    R.i += c && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1;           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
+    R.i += c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1;           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
     if (c && R.i >= R.frames.length - 1) { R.i = R.frames.length - 1; R.ended = true; }      // a kill clip stops on its last frame: the viewer moves on by hand
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }

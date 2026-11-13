@@ -33,7 +33,7 @@ export const CHARS = {
     tide: {
         id: 'tide', name: 'Tide', role: 'Zoner', walk: 0.9, orb: 1.1, blink: 1.0, scale: 1.0,
         desc: 'A water caster with a long staff. Sweeping reach and long-range water specials.',
-        look: { suit: 0x0c4a6e, trim: 0x7dd3fc, head: 'fin', weapon: 'staff', anim: 'staff', extra: 'staffback' },
+        look: { suit: 0x0c4a6e, trim: 0x7dd3fc, head: 'smooth', weapon: 'staff', anim: 'staff', extra: 'staffback' },
         art: { skin: '#7dd3fc', feature: 'fin' },
     },
     volt: {

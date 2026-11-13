@@ -9,6 +9,7 @@ import { charOf } from '../characters.js';
 import * as THREE from 'three';
 import { S, viewerFighter } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
+import { buildDecor, tickDecor, disposeDecor } from './charDecor.js';
 import { Trail } from './trail.js';
 import { buildSword } from './swordModel.js';
 
@@ -71,6 +72,7 @@ export class FighterModel {
 
         this.#build();
         this.#buildExtras();
+        buildDecor(this, this._ctx);
 
         const base = this.baseColor;
         const mk = (color, boost = 1.6) => new Trail(scene, { color, boost });
@@ -250,6 +252,7 @@ export class FighterModel {
         this.legL = makeLeg(-1);
 
         this.#bodyExtras(L, { M, G, armor, armorDark, suit, trim, glow, cap, trailer });
+        this._ctx = { M, G, armor, armorDark, suit, trim, glow, cap, trailer };
 
         // blade of light, held in the right hand
         const wr = this.armR.wr;
@@ -893,6 +896,7 @@ export class FighterModel {
             this.sway.forEach((g, i) => { const big = g.userData.kind === 'cape' ? 0.5 : 1; g.rotation.x = (0.18 + run * big + air * 0.5 + Math.sin(this.t * 4 + i * 1.7) * 0.08 * big); g.rotation.z = Math.sin(this.t * 3 + i) * 0.06; });
         }
         if (this.staffOrb) this.staffOrb.scale.setScalar(1 + Math.sin(this.t * 5) * 0.12);
+        tickDecor(this, dt);
 
         // little life in the always-on parts
         this.halo.rotation.z = this.t * 0.8;
@@ -1111,5 +1115,5 @@ export class FighterModel {
         }
     }
 
-    dispose() { this.scene.remove(this.root); }
+    dispose() { this.scene.remove(this.root); disposeDecor(this); }
 }
