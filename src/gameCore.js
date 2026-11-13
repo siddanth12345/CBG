@@ -686,6 +686,7 @@ class Fighter {
         if (this.maxJumps !== bj) { this.jumpsLeft = Math.min(bj, this.jumpsLeft + Math.max(0, bj - this.maxJumps)); this.maxJumps = bj; }
         if (this.gravT > 0) this.gravT--;
         if (this.dropT > 0) this.dropT--;
+        if (S.sdNoDmg) this.damage = 200;          // sudden death: percent is locked, moves cannot change it
         if (this.damage >= 250) {
             this.takeKO();
             return;
@@ -982,7 +983,7 @@ class Fighter {
             if (this.invincibleTimer > 0 || this.spawnT > 0) {
                 if (!(this._bzCool > 0)) {
                     const cx = (B.left + B.right) / 2, cy = (B.top + B.bottom) / 2, dx = cx - this.x, dy = cy - this.y, d = Math.hypot(dx, dy) || 1;
-                    this.damage += 250; this.interrupt && this.interrupt();
+                    if (!S.sdNoDmg) this.damage += 250; this.interrupt && this.interrupt();
                     this.vx = dx / d * 26; this.vy = dy / d * 26; this.hitstun = Math.max(this.hitstun, 30); this._bzCool = 40;
                     S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true); fx('hit', this.x, this.y, 25, Math.atan2(dy, dx));
                 }
@@ -3285,7 +3286,7 @@ function burnStick(f) { if (f.heldItem && f.heldItem.type === 'FIRESTICK') burnI
 function pickUp(f, it) {
     bump(f, 'items');
     if (it.type === 'STRAWBERRY') {
-        f.damage = Math.max(0, f.damage - 30);
+        if (!S.sdNoDmg) f.damage = Math.max(0, f.damage - 30);
         fx('heal', f.x, f.y); audio.playGrab(); it.st = 'dead'; return true;
     }
     if (it.type === 'BALLOON') {
@@ -3497,7 +3498,7 @@ function runCountdown() {
 /** tied for the fewest deaths: only they come back, at 200%, and the blast zone closes in */
 function beginSuddenDeath(tied) {
     S.sudden = true;
-    S.sdNoDmg = true;          // timer sudden death: only the kill barrier deals damage
+    S.sdNoDmg = true;          // sudden death: percent stays at 200, only the kill barrier can KO
     S.sdT = 0;
     S.timeLeft = 60 * 60;
     const a = ARENAS[S.arena] || ARENAS.normal;
@@ -4131,12 +4132,12 @@ function resetHazards() {
 function hazardHit(f, h) {
     f.interrupt && f.interrupt();
     if (h.kind === 'meteor') {
-        f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
+        if (!S.sdNoDmg) f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
         f.hitstun = Math.max(f.hitstun, 26); fx('hit', f.x, f.y, 25, -0.5); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
         return;
     }
     const storm = h.kind === 'storm', dir = f.x >= h.x ? 1 : -1;
-    f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
+    if (!S.sdNoDmg) f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
     f.hitstun = Math.max(f.hitstun, storm ? 28 : 22); fx('hit', f.x, f.y, 25, dir > 0 ? -0.6 : Math.PI + 0.6); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
 }
 /** every solid top a strike can come from: the stage piece(s) and the platforms */
@@ -4845,7 +4846,7 @@ function startMatchSequence(mode, cfg) {
             f.reset(true); f.shieldHold = 0; f.remoteAim = null;
         });
         if (S.match.mode === 'sudden') {
-            S.sudden = true; S.sdNoDmg = false; S.sdT = 0;
+            S.sudden = true; S.sdNoDmg = true; S.sdT = 0;
             const a = ARENAS[S.arena] || ARENAS.normal;
             S.sdBase = { left: a.bz.left, right: a.bz.right, top: a.bz.top, bottom: a.bz.bottom };
             Object.assign(BLAST_ZONES, S.sdBase);
