@@ -4701,8 +4701,8 @@ function umbraEdge(att, def, hb) {
     const behind = defFace === (att.facing || 1);
     if (!behind) return hb;
     bump(att, 'backstabs');
-    if (att.cloakT > 0) att._boostWait = true;                 // a backstab while already invisible: refresh the invisibility, and the NEXT hit deals 1.5x damage
-    att._shadowT = 300; att.cloakT = 300;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
+    if (att.cloakT > 0) { att._boostWait = true; att._shadowT = 360; att.cloakT = 360; }   // backstab while already invisible: reset the cloak to 6 s, next hit deals 1.5x
+    else { att._shadowT = 300; att.cloakT = 300; }             // first backstab: 1.7x speed and invisible for 5 s
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
     return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
