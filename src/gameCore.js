@@ -3764,7 +3764,7 @@ function launch(attacker, defender, hb) {
     }
     if (attacker && attacker !== defender) {
         bump(attacker, 'dealt', hb.damage || 0); bump(attacker, 'hits');
-        if (!S.demo && S.gameMode !== 'training') { const a = msOf(idxOf(attacker)), d = msOf(idxOf(defender)); a.dealt += hb.damage || 0; a.hits++; d.taken += hb.damage || 0; a.combo = Math.max(a.combo, defender.comboN || 1); }
+        if (!S.demo && S.gameMode !== 'training') { const a = msOf(idxOf(attacker)), d = msOf(idxOf(defender)); defender._lhN = S.recN || 0; a.dealt += hb.damage || 0; a.hits++; d.taken += hb.damage || 0; a.combo = Math.max(a.combo, defender.comboN || 1); }
         if (attacker === viewerFighter() && S.stats) S.stats.combo = Math.max(S.stats.combo, defender.comboN || 0);
         bump(defender, 'taken', hb.damage || 0);
         defender._lastHit = { by: attacker, type: hb.type || 'J', combo: defender.comboN || 1, t: 0 };
@@ -4798,7 +4798,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5298,20 +5298,24 @@ function captureKill(def) {
         dmg: Math.round(def.damage || 0), left: Math.max(0, def.stocks - ((S.match && S.match.mode === 'timer' && !S.sudden) ? 0 : 1)),
     };
     (S.klog || (S.klog = [])).push(meta);
-    const ko = S.rec.length - 1, hitAt = Math.max(0, ko - Math.min(ko, Math.round(def.lastHitT < 360 ? def.lastHitT : 0)));      // the frame of the blow that sent them out
-    const clip = { frames: S.rec.slice(), ko, hit: def.lastHitT < 360 ? hitAt : Math.max(0, ko - 20), post: 0, meta };
+    // a clip = 6 s before the KO (or, if the blow that killed was older than that, from that blow on) and 0.5 s after
+    const ko0 = S.rec.length - 1, age = def._lhN !== undefined ? (S.recN || 0) - def._lhN : -1, hit0 = age >= 0 && age <= ko0 ? ko0 - age : -1;
+    def._lhN = undefined;
+    const begin = Math.max(0, hit0 >= 0 ? Math.min(ko0 - 360, hit0 - 24) : ko0 - 360);
+    const clip = { frames: S.rec.slice(begin), ko: ko0 - begin, hit: hit0 >= 0 ? hit0 - begin : Math.max(0, ko0 - begin - 20), post: 0, meta };
     (S.clipsPend || (S.clipsPend = [])).push(clip);
 }
 function pumpClips(fr) {
     const P = S.clipsPend; if (!P || !P.length) return;
-    for (let i = P.length - 1; i >= 0; i--) { const c = P[i]; c.frames.push(fr); if (++c.post >= 100) { P.splice(i, 1); finishClip(c); } }
+    for (let i = P.length - 1; i >= 0; i--) { const c = P[i]; c.frames.push(fr); if (++c.post >= 30) { P.splice(i, 1); finishClip(c); } }
 }
 function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (L.length > 16) L.shift(); }
-const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
+const REC_FRAMES = 900;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
     rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
     if (rec.length > REC_FRAMES) rec.shift();
+    S.recN = (S.recN || 0) + 1;
     pumpClips(rec[rec.length - 1]);
 }
 function applyReplayFrame(fr) {
@@ -5360,10 +5364,11 @@ export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0
 function tickReplay() {
     const R = S.replay, c = R.clip;
     R.i += c && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1;           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
+    if (c && R.i >= R.frames.length - 1) { R.i = R.frames.length - 1; R.ended = true; }      // a kill clip stops on its last frame: the viewer moves on by hand
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }
     if (n !== R.n) { R.n = n; applyReplayFrame(R.frames[n]); }
-    if (c) {                                                    // zoom in on the victim from just before the blow until the KO has happened
+    if (c && !R.ended) {                                                    // zoom in on the victim from just before the blow until the KO has happened
         const s0 = c.hit - 14, e0 = c.ko + 14, el = R.i - s0;
         if (el >= 0 && R.i < e0) { S.kcDur = Math.max(1.2, (e0 - s0) / 60); S.kcT = S.kcDur - el / 60; S.kcFull = true; S.kcDef = c.meta.def; }
     }
@@ -5395,7 +5400,7 @@ export function stepKillsReplay(d) {
     stopReplay();
 }
 /** scrub inside the clip that is playing: seconds back (negative) or forward */
-export function seekKillsReplay(secs) { const R = S.replay; if (!_kr || !R) return; R.i = Math.max(0, Math.min(R.frames.length - 2, R.i + secs * 60)); R.n = -1; }
+export function seekKillsReplay(secs) { const R = S.replay; if (!_kr || !R) return; R.i = Math.max(0, Math.min(R.frames.length - 2, R.i + secs * 60)); R.n = -1; R.ended = false; }
 export function killsReplayActive() { return !!_kr; }
 export function matchStatsData() {
     const rows = fighters.map((f, i) => ({ i, name: dispName(f, i), char: f.char, color: f.color, active: f.active !== false, team: f.team, kos: (S.klog || []).filter(k => k.att === i).length, falls: (S.klog || []).filter(k => k.def === i).length, stocks: Math.max(0, f.stocks || 0), ...msOf(i) })).filter(r => r.active);

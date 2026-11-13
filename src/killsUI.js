@@ -11,7 +11,7 @@ let hud = null, pages = null, tab = 0, cur = null, onPagesDone = null;
 function ensure() {
     if (hud) return;
     hud = document.createElement('div'); hud.id = 'krHud'; hud.className = 'kr-hud'; hud.style.display = 'none';
-    hud.innerHTML = '<div class="kr-top"><span id="krLabel"></span></div><div class="kr-ctl"><button type="button" data-kr="prev">⏮ Prev kill</button><button type="button" data-kr="back">⏪ 3s</button><button type="button" data-kr="fwd">3s ⏩</button><button type="button" data-kr="next">Next kill ⏭</button><button type="button" data-kr="end">Done ✕</button></div><div id="krCard" class="kr-card"></div>';
+    hud.innerHTML = '<div class="kr-top"><span id="krLabel"></span></div><div class="kr-ctl"><button type="button" data-kr="prev">⏮ Prev</button><button type="button" data-kr="back">⏪ 3s</button><button type="button" data-kr="fwd">3s ⏩</button><button type="button" data-kr="next">Next ⏭</button><button type="button" data-kr="end">Done ✕</button></div><div id="krCard" class="kr-card"></div>';
     pages = document.createElement('div'); pages.id = 'krPages'; pages.className = 'kr-pages'; pages.style.display = 'none';
     const host = $('gameOverModal') ? $('gameOverModal').parentElement : document.body;
     host.appendChild(hud); host.appendChild(pages);
@@ -60,7 +60,7 @@ export function initKills() {
         if (S.gameState !== 'gameover') return;
         gameOverModal.classList.add('hidden');
         hud.style.display = 'block'; $('krCard').style.opacity = 0;
-        if (!startKillsReplay((i, n, m) => { cur = m; $('krLabel').textContent = `KILL ${i + 1} / ${n}`; $('krCard').innerHTML = card(m); }, () => { cur = null; back(); })) { hud.style.display = 'none'; gameOverModal.classList.remove('hidden'); }
+        if (!startKillsReplay((i, n, m) => { cur = m; $('krLabel').textContent = `REPLAY ${i + 1} / ${n}`; $('krCard').innerHTML = card(m); }, () => { cur = null; back(); })) { hud.style.display = 'none'; gameOverModal.classList.remove('hidden'); }
     });
 }
 /** called every frame: button visibility + the victim card while the camera is zoomed in */
@@ -69,5 +69,6 @@ export function tickKills() {
     const over = S.gameState === 'gameover' && !S.replay && S.online !== 'guest' && !killsReplayActive();
     const kb = $('killsBtn');
     kb.classList.toggle('hidden', !(over && S.clips && S.clips.length));
-    if (killsReplayActive() && S.replay) { const c = $('krCard'); c.style.opacity = S.kcT > 0 && S.kcFull ? Math.min(1, S.kcT / 0.3, (S.kcDur - S.kcT) / 0.25 + 0.0) : 0; }
+    document.body.classList.toggle('krplay', killsReplayActive());
+    if (killsReplayActive() && S.replay) { $('krCard').style.opacity = 1; const nx = hud.querySelector('[data-kr=next]'); if (nx) nx.classList.toggle('kr-pulse', !!S.replay.ended); $('krLabel').dataset.end = S.replay.ended ? ' — paused, press Next' : ''; }
 }
