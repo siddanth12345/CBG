@@ -2481,6 +2481,7 @@ class Fighter {
         }
 
         { const k = this.lastHitBy; S.lastKO = { att: k && k !== this && this.lastHitT < 360 ? idxOf(k) : -1, def: idxOf(this) }; }      // the replay camera follows these two
+        if (S.online !== 'guest' && !S.demo) captureKill(this);
         if (this === viewerFighter() && !S.demo) {                          // "why did I die": one line about the last hit that got through
             const h = this._lastHit;
             notify(h && h.by && h.by !== this && this.lastHitT < 360
@@ -3230,6 +3231,8 @@ const perkOf = (f, stat) => !f ? 0 : ((f === viewerFighter() && S.online !== 'gu
 /** match stats of the human player (for coins, daily challenges, the ladder) */
 const newStats = () => ({ dealt: 0, taken: 0, hits: 0, combo: 0, backstabs: 0, counters: 0, grabs: 0, items: 0, frames: 0, maxDmg: 0 });
 const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.stats[k] = (S.stats[k] || 0) + n; };
+/** per-fighter match stats (every fighter, not only the viewer): feeds the end-of-match pages and the kills replay */
+const msOf = (i) => { const a = S.ms || (S.ms = []); return a[i] || (a[i] = { dealt: 0, taken: 0, hits: 0, combo: 0, falls: 0 }); };
 const MOVE_NAMES = { J: 'melee', CORE: 'Neutral F', BLINK: 'Side F', SPIRAL: 'Up F', HEADBUTT: 'Down air', GRAB: 'grab', SUPLEX: 'Down F' };
 /** what a bot sees of a foe: a cloaked Umbra is invisible. Hard bots gamble on a spot near him (re-rolled every half second); the others only know where he vanished. */
 function aiSeen(bot, foe) {
@@ -3754,6 +3757,7 @@ function launch(attacker, defender, hb) {
     }
     if (attacker && attacker !== defender) {
         bump(attacker, 'dealt', hb.damage || 0); bump(attacker, 'hits');
+        if (!S.demo && S.gameMode !== 'training') { const a = msOf(idxOf(attacker)), d = msOf(idxOf(defender)); a.dealt += hb.damage || 0; a.hits++; d.taken += hb.damage || 0; a.combo = Math.max(a.combo, defender.comboN || 1); }
         if (attacker === viewerFighter() && S.stats) S.stats.combo = Math.max(S.stats.combo, defender.comboN || 0);
         bump(defender, 'taken', hb.damage || 0);
         defender._lastHit = { by: attacker, type: hb.type || 'J', combo: defender.comboN || 1, t: 0 };
@@ -4787,7 +4791,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -4970,6 +4974,7 @@ function endGame(winnerText, winnerRole = null) {
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
         try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, online: !!S.rankedQ, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
     }
+    if (S.clipsPend && S.clipsPend.length) { for (const c of S.clipsPend) finishClip(c); S.clipsPend = []; }
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
     document.getElementById('winnerText').textContent = winnerText;
@@ -5266,11 +5271,34 @@ export function applySnapshot(s) {
     }
 }
 
+const dispName = (f, i) => (f && f.name) || (f && f.isAI ? 'CPU ' + (i + 1) : 'Player ' + (i + 1));
+/** a KO just happened: keep the 5 s before it (the replay ring) and the ~1.7 s after, with who/what/how for the overlay */
+function captureKill(def) {
+    if (!S.rec || S.rec.length < 20) return;
+    const di = idxOf(def), ai = S.lastKO ? S.lastKO.att : -1, att = ai >= 0 ? fighters[ai] : null, h = def._lastHit;
+    const hit = h && h.by === att && att ? h : null;
+    msOf(di).falls++;
+    const meta = {
+        n: (S.klog ? S.klog.length : 0) + 1, t: S.stats ? S.stats.frames : 0, att: ai, def: di,
+        an: att ? dispName(att, ai) : '', ac: att ? att.char : '', dn: dispName(def, di), dc: def.char,
+        move: hit ? (MOVE_NAMES[hit.type] || String(hit.type).toLowerCase()) : '', combo: hit ? hit.combo : 0,
+        dmg: Math.round(def.damage || 0), left: Math.max(0, def.stocks - ((S.match && S.match.mode === 'timer' && !S.sudden) ? 0 : 1)),
+    };
+    (S.klog || (S.klog = [])).push(meta);
+    const clip = { frames: S.rec.slice(), ko: S.rec.length - 1, post: 0, meta };
+    (S.clipsPend || (S.clipsPend = [])).push(clip);
+}
+function pumpClips(fr) {
+    const P = S.clipsPend; if (!P || !P.length) return;
+    for (let i = P.length - 1; i >= 0; i--) { const c = P[i]; c.frames.push(fr); if (++c.post >= 100) { P.splice(i, 1); finishClip(c); } }
+}
+function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (L.length > 16) L.shift(); }
 const REC_FRAMES = 300;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
     rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
     if (rec.length > REC_FRAMES) rec.shift();
+    pumpClips(rec[rec.length - 1]);
 }
 function applyReplayFrame(fr) {
     fr.f.forEach((d, i) => {
@@ -5303,20 +5331,50 @@ function applyReplayFrame(fr) {
     if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; } else S.kcT = 0;
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
-export function startReplay(onDone) {
-    if (!S.rec || S.rec.length < 30) return false;
+export function startReplay(onDone, clip) {
+    const src = clip ? clip.frames : S.rec;
+    if (!src || src.length < 30) return false;
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     S.fxClear++; whirlpools.length = 0; tornadoes.length = 0; winds.length = 0; pillars.length = 0; zapTrails.length = 0; particles.length = 0;       // nothing from the live match is left on screen
     dramaticZoom.active = false;
-    S.replay = { frames: S.rec.slice(), i: 0, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
+    S.replay = { frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
     return true;
 }
-export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; if (d) d(); } }
+export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
 function tickReplay() {
-    const R = S.replay; R.i += 1;
+    const R = S.replay, c = R.clip;
+    R.i += c && R.i > c.ko - 8 && R.i < c.ko + 36 ? 0.5 : 1;               // kill clips slow down around the blow
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }
-    applyReplayFrame(R.frames[n]);
+    if (n !== R.n) { R.n = n; applyReplayFrame(R.frames[n]); }
+    if (c) {                                                    // zoom in on the victim from just before the KO until a moment after
+        const el = (R.i - (c.ko - 14)) / 60;
+        if (el >= 0 && el < KC_DUR) { S.kcT = KC_DUR - el; S.kcDur = KC_DUR; S.kcFull = true; S.kcDef = c.meta.def; }
+    }
+}
+let _kr = null;
+/** play every KO of the match, one clip after another: onClip(i, total, meta) as each starts, onEnd(skipped) after the last */
+export function startKillsReplay(onClip, onEnd) {
+    const clips = (S.clips || []).slice();
+    if (!clips.length) return false;
+    _kr = { i: -1, clips, onClip, onEnd, skip: false };
+    const next = () => {
+        const k = _kr; if (!k) return;
+        k.i++;
+        if (k.skip || k.i >= k.clips.length) { _kr = null; k.onEnd && k.onEnd(k.skip); return; }
+        const c = k.clips[k.i];
+        S.lastKO = { att: c.meta.att, def: c.meta.def };
+        k.onClip && k.onClip(k.i, k.clips.length, c.meta);
+        if (!startReplay(next, c)) next();
+    };
+    next();
+    return true;
+}
+export function skipKillsReplay() { if (_kr) { _kr.skip = true; stopReplay(); } }
+export function killsReplayActive() { return !!_kr; }
+export function matchStatsData() {
+    const rows = fighters.map((f, i) => ({ i, name: dispName(f, i), char: f.char, color: f.color, active: f.active !== false, team: f.team, kos: (S.klog || []).filter(k => k.att === i).length, falls: (S.klog || []).filter(k => k.def === i).length, stocks: Math.max(0, f.stocks || 0), ...msOf(i) })).filter(r => r.active);
+    return { rows, kills: (S.klog || []).slice(), secs: S.stats ? S.stats.frames / 60 : 0, clips: (S.clips || []).length };
 }
 export function step() {
     if (S.replay) { tickReplay(); return; }

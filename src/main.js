@@ -6,6 +6,7 @@ import {
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay,
 } from './gameCore.js';
 import { MetaUI } from './metaUI.js';
+import { initKills, tickKills } from './killsUI.js';
 import { tierOf, getMeta, botFor } from './meta.js';
 import { held, actionsFor, getNfToggle, toggleNeutral, neutralLatched } from './controls.js';
 import { TouchControls } from './touch.js';
@@ -287,6 +288,7 @@ function backToMenu() {
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
+initKills();
 $('replayBtn').addEventListener('click', () => { if (startReplay(() => gameOverModal.classList.remove('hidden'))) gameOverModal.classList.add('hidden'); });
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
@@ -318,6 +320,7 @@ function onlineGameOver() {
 $('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(Online.rankedQ); });
 
 function frame(now) {
+    tickKills();
     S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online);
     { const rb = $('replayBtn'); if (rb) rb.classList.toggle('hidden', !(S.gameState === 'gameover' && !S.replay && S.rec && S.rec.length >= 30)); }
     const dt = Math.min(0.1, (now - last) / 1000);
