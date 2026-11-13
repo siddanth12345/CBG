@@ -11,7 +11,7 @@ const SKEYS = ['teams', 'startDamage', 'stocks', 'mode', 'timeLimit', 'items', '
 const loadPresets = () => { try { const a = JSON.parse(localStorage.getItem(PKEY) || '[]'); return Array.isArray(a) ? a.slice(0, MAX_PRESETS) : []; } catch (e) { return []; } };
 const savePresets = (a) => { try { localStorage.setItem(PKEY, JSON.stringify(a)); } catch (e) { /* storage blocked */ } };
 const pickSettings = (st) => JSON.parse(JSON.stringify(Object.fromEntries(SKEYS.map(k => [k, st[k]]))));
-const describe = (st) => `${st.teams ? 'Teams' : 'FFA'} • ${st.mode === 'timer' ? st.timeLimit + ' min timer' : st.mode === 'sudden' ? 'sudden death' : st.stocks + ' stocks'} • ${st.mode === 'sudden' ? '200' : st.startDamage}% • ${MAP_NAMES[st.map] || '¥Frontier'}${st.items && st.items.on ? ' • items' : ''}`;
+const describe = (st) => `${st.teams ? 'Teams' : 'FFA'} • ${st.mode === 'timer' ? st.timeLimit + ' min timer' : st.mode === 'sudden' ? 'sudden death' : st.stocks + ' stocks'} • ${st.mode === 'sudden' ? '200' : st.startDamage}% • ${MAP_NAMES[st.map] || '¥Frontier'}${st.items && st.items.on ? ' • items' : ''}${st.hazards ? ' • hazards' : ''}`;
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEAMS = { red: '#ef4444', blue: '#3b82f6', yellow: '#facc15', green: '#22c55e' };

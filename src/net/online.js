@@ -90,7 +90,7 @@ export async function hostRoom(code, mode = 'pvp') {
                     Online.trainOn = true; Online.peerName = (m.name || 'Guest').slice(0, 20); trainAttach(Online.peerName, m.char);
                     NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
                     t.send({ t: 'welcome', name: Online.name, mode: 'pvp', to: m.id, slot: 1, char: getMyChar() });
-                    t.send({ t: 'start', to: m.id, name: Online.name, train: { arena: S.arena, theme: S.theme } });
+                    t.send({ t: 'start', to: m.id, name: Online.name, train: { arena: S.arena, theme: S.theme, hz: !!S.hazards } });
                     set('connected', Online.peerName + ' joined your training');
                     break;
                 }
@@ -254,7 +254,7 @@ export async function joinRoom(code) {
             case 'kick': if (m.to === myId) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'You were removed from the lobby'); cb('You were removed from the lobby'); } break;
             case 'lobby': if (welcomed) { Online.lobby = { members: m.members, settings: m.settings, started: m.started }; Online.onChange(); } break;
             case 'start': if (m.to && m.to !== myId) break;
-                if (m.train) { Online.inTrain = true; Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); setArena(m.train.arena || 'normal', m.train.theme || 'frontier'); Online.onChange(); break; }
+                if (m.train) { Online.inTrain = true; Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); setArena(m.train.arena || 'normal', m.train.theme || 'frontier'); S.hazards = !!m.train.hz; Online.onChange(); break; }
                 if (m.cfg) { S.online = 'guest'; Online.lobby.started = true; resetSnapshotState(); startMatchSequence('lobby', { ...m.cfg, mySlot: Online.slot }); Online.onChange(); break; }
                 Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); break;
             case 'snap': if (S.online === 'guest') applySnapshot(m.s); break;

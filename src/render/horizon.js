@@ -45,7 +45,7 @@ const glowTex = (inner, outer = 'rgba(255,255,255,0)') => ctex(256, 256, (g, w, 
 
 export function buildHorizon(scene, { D }) {
     const root = new THREE.Group(); scene.add(root);
-    const anim = [], clones = [];
+    const anim = [];
     const W = STAGE.width, H = STAGE.height;
     const topY = wy(STAGE.y), cx = wx(STAGE.x + W / 2);
     // the whole backdrop is designed for the small arena and scaled up with the big one
@@ -66,20 +66,21 @@ export function buildHorizon(scene, { D }) {
 
     // ------------------------------------------------------------ main stage
     const stage = new THREE.Group(); stage.position.set(cx, 0, 0); root.add(stage);
+    const body = new THREE.Group(); stage.add(body);          // the stage itself (hidden while the split pieces are shown); the standing ruins stay in `stage`
     const bodyH = H - 6;
     const slab = new THREE.Mesh(new THREE.BoxGeometry(W, bodyH, D), mSilver);
     slab.position.y = topY - 6 - bodyH / 2; slab.castShadow = true; slab.receiveShadow = true;
-    stage.add(slab);
+    body.add(slab);
     // front / back faces carry the Greek key band (a plane just in front of the slab)
     const faceH = bodyH * 0.5;
     for (const zs of [1, -1]) {
         const band = new THREE.Mesh(new THREE.PlaneGeometry(W - 20, faceH), new THREE.MeshStandardMaterial({ map: keyBand(W - 20, faceH), roughness: 0.5, metalness: 0.15 }));
         band.position.set(0, topY - 6 - bodyH * 0.5, zs * (D / 2 + 0.6)); if (zs < 0) band.rotation.y = Math.PI;
-        stage.add(band);
+        body.add(band);
         // gold trim lines above and below the band
         for (const dy of [faceH / 2 + 3, -faceH / 2 - 3]) {
             const tr = new THREE.Mesh(new THREE.BoxGeometry(W - 6, 4, 3), mGold);
-            tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); stage.add(tr);
+            tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); body.add(tr);
         }
     }
     // top face: pale stone tiles with a ring medallion
@@ -102,28 +103,28 @@ export function buildHorizon(scene, { D }) {
         g.beginPath(); g.arc(0, 0, h * 0.1, 0, Math.PI * 2); g.stroke();
     });
     const top = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.42, metalness: 0.2 }));
-    top.rotation.x = -Math.PI / 2; top.position.y = topY + 0.05; top.receiveShadow = true; stage.add(top);
+    top.rotation.x = -Math.PI / 2; top.position.y = topY + 0.05; top.receiveShadow = true; body.add(top);
     // marble cornice around the top edge + gold ledge caps (the two grabbable edges)
-    const corn = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 9, d), mMarble); m.position.set(x, topY - 3, z); m.castShadow = true; stage.add(m); };
+    const corn = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 9, d), mMarble); m.position.set(x, topY - 3, z); m.castShadow = true; body.add(m); };
     corn(W + 10, 12, 0, D / 2); corn(W + 10, 12, 0, -D / 2);
     corn(12, D, -W / 2 - 2, 0); corn(12, D, W / 2 + 2, 0);
-    for (const sx of [-1, 1]) { const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(sx * (W / 2 + 6), topY - 8, 0); stage.add(cap); }
+    for (const sx of [-1, 1]) { const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(sx * (W / 2 + 6), topY - 8, 0); body.add(cap); }
     // stepped underside + inverted stone keel with hanging broken columns (Battlefield's ruined underbelly)
     let yy = topY - H, ww = W * 0.9;
     for (let i = 0; i < 3; i++) {
         const th = Math.max(26, H * 0.55);
         const b = new THREE.Mesh(new THREE.BoxGeometry(ww, th, D * (0.92 - i * 0.14)), i % 2 ? mSilver : mMarble);
-        b.position.y = yy - th / 2; b.castShadow = true; stage.add(b);
+        b.position.y = yy - th / 2; b.castShadow = true; body.add(b);
         yy -= th; ww *= 0.72;
     }
     const keelGeo = new THREE.CylinderGeometry(0.5, 0.06, 1, 6, 1); keelGeo.rotateY(Math.PI / 6);
-    const keel = new THREE.Mesh(keelGeo, mDark); keel.scale.set(ww * 1.15, Math.max(200, H * 3.4), D * 0.7); keel.position.y = yy - keel.scale.y / 2; keel.castShadow = true; stage.add(keel);
+    const keel = new THREE.Mesh(keelGeo, mDark); keel.scale.set(ww * 1.15, Math.max(200, H * 3.4), D * 0.7); keel.position.y = yy - keel.scale.y / 2; keel.castShadow = true; body.add(keel);
     const colMat = mMarble;
     for (let i = 0; i < 5; i++) {
         const h = 90 + R() * 150, r = 9 + R() * 7;
         const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), colMat);
         c.position.set((i - 2) * W * 0.17 + (R() - 0.5) * 30, topY - H - 12 - h / 2, (R() - 0.5) * 100);
-        c.rotation.z = (R() - 0.5) * 0.12; c.castShadow = true; stage.add(c);
+        c.rotation.z = (R() - 0.5) * 0.12; c.castShadow = true; body.add(c);
     }
 
     // standing ruins behind the play lane: two fluted columns with a capital at each end and a broken arch (z behind the fighters)
@@ -312,16 +313,52 @@ export function buildHorizon(scene, { D }) {
         stroke('rgba(255,150,60,0.9)', 14, 22); stroke('#1b1410', 6, 0);
         for (let i = 2; i < pts.length - 2; i += 2) { const [a, b] = pts[i], d = seed() < 0.5 ? -1 : 1; g.strokeStyle = '#1b1410'; g.lineWidth = 3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + d * (14 + seed() * 22), b + 8 + seed() * 14); g.stroke(); }
     });
-    const stoneTex = ctex(256, 128, (g, w, h) => {
-        const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#e9e6df'); gr.addColorStop(0.5, '#c9c5bb'); gr.addColorStop(1, '#8f8c86'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-        const r2 = rng(11); g.strokeStyle = 'rgba(70,64,58,0.55)'; g.lineWidth = 2;
-        for (let i = 0; i < 9; i++) { let x = r2() * w, y = 0; g.beginPath(); g.moveTo(x, y); while (y < h) { x += (r2() - 0.5) * 26; y += 10 + r2() * 14; g.lineTo(x, y); } g.stroke(); }
-        g.fillStyle = 'rgba(255,255,255,0.18)'; for (let i = 0; i < 60; i++) g.fillRect(r2() * w, r2() * h, 2 + r2() * 5, 1 + r2() * 2);
-    });
     const decals = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: crackTex, transparent: true, depthWrite: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.visible = false; m.renderOrder = 4; root.add(m); return m; });
-    const caps = [];
-    const capMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xffffff, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
-    const getCap = (i) => { if (!caps[i]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(D, bodyH), capMat); m.visible = false; root.add(m); caps[i] = m; } return caps[i]; };
+    // ---- split pieces: when the stage breaks, every piece is its own solid chunk of floating stone (jagged cut edge, its own stepped underside and keel)
+    const pieces = []; let pieceKey = '';
+    const edgeLine = new THREE.LineBasicMaterial({ color: new THREE.Color('#ff9a3c').multiplyScalar(1.6), toneMapped: false });
+    const jag = (seed, n, A) => { const r = rng(seed), o = [0]; for (let m = 1; m <= n; m++) o.push((m % 2 ? 1 : -1) * (0.35 + r() * 0.65) * A); return o; };
+    function buildPiece(k, n, fr, cuts) {
+        const pw = (fr[k + 1] - fr[k]) * W, g = new THREE.Group(), N = 8, A = 16, rowH = bodyH / N;
+        const jl = k > 0 ? jag(Math.round(cuts[k - 1] * 1000) + 3, N, A) : null, jr = k < n - 1 ? jag(Math.round(cuts[k] * 1000) + 3, N, A) : null;
+        const sh = new THREE.Shape(); sh.moveTo(-pw / 2, 0); sh.lineTo(pw / 2, 0);
+        for (let m = 1; m <= N; m++) sh.lineTo(pw / 2 + (jr ? jr[m] : 0), -m * rowH);
+        for (let m = N; m >= 1; m--) sh.lineTo(-pw / 2 + (jl ? jl[m] : 0), -m * rowH);
+        sh.lineTo(-pw / 2, 0);
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: D, bevelEnabled: false }); geo.translate(0, 0, -D / 2);
+        const slabP = new THREE.Mesh(geo, mSilver); slabP.position.y = topY - 6; slabP.castShadow = true; slabP.receiveShadow = true; g.add(slabP);
+        for (const zs of [1, -1]) {                                    // Greek key band + gold trims on the front and back
+            const bw = Math.max(40, pw - 2 * (A + 6)), fh = bodyH * 0.5;
+            const band = new THREE.Mesh(new THREE.PlaneGeometry(bw, fh), new THREE.MeshStandardMaterial({ map: keyBand(bw, fh), roughness: 0.5, metalness: 0.15 }));
+            band.position.set((jl ? 0 : 0), topY - 6 - bodyH * 0.5, zs * (D / 2 + 0.6)); if (zs < 0) band.rotation.y = Math.PI; g.add(band);
+            for (const dy of [fh / 2 + 3, -fh / 2 - 3]) { const tr = new THREE.Mesh(new THREE.BoxGeometry(bw + 10, 4, 3), mGold); tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); g.add(tr); }
+            for (const [ed, sx] of [[jl, -1], [jr, 1]]) if (ed) {      // a glowing line along the broken edge
+                const pts = ed.map((o, m) => new THREE.Vector3(sx * pw / 2 + o, topY - 6 - m * rowH, zs * (D / 2 + 1.5)));
+                g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeLine));
+            }
+        }
+        const tt = topTex.clone(); tt.needsUpdate = true; tt.repeat.set(pw / W, 1); tt.offset.set(fr[k], 0);
+        const topP = new THREE.Mesh(new THREE.PlaneGeometry(pw, D), new THREE.MeshStandardMaterial({ map: tt, roughness: 0.42, metalness: 0.2 }));
+        topP.rotation.x = -Math.PI / 2; topP.position.y = topY + 0.05; topP.receiveShadow = true; g.add(topP);
+        const cornP = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 9, d), mMarble); m.position.set(x, topY - 3, z); m.castShadow = true; g.add(m); };
+        cornP(pw + (jl ? 0 : 10) + (jr ? 0 : 0), 12, 0, D / 2); cornP(pw, 12, 0, -D / 2);
+        if (!jl) { cornP(12, D, -pw / 2 - 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(-pw / 2 - 6, topY - 8, 0); g.add(cap); }
+        if (!jr) { cornP(12, D, pw / 2 + 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(pw / 2 + 6, topY - 8, 0); g.add(cap); }
+        let yy = topY - H, ww = pw * 0.9;                              // stepped underside + keel, sized to this piece
+        for (let i = 0; i < 3; i++) {
+            const th = Math.max(26, H * 0.55), b2 = new THREE.Mesh(new THREE.BoxGeometry(ww, th, D * (0.92 - i * 0.14)), i % 2 ? mSilver : mMarble);
+            b2.position.y = yy - th / 2; b2.castShadow = true; g.add(b2); yy -= th; ww *= 0.72;
+        }
+        const kg = new THREE.CylinderGeometry(0.5, 0.06, 1, 6, 1); kg.rotateY(Math.PI / 6);
+        const kl = new THREE.Mesh(kg, mDark); kl.scale.set(ww * 1.15, Math.max(200, H * 3.4) * (0.55 + 0.45 * Math.min(1, pw / (W * 0.5))), D * 0.7); kl.position.y = yy - kl.scale.y / 2; kl.castShadow = true; g.add(kl);
+        const rr = rng(Math.round(fr[k] * 1000) + 5);
+        for (let i = 0, nc = Math.max(1, Math.round(pw / W * 5)); i < nc; i++) {
+            const h = 90 + rr() * 150, r = 9 + rr() * 7, c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), mMarble);
+            c.position.set((i + 0.5 - nc / 2) * (pw * 0.8 / nc) + (rr() - 0.5) * 24, topY - H - 12 - h / 2, (rr() - 0.5) * 100); c.rotation.z = (rr() - 0.5) * 0.12; c.castShadow = true; g.add(c);
+        }
+        g.userData.mid = (fr[k] + fr[k + 1]) / 2 - 0.5; root.add(g); return g;
+    }
+    const clearPieces = () => { for (const g of pieces) { root.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map && o.material.map !== keyTex && o.material.map !== topTex) { /* per-piece textures are tiny clones */ } }); } pieces.length = 0; pieceKey = ''; };
 
     // `stars` is only a handle the view toggles for quality / menu; Horizon has none
     const stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ transparent: true, opacity: 0 }));
@@ -330,34 +367,22 @@ export function buildHorizon(scene, { D }) {
         update(t, dt) {
             for (const f of anim) f(t, dt);
             // ---- the split hazard: the stage is drawn as up to three clipped copies that drift apart (with a shake)
-            const segs = STAGE.segs, shk = segs || platG.some(o => o.p.bx !== undefined) ? splitShake(splitClock()) : 0;
+            const segs = STAGE.segs, shk = splitCuts().length ? splitShake(splitClock()) : 0;
             const jx = (k) => shk ? Math.sin(t * 61 + k * 2.3) * 5 * shk : 0, jy = (k) => shk ? Math.sin(t * 47 + k * 1.7) * 3 * shk : 0;
-            if (segs && segs.length) {
-                if (!clones.length) for (let k = 0; k < 3; k++) {
-                    const g = stage.clone(true), pl = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)];
-                    g.traverse((o) => { if (o.isMesh) { o.castShadow = false; const cl = (m) => { const c = m.clone(); c.clippingPlanes = pl; return c; }; o.material = Array.isArray(o.material) ? o.material.map(cl) : cl(o.material); } });
-                    root.add(g); clones.push({ g, pl });
-                }
-                stage.visible = false;
-                clones.forEach((c, k) => {
-                    const q = segs[k]; c.g.visible = !!q; if (!q) return;
-                    c.pl[0].constant = -wx(q.l); c.pl[1].constant = wx(q.r);
-                    c.g.position.set(cx + (wx(q.off) - wx(0)) + jx(k), jy(k), 0);
-                });
-            } else if (clones.length) { stage.visible = true; clones.forEach(c => { c.g.visible = false; }); }
-            // crack lines on the top before it opens; stone faces on the cut edges while it is open
-            const cuts = splitCuts(), warn = cuts.length && !segs ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;
+            const cuts = splitCuts(), clk = splitClock() % 900;
+            const broken = cuts.length > 0 && clk >= 330;                       // the pieces replace the whole stage from the moment it breaks until it is whole again
+            if (broken) {
+                const fr = [0, ...cuts, 1], key = cuts.join(',');
+                if (key !== pieceKey) { clearPieces(); pieceKey = key; for (let k = 0; k < fr.length - 1; k++) pieces.push(buildPiece(k, fr.length - 1, fr, cuts)); }
+                body.visible = false;
+                pieces.forEach((g, k) => { g.visible = true; const q = segs && segs[k]; g.position.set(cx + g.userData.mid * W + (q ? wx(q.off) - wx(0) : 0) + jx(k), jy(k), 0); });
+            } else { body.visible = true; pieces.forEach(g => { g.visible = false; }); }
+            // crack lines on the top just before it breaks
+            const warn = cuts.length && clk >= 300 && clk < 330 ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;
             decals.forEach((d, i) => {
                 const on = warn > 0 && i < cuts.length; d.visible = on; if (!on) return;
                 d.position.set(cx - W / 2 + cuts[i] * W + jx(i + 9), topY + 0.8, 0); d.scale.set(70, D * 0.98, 1); d.material.opacity = 0.35 + 0.65 * warn;
             });
-            const capY = topY - 6 - bodyH / 2;
-            for (let i = 0; i < 6; i++) {
-                const c = getCap(i), k = i >> 1, q = segs && segs[k], left = (i & 1) === 0;
-                const ok = q && (left ? k > 0 : k < segs.length - 1);
-                c.visible = !!ok; if (!ok) continue;
-                c.position.set((left ? wx(q.l) : wx(q.r)) + jx(k) + (left ? -0.6 : 0.6), capY + jy(k), 0); c.rotation.y = Math.PI / 2;
-            }
             if (STAGE.platforms.some(q => q.bx !== undefined)) platG.forEach((o, i) => o.g.position.set(wx(o.p.x + o.p.w / 2) + jx(i + 3), wy(o.p.y) + jy(i + 3), 0));
             for (const g of rocks) g.position.y = g.userData.base + Math.sin(t * g.userData.sp + g.userData.ph) * g.userData.amp;
         },
