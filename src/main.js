@@ -289,7 +289,6 @@ function backToMenu() {
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
 initKills();
-$('replayBtn').addEventListener('click', () => { if (startReplay(() => gameOverModal.classList.remove('hidden'))) gameOverModal.classList.add('hidden'); });
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
 const trainMenuBtn = $('trainMenuBtn');
@@ -322,7 +321,6 @@ $('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.a
 function frame(now) {
     tickKills();
     S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online);
-    { const rb = $('replayBtn'); if (rb) rb.classList.toggle('hidden', !(S.gameState === 'gameover' && !S.replay && S.rec && S.rec.length >= 30)); }
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     try {

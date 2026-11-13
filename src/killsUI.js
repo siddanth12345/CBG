@@ -1,6 +1,6 @@
 // Kills replay: every KO of the match as its own clip (5 s before + the blow), a stats card while the camera pushes in
 // on the victim, then three stats pages (click anywhere to continue) and back to the result screen.
-import { S, startKillsReplay, skipKillsReplay, killsReplayActive, matchStatsData, gameOverModal, setEndHook } from './gameCore.js';
+import { S, startKillsReplay, skipKillsReplay, killsReplayActive, matchStatsData, gameOverModal, setEndHook, stepKillsReplay, seekKillsReplay } from './gameCore.js';
 import { charOf } from './characters.js';
 
 const $ = (id) => document.getElementById(id);
@@ -11,11 +11,11 @@ let hud = null, pages = null, tab = 0, cur = null, onPagesDone = null;
 function ensure() {
     if (hud) return;
     hud = document.createElement('div'); hud.id = 'krHud'; hud.className = 'kr-hud'; hud.style.display = 'none';
-    hud.innerHTML = '<div class="kr-top"><span id="krLabel"></span><button id="krSkip" type="button">Skip ▸▸</button></div><div id="krCard" class="kr-card"></div>';
+    hud.innerHTML = '<div class="kr-top"><span id="krLabel"></span></div><div class="kr-ctl"><button type="button" data-kr="prev">⏮ Prev kill</button><button type="button" data-kr="back">⏪ 3s</button><button type="button" data-kr="fwd">3s ⏩</button><button type="button" data-kr="next">Next kill ⏭</button><button type="button" data-kr="end">Done ✕</button></div><div id="krCard" class="kr-card"></div>';
     pages = document.createElement('div'); pages.id = 'krPages'; pages.className = 'kr-pages'; pages.style.display = 'none';
     const host = $('gameOverModal') ? $('gameOverModal').parentElement : document.body;
     host.appendChild(hud); host.appendChild(pages);
-    $('krSkip').addEventListener('click', (e) => { e.stopPropagation(); skipKillsReplay(); });
+    hud.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-kr]'); if (!b) return; e.stopPropagation(); const k = b.dataset.kr; if (k === 'prev') stepKillsReplay(-1); else if (k === 'next') stepKillsReplay(1); else if (k === 'back') seekKillsReplay(-3); else if (k === 'fwd') seekKillsReplay(3); else skipKillsReplay(); });
     pages.addEventListener('click', (e) => { const t = e.target.closest && e.target.closest('[data-krtab]'); if (t) { e.stopPropagation(); tab = +t.dataset.krtab; drawPages(); return; } advance(); });
     window.addEventListener('keydown', (e) => { if (pages.style.display !== 'none' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); advance(); } });
 }

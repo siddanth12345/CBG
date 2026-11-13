@@ -496,3 +496,6 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .kr-aw{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}.kr-aw div{background:#1e293b;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
 .kr-aw b{font-size:11px;color:#94a3b8;text-transform:uppercase}.kr-aw em{font-style:normal;color:#fb7185;font-weight:800}
 .kr-sub{color:#94a3b8;text-align:center;margin:10px 0 2px}.kr-hint{text-align:center;color:#64748b;font-size:12px;margin-top:10px;letter-spacing:.1em;text-transform:uppercase}
+
+.kr-ctl{position:absolute;top:118px;left:0;right:0;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.kr-ctl button{pointer-events:auto;background:#0f172acc;border:1px solid #475569;color:#e2e8f0;border-radius:10px;padding:8px 14px;font:700 13px system-ui;cursor:pointer}.kr-ctl button:hover{background:#1e293b}

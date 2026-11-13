@@ -320,7 +320,7 @@ export function buildHorizon(scene, { D }) {
     const jag = (seed, n, A) => { const r = rng(seed), o = [0]; for (let m = 1; m <= n; m++) o.push((m % 2 ? 1 : -1) * (0.35 + r() * 0.65) * A); return o; };
     function buildPiece(k, n, fr, cuts) {
         const pw = (fr[k + 1] - fr[k]) * W, g = new THREE.Group(), N = 8, A = 16, rowH = bodyH / N;
-        const jl = k > 0 ? jag(Math.round(cuts[k - 1] * 1000) + 3, N, A) : null, jr = k < n - 1 ? jag(Math.round(cuts[k] * 1000) + 3, N, A) : null;
+        const UR = 7 + 8, jl = k > 0 ? jag(Math.round(cuts[k - 1] * 1000) + 3, N + UR, A) : null, jr = k < n - 1 ? jag(Math.round(cuts[k] * 1000) + 3, N + UR, A) : null;      // the cut continues down through the underside and the keel (same zigzag)
         const sh = new THREE.Shape(); sh.moveTo(-pw / 2, 0); sh.lineTo(pw / 2, 0);
         for (let m = 1; m <= N; m++) sh.lineTo(pw / 2 + (jr ? jr[m] : 0), -m * rowH);
         for (let m = N; m >= 1; m--) sh.lineTo(-pw / 2 + (jl ? jl[m] : 0), -m * rowH);
@@ -332,10 +332,6 @@ export function buildHorizon(scene, { D }) {
             const band = new THREE.Mesh(new THREE.PlaneGeometry(bw, fh), new THREE.MeshStandardMaterial({ map: keyBand(bw, fh), roughness: 0.5, metalness: 0.15 }));
             band.position.set((jl ? 0 : 0), topY - 6 - bodyH * 0.5, zs * (D / 2 + 0.6)); if (zs < 0) band.rotation.y = Math.PI; g.add(band);
             for (const dy of [fh / 2 + 3, -fh / 2 - 3]) { const tr = new THREE.Mesh(new THREE.BoxGeometry(bw + 10, 4, 3), mGold); tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); g.add(tr); }
-            for (const [ed, sx] of [[jl, -1], [jr, 1]]) if (ed) {      // a glowing line along the broken edge
-                const pts = ed.map((o, m) => new THREE.Vector3(sx * pw / 2 + o, topY - 6 - m * rowH, zs * (D / 2 + 1.5)));
-                g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), edgeLine));
-            }
         }
         const tt = topTex.clone(); tt.needsUpdate = true; tt.repeat.set(pw / W, 1); tt.offset.set(fr[k], 0);
         const topP = new THREE.Mesh(new THREE.PlaneGeometry(pw, D), new THREE.MeshStandardMaterial({ map: tt, roughness: 0.42, metalness: 0.2 }));
@@ -344,13 +340,37 @@ export function buildHorizon(scene, { D }) {
         cornP(pw + (jl ? 0 : 10) + (jr ? 0 : 0), 12, 0, D / 2); cornP(pw, 12, 0, -D / 2);
         if (!jl) { cornP(12, D, -pw / 2 - 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(-pw / 2 - 6, topY - 8, 0); g.add(cap); }
         if (!jr) { cornP(12, D, pw / 2 + 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(pw / 2 + 6, topY - 8, 0); g.add(cap); }
-        let yy = topY - H, ww = pw * 0.9;                              // stepped underside + keel, sized to this piece
-        for (let i = 0; i < 3; i++) {
-            const th = Math.max(26, H * 0.55), b2 = new THREE.Mesh(new THREE.BoxGeometry(ww, th, D * (0.92 - i * 0.14)), i % 2 ? mSilver : mMarble);
-            b2.position.y = yy - th / 2; b2.castShadow = true; g.add(b2); yy -= th; ww *= 0.72;
+        // underside: the steps and the keel of the WHOLE stage, cut by the same crack lines, so the break runs through the rock instead of leaving a separate cone under every piece
+        {
+            const mid = ((fr[k] + fr[k + 1]) / 2 - 0.5) * W, xl = fr[k] * W - W / 2 - mid, xr = fr[k + 1] * W - W / 2 - mid;
+            const stepH = Math.max(26, H * 0.55), keelH = Math.max(200, H * 3.4);
+            let wk = W * 0.9; const secs = [];
+            for (let i = 0; i < 3; i++) { secs.push({ rows: 2, h: stepH, w0: wk / 2, w1: wk / 2, d: D * (0.92 - i * 0.14), m: i % 2 ? mSilver : mMarble }); wk *= 0.72; }
+            secs.push({ rows: 8, h: keelH, w0: wk * 1.15 / 2, w1: wk * 1.15 / 2 * 0.12, d: D * 0.7, m: mDark });
+            let y = topY - H, gi = N;
+            for (const sc of secs) {
+                const rh = sc.h / sc.rows, pts = [];
+                for (let r = 0; r <= sc.rows; r++) {
+                    const hw = sc.w0 + (sc.w1 - sc.w0) * r / sc.rows, idx = Math.min(gi + r, N + UR);
+                    const L = Math.max(-hw, jl ? xl + jl[idx] : -1e9), R = Math.min(hw, jr ? xr + jr[idx] : 1e9);
+                    pts.push({ y: y - r * rh, L, R, ok: R - L > 2 });
+                }
+                for (let a0 = 0; a0 < pts.length;) {                      // every unbroken run of rows becomes one solid block
+                    if (!pts[a0].ok) { a0++; continue; }
+                    let b0 = a0; while (b0 + 1 < pts.length && pts[b0 + 1].ok) b0++;
+                    if (b0 > a0) {
+                        const sh2 = new THREE.Shape(); sh2.moveTo(pts[a0].L, pts[a0].y);
+                        for (let r = a0 + 1; r <= b0; r++) sh2.lineTo(pts[r].L, pts[r].y);
+                        for (let r = b0; r >= a0; r--) sh2.lineTo(pts[r].R, pts[r].y);
+                        sh2.lineTo(pts[a0].L, pts[a0].y);
+                        const gg = new THREE.ExtrudeGeometry(sh2, { depth: sc.d, bevelEnabled: false }); gg.translate(0, 0, -sc.d / 2);
+                        const mm = new THREE.Mesh(gg, sc.m); mm.castShadow = true; g.add(mm);
+                    }
+                    a0 = b0 + 1;
+                }
+                y -= sc.h; gi += sc.rows;
+            }
         }
-        const kg = new THREE.CylinderGeometry(0.5, 0.06, 1, 6, 1); kg.rotateY(Math.PI / 6);
-        const kl = new THREE.Mesh(kg, mDark); kl.scale.set(ww * 1.15, Math.max(200, H * 3.4) * (0.55 + 0.45 * Math.min(1, pw / (W * 0.5))), D * 0.7); kl.position.y = yy - kl.scale.y / 2; kl.castShadow = true; g.add(kl);
         const rr = rng(Math.round(fr[k] * 1000) + 5);
         for (let i = 0, nc = Math.max(1, Math.round(pw / W * 5)); i < nc; i++) {
             const h = 90 + rr() * 150, r = 9 + rr() * 7, c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), mMarble);
