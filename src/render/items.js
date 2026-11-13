@@ -140,7 +140,7 @@ export class ItemsView {
                 this.scene.add(g); e = { g, type: it.type }; this.map.set(it.id, e);
             }
             const g = e.g;
-            g.visible = !(it.type === 'FIRESTICK' && it.st === 'held');       // a held stick is drawn in the holder's hand by the fighter model
+            { const hf = it.st === 'held' && fighters[it.hold]; g.visible = !(it.type === 'FIRESTICK' && it.st === 'held' && (hf && performance.now() - (hf._stickAt || 0) < 250)); }      // a held stick is drawn in the holder's hand; if that hand is not drawing it, the item draws itself       // a held stick is drawn in the holder's hand by the fighter model
             if (!g.visible) continue;
             const px = wx(it.x), py = wy(it.y);
             if (it.type === 'FIRESTICK') {

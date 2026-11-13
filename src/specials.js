@@ -61,7 +61,7 @@ export const SP = {
     umbra: {
         N: { kind: 'orb', look: 'void', name: 'Void Orb', desc: 'A slow orb that bends a little toward your foe. 8 to 12.', cd: 160,
              speed: [8.5, 7.5], r: [14, 22], dmg: [8, 12], R: [75, 105], bkb: [4, 6], kbg: 0.5, life: 300, curve: 0.02 },
-        S: { kind: 'tp', name: 'Shadow Step', desc: 'Half a second of startup (a purple blast gathers around him), then he vanishes and stabs from behind the nearest foe (10). Slow to recover.', cd: 130, lock: 50, windup: 30, dist: 190, behind: true, near: 380, swing: 'SP_umbra_S', dmg: 10, bkb: 9, kbg: 0.9, w: 90, h: 70 },
+        S: { kind: 'tp', name: 'Shadow Step', desc: 'Half a second of startup (a purple blast gathers around him), then he vanishes and stabs from behind the nearest foe (10). Side F is tired for 1 s afterwards.', cd: 130, lock: 50, windup: 30, dist: 190, behind: true, near: 380, swing: 'SP_umbra_S', dmg: 10, bkb: 9, kbg: 0.9, w: 90, h: 70 },
         U: { kind: 'rocket', ghost: true, name: 'Shadow Flight', desc: 'No attack: you dissolve into shadow and fly where you aim (steer as you go) for 1.1 s as an invisible shadow: can still be hit out of it, no damage, straight through walls.', cd: 150, frames: 66, speed: 12, turn: 0.16 },
         DG: { kind: 'pound', name: 'Void Pit', desc: 'Marks the foe\'s spot (or in front of you): after a clear delay a pillar of shadow erupts (12).', cd: 150, windup: 32, w: 0.07, h: 200, dmg: 12, bkb: 9, kbg: 0.9, ang: -1.35, stun: 0, lock: 24, hits: 1, atTarget: true },
         DA: { kind: 'dive', name: 'Dagger Plunge', desc: 'A steep stab-dive with a sharp impact (10).', cd: 120, vy: 27, hitDmg: 0, every: 99, impactDmg: 10, impactW: 0.07, stun: false, bkb: 8, kbg: 0.9, ang: -1.1, lock: 18 },

@@ -397,3 +397,6 @@ for (const ev of ['pointerdown', 'pointerup', 'keydown', 'touchstart', 'touchend
     document.addEventListener(ev, unlockMusic, { passive: true, capture: true });
 }
 
+
+// warm up the online relay in the background so hosting / joining connects without a wait (the transports load lazily otherwise)
+setTimeout(() => { import('./net/supa.js').then(m => { m.getRealtimeClient().catch(() => {}); }).catch(() => {}); }, 1500);

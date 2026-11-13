@@ -871,6 +871,7 @@ export class FighterModel {
         for (const m of this.bladeParts) m.visible = !hs && !m.userData.hide;
         this.blade.scale.y = Math.max(0.001, BLADE_LEN * bl * (hs ? lenK * 0.5 : 1));
         this.stickG.visible = !!hs;
+        if (hs) f._stickAt = performance.now();                           // tells the item renderer this hand is drawing the stick
         if (hs) {
             const L = BLADE_LEN * lenK * 0.5 + 14;                          // visual length follows the remaining length
             this.stickK += (bl - this.stickK) * (1 - Math.exp(-dt * (bl > this.stickK ? 34 : 7)));   // slower on the way back: follow-through

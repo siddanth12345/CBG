@@ -5,7 +5,7 @@
 //   - an account saves: controls, borgs (friends) and the 1v1 win/loss record
 // Two backends: Supabase (when src/net/config.js is filled in) or a local one (this browser only) so the
 // whole flow can be used and tested with no server.
-import { getClient, supabaseConfigured } from './net/supa.js';
+import { getClient, getAccountClient, supabaseConfigured } from './net/supa.js';
 import { EMAILJS_SERVICE, EMAILJS_TEMPLATE, EMAILJS_KEY } from './net/config.js';
 import { exportBindings, importBindings, setBindingsPersister } from './controls.js';
 import * as Borgs from './friends.js';
@@ -94,15 +94,15 @@ const LocalBackend = {
 const SupaBackend = {
     name: 'supabase',
     async restore() {
-        const c = await getClient();
+        const c = await getAccountClient();
         const { data } = await c.auth.getUser();
         if (!data || !data.user) return null;
         const { data: p } = await c.from('luminary_profiles').select('username').eq('id', data.user.id).maybeSingle();
         return p ? { userId: data.user.id, username: p.username } : null;
     },
-    async exists(u) { const c = await getClient(); const { data } = await c.rpc('luminary_username_exists', { _name: u }); return !!data; },
+    async exists(u) { const c = await getAccountClient(); const { data } = await c.rpc('luminary_username_exists', { _name: u }); return !!data; },
     async signUp(u, pw, email) {
-        const c = await getClient();
+        const c = await getAccountClient();
         const { data, error } = await c.auth.signUp({
             email: toEmail(u), password: authPw(pw),
             options: { data: { username: 'lum_' + u, contact_email: email || '' } },   // prefixed: harmless in a project shared with another game
@@ -119,17 +119,48 @@ const SupaBackend = {
         return { userId: user.id, username: u };
     },
     async signIn(u, pw) {
-        const c = await getClient();
+        const c = await getAccountClient();
         const { data, error } = await c.auth.signInWithPassword({ email: toEmail(u), password: authPw(pw) });
         if (error) return { error: 'Wrong username or password.' };
         const { data: p } = await c.from('luminary_profiles').select('username').eq('id', data.user.id).maybeSingle();
         return { userId: data.user.id, username: p ? p.username : u };
     },
-    async signOut() { const c = await getClient(); await c.auth.signOut(); },
-    async load(userId) { const c = await getClient(); const { data } = await c.from('luminary_profiles').select('settings').eq('id', userId).maybeSingle(); return (data && data.settings) || {}; },
-    async save(userId, data) { const c = await getClient(); await c.from('luminary_profiles').update({ settings: data, updated_at: new Date().toISOString() }).eq('id', userId); },
+    async signOut() { const c = await getAccountClient(); await c.auth.signOut(); },
+    async load(userId) { const c = await getAccountClient(); const { data } = await c.from('luminary_profiles').select('settings').eq('id', userId).maybeSingle(); return (data && data.settings) || {}; },
+    async save(userId, data) { const c = await getAccountClient(); await c.from('luminary_profiles').update({ settings: data, updated_at: new Date().toISOString() }).eq('id', userId); },
 };
-export const backend = supabaseConfigured() ? SupaBackend : LocalBackend;
+// Accounts are universal (same login on every device) whenever the cloud table exists: a dedicated project in config.js, or the shared one once supabase/luminary.sql
+// has been run there. Until then (or offline) accounts stay on this device. Local accounts move to the cloud the first time they sign in there.
+let chosen = supabaseConfigured() ? SupaBackend : LocalBackend, picking = null;
+const pick = () => picking || (picking = (async () => {
+    if (supabaseConfigured()) return;
+    try {
+        const c = await getAccountClient();
+        const r = await Promise.race([c.rpc('luminary_username_exists', { _name: 'x' }), new Promise(res => setTimeout(() => res(null), 7000))]);
+        if (r && !r.error) chosen = SupaBackend;
+    } catch (e) { /* no cloud: local accounts */ }
+})());
+export const backend = new Proxy({}, {
+    get: (_, k) => {
+        if (k === 'name') return chosen.name;
+        if (k === 'ready') return pick;
+        return async (...a) => {
+            await pick();
+            if (k === 'signIn' && chosen !== LocalBackend) {
+                const r = await chosen.signIn(...a);
+                if (!r.error) return r;
+                const l = await LocalBackend.signIn(...a);                       // an account made on this device before the cloud existed
+                if (l.error || await chosen.exists(a[0])) return r;
+                const data = await LocalBackend.load(l.userId), su = await chosen.signUp(a[0], a[1], '');
+                if (su.error) return r;
+                try { await chosen.save(su.userId, data); } catch (e) { /* saved on the next change */ }
+                return su;
+            }
+            return chosen[k](...a);
+        };
+    },
+});
+export const cloudAccounts = async () => { await pick(); return chosen !== LocalBackend; };
 
 // ------------------------------------------------------------------ saved data
 const GUEST_KEY = 'luminary-guest-data';

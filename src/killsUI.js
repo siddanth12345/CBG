@@ -1,6 +1,6 @@
 // Kills replay: every KO of the match as its own clip (5 s before + the blow), a stats card while the camera pushes in
 // on the victim, then three stats pages (click anywhere to continue) and back to the result screen.
-import { S, startKillsReplay, skipKillsReplay, killsReplayActive, matchStatsData, gameOverModal } from './gameCore.js';
+import { S, startKillsReplay, skipKillsReplay, killsReplayActive, matchStatsData, gameOverModal, setEndHook } from './gameCore.js';
 import { charOf } from './characters.js';
 
 const $ = (id) => document.getElementById(id);
@@ -39,9 +39,10 @@ function drawPages() {
     }
     pages.innerHTML = `<div class="kr-panel"><div class="kr-tabs">${tabs.map((t, i) => `<button type="button" data-krtab="${i}" class="${i === tab ? 'on' : ''}">${t}</button>`).join('')}</div><div class="kr-body">${body}</div><div class="kr-hint">click anywhere to continue ${tab + 1}/3</div></div>`;
 }
-function advance() { if (tab < 2) { tab++; drawPages(); } else closePages(); }
+let shownAt = 0;
+function advance() { if (performance.now() - shownAt < 700) return; if (tab < 2) { tab++; drawPages(); } else closePages(); }
 function closePages() { pages.style.display = 'none'; const f = onPagesDone; onPagesDone = null; if (f) f(); }
-export function showStatsPages(done) { ensure(); tab = 0; onPagesDone = done || null; drawPages(); pages.style.display = 'flex'; }
+export function showStatsPages(done) { ensure(); tab = 0; onPagesDone = done || null; drawPages(); pages.style.display = 'flex'; shownAt = performance.now(); }
 
 function card(m) {
     const bits = [`<div class="kr-v">${esc(m.dn)} <small>${esc(cn(m.dc))}</small></div>`,
@@ -52,7 +53,8 @@ function card(m) {
 
 export function initKills() {
     ensure();
-    const kb = $('killsBtn'), sb = $('statsBtn');
+    const kb = $('killsBtn');
+    setEndHook((done) => showStatsPages(done));
     const back = () => { hud.style.display = 'none'; showStatsPages(() => gameOverModal.classList.remove('hidden')); };
     kb.addEventListener('click', () => {
         if (S.gameState !== 'gameover') return;
@@ -60,14 +62,12 @@ export function initKills() {
         hud.style.display = 'block'; $('krCard').style.opacity = 0;
         if (!startKillsReplay((i, n, m) => { cur = m; $('krLabel').textContent = `KILL ${i + 1} / ${n}`; $('krCard').innerHTML = card(m); }, () => { cur = null; back(); })) { hud.style.display = 'none'; gameOverModal.classList.remove('hidden'); }
     });
-    sb.addEventListener('click', () => { gameOverModal.classList.add('hidden'); showStatsPages(() => gameOverModal.classList.remove('hidden')); });
 }
 /** called every frame: button visibility + the victim card while the camera is zoomed in */
 export function tickKills() {
     if (!hud) return;
     const over = S.gameState === 'gameover' && !S.replay && S.online !== 'guest' && !killsReplayActive();
-    const kb = $('killsBtn'), sb = $('statsBtn');
+    const kb = $('killsBtn');
     kb.classList.toggle('hidden', !(over && S.clips && S.clips.length));
-    sb.classList.toggle('hidden', !(over && S.klog && S.ms && S.ms.length));
     if (killsReplayActive() && S.replay) { const c = $('krCard'); c.style.opacity = S.kcT > 0 && S.kcFull ? Math.min(1, S.kcT / 0.3, (S.kcDur - S.kcT) / 0.25 + 0.0) : 0; }
 }

@@ -1878,6 +1878,7 @@ class Fighter {
         this.swing = SWING[sp.swing] || SWING.BLINK;
         this.swingHit = false;
         this.setMove('BLINK', 18);
+        if (this.char === 'umbra') this.cd.BLINK = 60;                // Shadow Step: Side F is tired for 1 s after the stab lands
         audio.playDash();
     }
 
@@ -2105,7 +2106,9 @@ class Fighter {
     checkStageCollision(bounce = false) {
         if (!STAGE.segs) return this._stageCollide(bounce);
         const x0 = STAGE.x, w0 = STAGE.width;                 // the split stage: collide with each solid piece in turn
-        for (const q of STAGE.segs) { STAGE.x = q.l; STAGE.width = q.r - q.l; this._stageCollide(bounce); }
+        let on = false;                                       // standing on ANY piece counts (each piece's pass resets `grounded`, which wiped the landing from the piece before it)
+        for (const q of STAGE.segs) { STAGE.x = q.l; STAGE.width = q.r - q.l; this._stageCollide(bounce); if (this.grounded) on = true; }
+        this.grounded = on;
         STAGE.x = x0; STAGE.width = w0;
     }
     _stageCollide(bounce = false) {
@@ -3234,13 +3237,17 @@ const bump = (f, k, n = 1) => { if (f && f === viewerFighter() && S.stats) S.sta
 /** per-fighter match stats (every fighter, not only the viewer): feeds the end-of-match pages and the kills replay */
 const msOf = (i) => { const a = S.ms || (S.ms = []); return a[i] || (a[i] = { dealt: 0, taken: 0, hits: 0, combo: 0, falls: 0 }); };
 const MOVE_NAMES = { J: 'melee', CORE: 'Neutral F', BLINK: 'Side F', SPIRAL: 'Up F', HEADBUTT: 'Down air', GRAB: 'grab', SUPLEX: 'Down F' };
-/** what a bot sees of a foe: a cloaked Umbra is invisible. Hard bots gamble on a spot near him (re-rolled every half second); the others only know where he vanished. */
+/** what a bot sees of a foe: a cloaked Umbra is completely invisible to bots. The only hints are what a person could also see:
+ *  the flash and particles of a move (a fixed spot for 2/3 s) and, rarely, a fast dash's trail (a rough spot nearby for 0.4 s). No hint = null: the bot has nothing to chase. */
 function aiSeen(bot, foe) {
     if (!foe || !(foe.cloakT > 0)) { if (bot) bot._lost = null; return foe; }
-    const g = bot._lost && bot._lost.foe === foe ? bot._lost : (bot._lost = { foe, x: foe.x, y: foe.y, t: 0 });
-    if (bot.level === 'hard' || (S.gameMode === 'training' && S.train && S.train.botType === 'hard')) {
-        if (g.t-- <= 0) { g.t = 30; const r = Math.random(), a = Math.random() * Math.PI * 2, d = r < 0.3 ? 40 + Math.random() * 120 : 160 + Math.random() * 420; g.x = foe.x + Math.cos(a) * d; g.y = foe.y + Math.sin(a) * d * 0.5; }
-    }
+    const g = bot._lost && bot._lost.foe === foe ? bot._lost : (bot._lost = { foe, x: 0, y: 0, t: 0 });
+    const d = Math.hypot(foe.x - bot.x, foe.y - bot.y);
+    const acting = (foe.attackTimer > 0 || !!foe.swing || !!foe.activeMove) && d < 900;
+    if (acting) { g.x = foe.x; g.y = foe.y; g.t = 40; }
+    else if (g.t <= 0 && d < 450 && Math.hypot(foe.vx || 0, foe.vy || 0) > 12) { g.x = foe.x + (Math.random() - 0.5) * 220; g.y = foe.y + (Math.random() - 0.5) * 120; g.t = 24; }
+    if (g.t <= 0) return null;
+    g.t--;
     const px = Object.create(foe); px.x = g.x; px.y = g.y; px.vx = 0; px.vy = 0; px.cloakT = 0;
     return px;
 }
@@ -4963,6 +4970,8 @@ export function applyTrainPrefs() {
 }
 
 const gameOverModal = document.getElementById('gameOverModal');
+let endHook = null;
+export function setEndHook(f) { endHook = f; }
 function endGame(winnerText, winnerRole = null) {
     if (S.sdBase) { Object.assign(BLAST_ZONES, S.sdBase); S.sdBase = null; }
     S.sudden = false; S.sdT = 0; S.cdN = -1;
@@ -4979,7 +4988,8 @@ function endGame(winnerText, winnerRole = null) {
     S.winnerRole = winnerRole;
     document.getElementById('winnerText').textContent = winnerText;
     setTimeout(() => {
-        gameOverModal.classList.remove('hidden');
+        const show = () => { if (S.gameState === 'gameover') gameOverModal.classList.remove('hidden'); };
+        if (endHook && !S.demo && S.gameMode !== 'training' && S.online !== 'guest' && S.ms) endHook(show); else show();       // the match stats come first, then the win / lose screen
     }, 800);
 }
 
@@ -5181,6 +5191,7 @@ function guestSmooth() {
         f.x = x; f.y = y;
     }
     for (const o of orbs) { o.x += o.vx * 0.5; o.y += o.vy * 0.5; }
+    for (const g of items) if (g.st === 'held') { const h = fighters[g.hold]; if (h && h.active) { g.x = h.x + (h.facing || 1) * 30; g.y = h.y - 2; } }      // a carried item sticks to the hand as it is drawn (the fighter is shown slightly ahead of the host's copy of the item)
     for (const g of items) if (g.st !== 'held' && !g.act && g.st !== 'zone') { g.x += g.vx * 0.5; g.y += g.vy * 0.5; g.rot += (g.spin || 0) * 0.5; }
 }
 export function applySnapshot(s) {
@@ -5227,7 +5238,9 @@ export function applySnapshot(s) {
         seenIt.add(o.id);
         let g = guestItems.get(o.id);
         if (!g) { g = { id: o.id }; guestItems.set(o.id, g); items.push(g); }
-        Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: o.h, r: ITEM_R[o.t] });
+        const had = g.x !== undefined && g.st !== 'held', gx = g.x, gy = g.y;
+        Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: guestFlip(o.h), r: ITEM_R[o.t] });
+        if (had && o.st !== 'held' && Math.hypot(gx - o.x, gy - o.y) < 90) { g.x = gx + (o.x - gx) * 0.5; g.y = gy + (o.y - gy) * 0.5; }      // loose items glide to the new position instead of snapping
     }
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
     for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
@@ -5316,7 +5329,9 @@ function applyReplayFrame(fr) {
         seenIt.add(o.id);
         let g = guestItems.get(o.id);
         if (!g) { g = { id: o.id }; guestItems.set(o.id, g); items.push(g); }
-        Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: o.h, r: ITEM_R[o.t] });
+        const had = g.x !== undefined && g.st !== 'held', gx = g.x, gy = g.y;
+        Object.assign(g, { type: o.t, x: o.x, y: o.y, vx: o.vx, vy: o.vy, st: o.st, len: o.len, act: !!o.act, rot: o.rot, spin: o.sp, hold: guestFlip(o.h), r: ITEM_R[o.t] });
+        if (had && o.st !== 'held' && Math.hypot(gx - o.x, gy - o.y) < 90) { g.x = gx + (o.x - gx) * 0.5; g.y = gy + (o.y - gy) * 0.5; }      // loose items glide to the new position instead of snapping
     }
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
     for (const f of fighters) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;
@@ -5405,7 +5420,7 @@ export function step() {
         flushBuffered();
         for (const f of live) {
             if (!f._upd) continue;
-            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); if (foe) f.updateAI(aiSeen(f, foe)); aiWalk(f); f.update(); continue; }
+            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; if (seen) f.updateAI(seen); else if (foe) f.holdStill && f.holdStill(); aiWalk(f); f.update(); continue; }
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
@@ -5425,7 +5440,7 @@ export function step() {
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
             const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
-            if (!staticBot) { p2.updateAI(aiSeen(p2, p1)); aiWalk(p2); }
+            if (!staticBot) { const seen = aiSeen(p2, p1); if (seen) p2.updateAI(seen); aiWalk(p2); }
         }
         if (p2._upd) p2.update();
 
