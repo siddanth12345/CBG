@@ -2598,26 +2598,58 @@ class AIBot extends Fighter {
         return true;
     }
 
+    /** how much this bot has practised the kill barrier. Easy: 1 attempt. Apex: 50. */
+    barrierPractice() {
+        const lv = this.diff || this.level;
+        return { easy: 1, medium: 10, hard: 22, expert: 32, master: 41, apex: 50 }[lv] || 1;
+    }
+    /** steer out of the kill box. Returns true when this frame is spent surviving (skip the fight). */
+    respectBarrier() {
+        const sk = this.barrierPractice() / 50;
+        const B = BLAST_ZONES, sudden = !!S.sudden;
+        const padX = 24 + sk * (sudden ? 420 : 150);
+        const padY = 24 + sk * (sudden ? 300 : 110);
+        const dl = this.x - B.left, dr = B.right - this.x, dt = this.y - B.top, db = B.bottom - this.y;
+        const room = Math.min(dl, dr, dt, db);
+        if (room > Math.max(padX, padY)) return false;
+        const cx = Math.max(B.left + 50, Math.min(B.right - 50, STAGE.x + STAGE.width / 2));
+        const ty = Math.max(B.top + 50, Math.min(STAGE.y - 20, B.bottom - 60));
+        const dir = cx >= this.x ? 1 : -1;
+        this.facing = dir;
+        this.cancelF();
+        this.vx += dir * (0.9 + sk * 2.6);
+        const off = this.y > STAGE.y + 6 || this.x < STAGE.x || this.x > STAGE.x + STAGE.width || db < padY || dt < padY * 0.55;
+        if (!off) return false;
+        if (this.jumpsLeft > 0 && this.vy > -4 && Math.random() < 0.3 + sk * 0.7) this.jump();
+        if (this.actionTimer % (sk > 0.5 ? 2 : 7) === 0) {
+            if (this.cd.SPIRAL <= 0) this.useSpecial('SPIRAL', cx, ty);
+            else if (this.cd.BLINK <= 0 && sk > 0.12) this.useSpecial('BLINK', cx, ty);
+        }
+        return true;
+    }
     /** a recovery decision for when the bot is off the stage */
     recover() {
-        const cx = STAGE.x + STAGE.width / 2;
+        const B = BLAST_ZONES;
+        const inset = 48 + (this.barrierPractice() / 50) * (S.sudden ? 190 : 36);
+        const safeL = Math.max(STAGE.x + 50, B.left + inset), safeR = Math.min(STAGE.x + STAGE.width - 50, B.right - inset);
+        const cx = safeL < safeR ? (safeL + safeR) / 2 : (B.left + B.right) / 2;
         const belowMap = this.y > STAGE.y + 8;
         const offL = this.x < STAGE.x - 20, offR = this.x > STAGE.x + STAGE.width + 20;
         // Prefer landing ON the stage top (not only the ledge). Below map → full priority stage.
         let tx, ty;
         if (belowMap) {
-            if (offL) tx = STAGE.x + 140;
-            else if (offR) tx = STAGE.x + STAGE.width - 140;
+            if (offL) tx = Math.max(safeL, STAGE.x + 140);
+            else if (offR) tx = Math.min(safeR, STAGE.x + STAGE.width - 140);
             else {                                                  // UNDER the stage: use a ledge only because the solid floor blocks a direct climb.
                 // Pick the reachable lip using both horizontal distance and vertical route distance.
-                const leftX = STAGE.x - 90, rightX = STAGE.x + STAGE.width + 90;
+                const leftX = Math.max(B.left + 70, STAGE.x - 90), rightX = Math.min(B.right - 70, STAGE.x + STAGE.width + 90);
                 const routeCost = (x) => Math.hypot(this.x - x, (this.y - (STAGE.y + 60)) * 0.65);
                 const side = routeCost(leftX) <= routeCost(rightX) ? -1 : 1;
                 tx = side < 0 ? leftX : rightX;
-                ty = STAGE.y + 60;                                    // get outside the platform first, then climb to the top
+                ty = Math.min(B.bottom - 80, STAGE.y + 60);           // get outside the platform first, then climb to the top
             }
-            if (offL || offR) ty = STAGE.y - 90;
-            else ty = STAGE.y + 60;
+            if (offL || offR) ty = Math.max(B.top + 40, STAGE.y - 90);
+            else ty = Math.min(B.bottom - 80, STAGE.y + 60);
         } else if (offL || offR) {
             // above stage height but off side: drift to center / stage top
             tx = cx;
@@ -2730,6 +2762,22 @@ class AIBot extends Fighter {
             this.isShielding = false;
             return;
         }
+        // nobody visible (Umbra cloaked, or no foe): still recover and stay inside the kill barrier
+        if (!target) {
+            this.actionTimer++;
+            this.isShielding = false;
+            this.shieldHold = 0;
+            if (this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.freezeTimer > 0) return;
+            if (this.respectBarrier()) return;
+            const off = this.x < STAGE.x - 8 || this.x > STAGE.x + STAGE.width + 8 || this.y > STAGE.y + 8;
+            if (off) this.recover();
+            else {
+                const cx = STAGE.x + STAGE.width / 2;
+                this.facing = cx >= this.x ? 1 : -1;
+                this.vx += this.facing * (0.55 + this.barrierPractice() / 80);
+            }
+            return;
+        }
 
         if (this.level === 'hard') this.observe(target);
 
@@ -2747,6 +2795,7 @@ class AIBot extends Fighter {
         }
 
         this.actionTimer++;
+        if (this.respectBarrier()) return;
         if (this.mod && !S.demo && this.modTick(target)) return;
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
@@ -2902,6 +2951,11 @@ class AIBot extends Fighter {
         }
 
         if (targetIsOffStage) {
+            if (S.sudden) {
+                const sk = this.barrierPractice() / 50, B = BLAST_ZONES;
+                const targetRoom = Math.min(target.x - B.left, B.right - target.x, target.y - B.top, B.bottom - target.y);
+                if (targetRoom < 36 + sk * 280) { this.recover(); return; }   // don't follow them into the closing box
+            }
             // Can we still recover if we chase off-stage?
             const hasUp = this.cd.SPIRAL <= 0;
             const hasSide = this.cd.BLINK <= 0;
@@ -5436,7 +5490,7 @@ export function step() {
         flushBuffered();
         for (const f of live) {
             if (!f._upd) continue;
-            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; if (seen) f.updateAI(seen); else if (foe) f.holdStill && f.holdStill(); aiWalk(f); f.update(); continue; }
+            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; f.updateAI(seen || null); aiWalk(f); f.update(); continue; }
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
@@ -5456,7 +5510,7 @@ export function step() {
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
             const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
-            if (!staticBot) { const seen = aiSeen(p2, p1); if (seen) p2.updateAI(seen); aiWalk(p2); }
+            if (!staticBot) { const seen = aiSeen(p2, p1); p2.updateAI(seen || null); aiWalk(p2); }
         }
         if (p2._upd) p2.update();
 
