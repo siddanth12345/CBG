@@ -315,7 +315,23 @@ export function buildHorizon(scene, { D }) {
     });
     const decals = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: crackTex, transparent: true, depthWrite: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.visible = false; m.renderOrder = 4; root.add(m); return m; });
     // ---- split pieces: when the stage breaks, every piece is its own solid chunk of floating stone (jagged cut edge, its own stepped underside and keel)
-    const pieces = []; let pieceKey = '';
+    // the keel (the big inverted triangle) never changes: it stays one whole stone under the cracked stage, and the crack lines run down its face
+    const keelSolo = keel.clone(); keelSolo.visible = false; stage.add(keelSolo);
+    const keelCracks = new THREE.Group(); keelCracks.visible = false; stage.add(keelCracks);
+    const crackDark = new THREE.LineBasicMaterial({ color: 0x1b1410 }), crackGlow = new THREE.LineBasicMaterial({ color: new THREE.Color('#ff9a3c').multiplyScalar(1.6), toneMapped: false });
+    function buildKeelCracks(cuts) {
+        while (keelCracks.children.length) { const o = keelCracks.children.pop(); o.geometry.dispose(); }
+        const top = keel.position.y + keel.scale.y / 2, kh = keel.scale.y, hwTop = keel.scale.x / 2, n = 14;
+        cuts.forEach((c, ci) => {
+            const r = rng(Math.round(c * 1000) + 11), pts = [], pts2 = [];
+            for (let i = 0; i <= n; i++) {
+                const t = i / n, hw = hwTop * (1 - 0.88 * t), x = (c - 0.5) * 2 * hw * 0.92 + (i && i < n ? (r() - 0.5) * 16 * (1 - t) : 0);
+                pts.push(new THREE.Vector3(x, top - kh * t * 0.97, D * 0.7 * 0.5 * (1 - t * 0.6) * 0.78 + 1.2)); pts2.push(new THREE.Vector3(x, top - kh * t * 0.97, -(D * 0.7 * 0.5 * (1 - t * 0.6) * 0.78 + 1.2)));
+            }
+            for (const arr of [pts, pts2]) { const gl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arr), crackGlow); const dk = gl.clone(); dk.material = crackDark; dk.position.x += 1.4; keelCracks.add(gl, dk); }
+        });
+    }
+    const pieces = []; let pieceKey = '', keelKey = '';
     const edgeLine = new THREE.LineBasicMaterial({ color: new THREE.Color('#ff9a3c').multiplyScalar(1.6), toneMapped: false });
     const jag = (seed, n, A) => { const r = rng(seed), o = [0]; for (let m = 1; m <= n; m++) o.push((m % 2 ? 1 : -1) * (0.35 + r() * 0.65) * A); return o; };
     function buildPiece(k, n, fr, cuts) {
@@ -346,7 +362,6 @@ export function buildHorizon(scene, { D }) {
             const stepH = Math.max(26, H * 0.55), keelH = Math.max(200, H * 3.4);
             let wk = W * 0.9; const secs = [];
             for (let i = 0; i < 3; i++) { secs.push({ rows: 2, h: stepH, w0: wk / 2, w1: wk / 2, d: D * (0.92 - i * 0.14), m: i % 2 ? mSilver : mMarble }); wk *= 0.72; }
-            secs.push({ rows: 8, h: keelH, w0: wk * 1.15 / 2, w1: wk * 1.15 / 2 * 0.12, d: D * 0.7, m: mDark });
             let y = topY - H, gi = N;
             for (const sc of secs) {
                 const rh = sc.h / sc.rows, pts = [];
@@ -394,9 +409,9 @@ export function buildHorizon(scene, { D }) {
             if (broken) {
                 const fr = [0, ...cuts, 1], key = cuts.join(',');
                 if (key !== pieceKey) { clearPieces(); pieceKey = key; for (let k = 0; k < fr.length - 1; k++) pieces.push(buildPiece(k, fr.length - 1, fr, cuts)); }
-                body.visible = false;
+                body.visible = false; keelSolo.visible = true; keelCracks.visible = true; if (key !== keelKey) { keelKey = key; buildKeelCracks(cuts); }
                 pieces.forEach((g, k) => { g.visible = true; const q = segs && segs[k]; g.position.set(cx + g.userData.mid * W + (q ? wx(q.off) - wx(0) : 0) + jx(k), jy(k), 0); });
-            } else { body.visible = true; pieces.forEach(g => { g.visible = false; }); }
+            } else { body.visible = true; keelSolo.visible = false; keelCracks.visible = false; pieces.forEach(g => { g.visible = false; }); }
             // crack lines on the top just before it breaks
             const warn = cuts.length && clk >= 300 && clk < 330 ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;
             decals.forEach((d, i) => {

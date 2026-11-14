@@ -38,13 +38,24 @@ const BUILD = {
         m.halo.visible = false;
         // a great sword, twice his height, held upright at his left side
         const sw = c.G(m.armL.wr, 0, 0, 0); sw.rotation.z = 0.06;
-        const blade = c.M(new THREE.BoxGeometry(12, 98, 3), c.trim); blade.position.y = 52; sw.add(blade);
-        const tip = c.M(new THREE.ConeGeometry(6, 14, 4), c.trim); tip.scale.z = 0.3; tip.rotation.y = Math.PI / 4; tip.position.y = 108; sw.add(tip);
-        const fuller = c.M(new THREE.BoxGeometry(2.2, 80, 3.4), c.glow); fuller.position.y = 50; sw.add(fuller);
-        const guard = c.M(new THREE.BoxGeometry(26, 3.6, 5), c.armorDark); guard.position.y = 2.6; sw.add(guard);
-        for (const s of [-1, 1]) { const horn = c.M(new THREE.ConeGeometry(2.2, 8, 5), c.armorDark); horn.position.set(s * 13, 5, 0); horn.rotation.z = -s * 0.5; sw.add(horn); }
-        const grip = c.M(new THREE.CylinderGeometry(1.7, 1.7, 13, 8), c.suit); grip.position.y = -5; sw.add(grip);
-        const pom = c.M(new THREE.SphereGeometry(3, 10, 8), c.glow); pom.position.y = -12.5; sw.add(pom);
+        // a broad cleaver: slanted, serrated tip, dark rune panel down the middle, round guard, wrapped grip
+        const bs = new THREE.Shape(); bs.moveTo(-11, 6); bs.lineTo(-11, 100); bs.lineTo(-9, 112);                  // sharp point at the top left
+        bs.lineTo(11, 92); bs.lineTo(11, 6); bs.lineTo(-11, 6);
+        const notch = new THREE.Shape(); notch.moveTo(-11, 100); notch.lineTo(-11, 100);
+        const bg = new THREE.ExtrudeGeometry(bs, { depth: 3.6, bevelEnabled: true, bevelSize: 0.7, bevelThickness: 0.9, bevelSegments: 1 }); bg.translate(0, 0, -1.8);
+        const blade = c.M(bg, c.trim); sw.add(blade);
+        for (const [y, w] of [[96, 5], [86, 4], [76, 3.2]]) {                                                     // serrated teeth bitten out of the cutting edge
+            const t = new THREE.Mesh(new THREE.ConeGeometry(w, w * 1.7, 3), new THREE.MeshBasicMaterial({ color: 0x0b1020 })); t.rotation.z = Math.PI / 2; t.position.set(-11 - w * 0.15, y, 0); t.scale.z = 3; sw.add(t);
+        }
+        for (const zs of [1, -1]) {
+            const pn = c.M(new THREE.BoxGeometry(11, 66, 1.2), c.suit); pn.position.set(2, 50, zs * 2.2); sw.add(pn);
+            const rune = [[-3, 76, 6, 1.1], [0, 71, 1.1, 5], [3, 66, 6, 1.1], [0, 61, 1.1, 5], [-3, 56, 6, 1.1], [0, 40, 1.1, 22], [-3, 29, 6, 1.1]];
+            for (const [x, y, w, h] of rune) { const r = c.M(new THREE.BoxGeometry(w, h, 0.5), c.glow); r.position.set(2 + x, y, zs * 2.9); sw.add(r); }
+        }
+        const guard = c.M(new THREE.CylinderGeometry(11.5, 11.5, 3.6, 18), c.armorDark); guard.scale.set(1, 1, 0.5); guard.position.y = 4.4; sw.add(guard);
+        const grip = c.M(new THREE.CylinderGeometry(1.9, 1.9, 15, 8), c.suit); grip.position.y = -4.5; sw.add(grip);
+        for (let i = 0; i < 5; i++) { const wr = c.M(new THREE.TorusGeometry(1.95, 0.45, 5, 10), c.glow); wr.rotation.x = Math.PI / 2; wr.position.y = -10 + i * 3; sw.add(wr); }
+        const pom = c.M(new THREE.OctahedronGeometry(3.4, 0), c.trim); pom.position.y = -13.5; pom.scale.set(1, 0.8, 0.8); sw.add(pom);
         for (const s of [-1, 1]) {                                           // spiked pauldrons and a tabard
             const sp = c.M(new THREE.ConeGeometry(2.6, 9, 6), c.armorDark); sp.position.set(s * 14.4, 21, 0); sp.rotation.z = -s * 0.9; m.torso.add(sp);
         }
