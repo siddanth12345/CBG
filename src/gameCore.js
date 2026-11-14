@@ -686,6 +686,7 @@ class Fighter {
         if (this.maxJumps !== bj) { this.jumpsLeft = Math.min(bj, this.jumpsLeft + Math.max(0, bj - this.maxJumps)); this.maxJumps = bj; }
         if (this.gravT > 0) this.gravT--;
         if (this.dropT > 0) this.dropT--;
+        if (S.sdNoDmg) this.damage = 200;          // sudden death: percent is locked, moves cannot change it
         if (this.damage >= 250) {
             this.takeKO();
             return;
@@ -982,7 +983,7 @@ class Fighter {
             if (this.invincibleTimer > 0 || this.spawnT > 0) {
                 if (!(this._bzCool > 0)) {
                     const cx = (B.left + B.right) / 2, cy = (B.top + B.bottom) / 2, dx = cx - this.x, dy = cy - this.y, d = Math.hypot(dx, dy) || 1;
-                    this.damage += 250; this.interrupt && this.interrupt();
+                    if (!S.sdNoDmg) this.damage += 250; this.interrupt && this.interrupt();
                     this.vx = dx / d * 26; this.vy = dy / d * 26; this.hitstun = Math.max(this.hitstun, 30); this._bzCool = 40;
                     S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true); fx('hit', this.x, this.y, 25, Math.atan2(dy, dx));
                 }
@@ -2597,26 +2598,58 @@ class AIBot extends Fighter {
         return true;
     }
 
+    /** how much this bot has practised the kill barrier. Easy: 1 attempt. Apex: 50. */
+    barrierPractice() {
+        const lv = this.diff || this.level;
+        return { easy: 1, medium: 10, hard: 22, expert: 32, master: 41, apex: 50 }[lv] || 1;
+    }
+    /** steer out of the kill box. Returns true when this frame is spent surviving (skip the fight). */
+    respectBarrier() {
+        const sk = this.barrierPractice() / 50;
+        const B = BLAST_ZONES, sudden = !!S.sudden;
+        const padX = 24 + sk * (sudden ? 420 : 150);
+        const padY = 24 + sk * (sudden ? 300 : 110);
+        const dl = this.x - B.left, dr = B.right - this.x, dt = this.y - B.top, db = B.bottom - this.y;
+        const room = Math.min(dl, dr, dt, db);
+        if (room > Math.max(padX, padY)) return false;
+        const cx = Math.max(B.left + 50, Math.min(B.right - 50, STAGE.x + STAGE.width / 2));
+        const ty = Math.max(B.top + 50, Math.min(STAGE.y - 20, B.bottom - 60));
+        const dir = cx >= this.x ? 1 : -1;
+        this.facing = dir;
+        this.cancelF();
+        this.vx += dir * (0.9 + sk * 2.6);
+        const off = this.y > STAGE.y + 6 || this.x < STAGE.x || this.x > STAGE.x + STAGE.width || db < padY || dt < padY * 0.55;
+        if (!off) return false;
+        if (this.jumpsLeft > 0 && this.vy > -4 && Math.random() < 0.3 + sk * 0.7) this.jump();
+        if (this.actionTimer % (sk > 0.5 ? 2 : 7) === 0) {
+            if (this.cd.SPIRAL <= 0) this.useSpecial('SPIRAL', cx, ty);
+            else if (this.cd.BLINK <= 0 && sk > 0.12) this.useSpecial('BLINK', cx, ty);
+        }
+        return true;
+    }
     /** a recovery decision for when the bot is off the stage */
     recover() {
-        const cx = STAGE.x + STAGE.width / 2;
+        const B = BLAST_ZONES;
+        const inset = 48 + (this.barrierPractice() / 50) * (S.sudden ? 190 : 36);
+        const safeL = Math.max(STAGE.x + 50, B.left + inset), safeR = Math.min(STAGE.x + STAGE.width - 50, B.right - inset);
+        const cx = safeL < safeR ? (safeL + safeR) / 2 : (B.left + B.right) / 2;
         const belowMap = this.y > STAGE.y + 8;
         const offL = this.x < STAGE.x - 20, offR = this.x > STAGE.x + STAGE.width + 20;
         // Prefer landing ON the stage top (not only the ledge). Below map → full priority stage.
         let tx, ty;
         if (belowMap) {
-            if (offL) tx = STAGE.x + 140;
-            else if (offR) tx = STAGE.x + STAGE.width - 140;
+            if (offL) tx = Math.max(safeL, STAGE.x + 140);
+            else if (offR) tx = Math.min(safeR, STAGE.x + STAGE.width - 140);
             else {                                                  // UNDER the stage: use a ledge only because the solid floor blocks a direct climb.
                 // Pick the reachable lip using both horizontal distance and vertical route distance.
-                const leftX = STAGE.x - 90, rightX = STAGE.x + STAGE.width + 90;
+                const leftX = Math.max(B.left + 70, STAGE.x - 90), rightX = Math.min(B.right - 70, STAGE.x + STAGE.width + 90);
                 const routeCost = (x) => Math.hypot(this.x - x, (this.y - (STAGE.y + 60)) * 0.65);
                 const side = routeCost(leftX) <= routeCost(rightX) ? -1 : 1;
                 tx = side < 0 ? leftX : rightX;
-                ty = STAGE.y + 60;                                    // get outside the platform first, then climb to the top
+                ty = Math.min(B.bottom - 80, STAGE.y + 60);           // get outside the platform first, then climb to the top
             }
-            if (offL || offR) ty = STAGE.y - 90;
-            else ty = STAGE.y + 60;
+            if (offL || offR) ty = Math.max(B.top + 40, STAGE.y - 90);
+            else ty = Math.min(B.bottom - 80, STAGE.y + 60);
         } else if (offL || offR) {
             // above stage height but off side: drift to center / stage top
             tx = cx;
@@ -2729,6 +2762,22 @@ class AIBot extends Fighter {
             this.isShielding = false;
             return;
         }
+        // nobody visible (Umbra cloaked, or no foe): still recover and stay inside the kill barrier
+        if (!target) {
+            this.actionTimer++;
+            this.isShielding = false;
+            this.shieldHold = 0;
+            if (this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.freezeTimer > 0) return;
+            if (this.respectBarrier()) return;
+            const off = this.x < STAGE.x - 8 || this.x > STAGE.x + STAGE.width + 8 || this.y > STAGE.y + 8;
+            if (off) this.recover();
+            else {
+                const cx = STAGE.x + STAGE.width / 2;
+                this.facing = cx >= this.x ? 1 : -1;
+                this.vx += this.facing * (0.55 + this.barrierPractice() / 80);
+            }
+            return;
+        }
 
         if (this.level === 'hard') this.observe(target);
 
@@ -2746,6 +2795,7 @@ class AIBot extends Fighter {
         }
 
         this.actionTimer++;
+        if (this.respectBarrier()) return;
         if (this.mod && !S.demo && this.modTick(target)) return;
         const stageCenterX = STAGE.x + STAGE.width / 2;
 
@@ -2901,6 +2951,11 @@ class AIBot extends Fighter {
         }
 
         if (targetIsOffStage) {
+            if (S.sudden) {
+                const sk = this.barrierPractice() / 50, B = BLAST_ZONES;
+                const targetRoom = Math.min(target.x - B.left, B.right - target.x, target.y - B.top, B.bottom - target.y);
+                if (targetRoom < 36 + sk * 280) { this.recover(); return; }   // don't follow them into the closing box
+            }
             // Can we still recover if we chase off-stage?
             const hasUp = this.cd.SPIRAL <= 0;
             const hasSide = this.cd.BLINK <= 0;
@@ -3285,7 +3340,7 @@ function burnStick(f) { if (f.heldItem && f.heldItem.type === 'FIRESTICK') burnI
 function pickUp(f, it) {
     bump(f, 'items');
     if (it.type === 'STRAWBERRY') {
-        f.damage = Math.max(0, f.damage - 30);
+        if (!S.sdNoDmg) f.damage = Math.max(0, f.damage - 30);
         fx('heal', f.x, f.y); audio.playGrab(); it.st = 'dead'; return true;
     }
     if (it.type === 'BALLOON') {
@@ -3497,7 +3552,7 @@ function runCountdown() {
 /** tied for the fewest deaths: only they come back, at 200%, and the blast zone closes in */
 function beginSuddenDeath(tied) {
     S.sudden = true;
-    S.sdNoDmg = true;          // timer sudden death: only the kill barrier deals damage
+    S.sdNoDmg = true;          // sudden death: percent stays at 200, only the kill barrier can KO
     S.sdT = 0;
     S.timeLeft = 60 * 60;
     const a = ARENAS[S.arena] || ARENAS.normal;
@@ -4131,12 +4186,12 @@ function resetHazards() {
 function hazardHit(f, h) {
     f.interrupt && f.interrupt();
     if (h.kind === 'meteor') {
-        f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
+        if (!S.sdNoDmg) f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
         f.hitstun = Math.max(f.hitstun, 26); fx('hit', f.x, f.y, 25, -0.5); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
         return;
     }
     const storm = h.kind === 'storm', dir = f.x >= h.x ? 1 : -1;
-    f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
+    if (!S.sdNoDmg) f.damage += h.dmg; f.grounded = false; f.vx = storm ? dir * 6 : (f.x - h.x) * 0.06; f.vy = -(storm ? 13 : 19) - Math.min(8, f.damage * 0.03);
     f.hitstun = Math.max(f.hitstun, storm ? 28 : 22); fx('hit', f.x, f.y, 25, dir > 0 ? -0.6 : Math.PI + 0.6); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 10);
 }
 /** every solid top a strike can come from: the stage piece(s) and the platforms */
@@ -4646,8 +4701,8 @@ function umbraEdge(att, def, hb) {
     const behind = defFace === (att.facing || 1);
     if (!behind) return hb;
     bump(att, 'backstabs');
-    if (att.cloakT > 0) att._boostWait = true;                 // a backstab while already invisible: refresh the invisibility, and the NEXT hit deals 1.5x damage
-    att._shadowT = 300; att.cloakT = 300;                      // successful backstab: 1.7x speed and invisible for 3 s, with a flash
+    if (att.cloakT > 0) { att._boostWait = true; att._shadowT = 360; att.cloakT = 360; }   // backstab while already invisible: reset the cloak to 6 s, next hit deals 1.5x
+    else { att._shadowT = 300; att.cloakT = 300; }             // first backstab: 1.7x speed and invisible for 5 s
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
     return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
@@ -4845,7 +4900,7 @@ function startMatchSequence(mode, cfg) {
             f.reset(true); f.shieldHold = 0; f.remoteAim = null;
         });
         if (S.match.mode === 'sudden') {
-            S.sudden = true; S.sdNoDmg = false; S.sdT = 0;
+            S.sudden = true; S.sdNoDmg = true; S.sdT = 0;
             const a = ARENAS[S.arena] || ARENAS.normal;
             S.sdBase = { left: a.bz.left, right: a.bz.right, top: a.bz.top, bottom: a.bz.bottom };
             Object.assign(BLAST_ZONES, S.sdBase);
@@ -5435,7 +5490,7 @@ export function step() {
         flushBuffered();
         for (const f of live) {
             if (!f._upd) continue;
-            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; if (seen) f.updateAI(seen); else if (foe) f.holdStill && f.holdStill(); aiWalk(f); f.update(); continue; }
+            if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; f.updateAI(seen || null); aiWalk(f); f.update(); continue; }
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
         }
@@ -5455,7 +5510,7 @@ export function step() {
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
             const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
-            if (!staticBot) { const seen = aiSeen(p2, p1); if (seen) p2.updateAI(seen); aiWalk(p2); }
+            if (!staticBot) { const seen = aiSeen(p2, p1); p2.updateAI(seen || null); aiWalk(p2); }
         }
         if (p2._upd) p2.update();
 
