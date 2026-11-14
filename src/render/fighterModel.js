@@ -81,6 +81,10 @@ export class FighterModel {
             footR: mk(base, 1.8), footL: mk(base, 1.8), body: mk(base, 1.5),
         };
         this.trails.body.max = 28;
+        if (this.f && this.f.char === 'bulwark') {                       // heavy swings leave a long, bright ribbon
+            scene.remove(this.trails.blade.mesh); this.trails.blade.geo.dispose();
+            this.trails.blade = new Trail(scene, { color: base, boost: 3, max: 44, life: 0.55 });
+        }
     }
 
     // ============================================================ build
@@ -172,6 +176,7 @@ export class FighterModel {
             }
         }
 
+        this.swK = 0; this.bwSw = null;
         this.sway = [];                                       // trailing bits (scarf, ribbons, cape) that swing with movement
         const trailer = (parent, w, h, x, y, z, mat, kind) => { const g = G(parent, x, y, z); const m = M(new THREE.BoxGeometry(w, h, 0.9), mat); m.position.y = -h / 2; g.add(m); g.userData.kind = kind; this.sway.push(g); return g; };
         const HM = {
@@ -711,10 +716,11 @@ export class FighterModel {
         const o = {};
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
+        const hv = f.char === 'bulwark', ez = (x) => hv ? Math.pow(x, 3.2) : smooth(x);       // Bulwark: the follow-through starts very slowly (heavy), then whips through; same total time
 
         if (k === 'JAB') {                                   // around-the-world sword spin
             const wind = smooth(seg(u, 0, 0.2));
-            const spin = smooth(seg(u, 0.2, 0.86));
+            const spin = ez(seg(u, 0.2, 0.86));
             const rec = smooth(seg(u, 0.86, 1));
             o.rSx = lerp(130, 92, wind); o.rSx = lerp(o.rSx, 20, rec); o.rE = 4; o.rSz = 4 + 10 * (1 - wind);
             o.lSx = lerp(20, 60, wind); o.lE = 40; o.lSz = 30;
@@ -725,7 +731,7 @@ export class FighterModel {
         }
         if (k === 'UP') {
             const crouch = smooth(seg(u, 0, 0.16)) * (1 - smooth(seg(u, 0.16, 0.3)));
-            const sw = smooth(seg(u, 0.14, 0.46));
+            const sw = ez(seg(u, 0.14, 0.46));
             const rec = smooth(seg(u, 0.62, 1));
             const rise = sw * (1 - rec);
             o.rSx = lerp(lerp(8, -38, smooth(seg(u, 0, 0.14))), 178, sw); o.rSx = lerp(o.rSx, 20, rec);
@@ -753,7 +759,7 @@ export class FighterModel {
         }
         if (k === 'SIDE_LEFT' || k === 'SIDE_RIGHT') {
             const wind = smooth(seg(u, 0, 0.28));
-            const swing = smooth(seg(u, 0.28, 0.5));
+            const swing = ez(seg(u, 0.28, hv ? 0.56 : 0.5));
             const rec = smooth(seg(u, 0.6, 1));
             let a = lerp(14, 205, wind); a = lerp(a, 8, swing); a = lerp(a, 16, rec);
             o.rSx = a; o.rE = lerp(26, 10, swing); o.rSz = lerp(10, 16, wind) * (1 - swing * 0.5); o.rSy = lerp(0, 0, wind);
@@ -857,6 +863,16 @@ export class FighterModel {
 
         this.torso.rotation.set(pose.torsoX * D2R, pose.torsoY * D2R, pose.torsoZ * D2R);
         this.head.rotation.set(pose.headX * D2R, pose.headY * D2R, pose.headZ * D2R);
+        if (this.bwSw) {                                     // Bulwark carries the great sword over his back (left arm swept behind) while moving, jumping or fighting
+            const busy = !!atk || !f.grounded || Math.abs(f.vx) > 1.4;
+            const free = !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging);
+            const want = busy && free ? 1 : 0;
+            this.swK += (want - this.swK) * (1 - Math.exp(-dt * 14));
+            const k = this.swK;
+            const Q = (typeof window !== 'undefined' && window.__bwp) || [125, 18, 95, -2.75, 0, 0];
+            pose.lSx = lerp(pose.lSx, Q[0], k); pose.lSz = lerp(pose.lSz, Q[1], k); pose.lE = lerp(pose.lE, Q[2], k);
+            this.bwSw.rotation.set(k * Q[3], k * Q[4], lerp(0.06, Q[5], k));
+        }
         this.armR.sh.rotation.set(-pose.rSx * D2R, pose.rSy * D2R, pose.rSz * D2R);
         this.armL.sh.rotation.set(-pose.lSx * D2R, pose.lSy * D2R, -pose.lSz * D2R);
         this.armR.el.rotation.set(-pose.rE * D2R, 0, 0);

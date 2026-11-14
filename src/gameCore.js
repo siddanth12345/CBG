@@ -5403,7 +5403,7 @@ function applyReplayFrame(fr) {
     if (fr.sp) { SPL.t = fr.sp[0]; SPL.cuts = fr.sp.slice(1); applySplit(false); }
     if (fr.bz) { BLAST_ZONES.left = fr.bz[0]; BLAST_ZONES.right = fr.bz[1]; BLAST_ZONES.top = fr.bz[2]; BLAST_ZONES.bottom = fr.bz[3]; S.sudden = !!fr.sd; S.sdT = fr.sdt || 0; }     // the closing kill barrier
     for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
-    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; } else S.kcT = 0;
+    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone, clip) {
@@ -5415,7 +5415,7 @@ export function startReplay(onDone, clip) {
     S.replay = { frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
     return true;
 }
-export function stopReplay() { if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
+export function stopReplay() { S.kcImpT = 0; if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
 function tickReplay() {
     const R = S.replay, c = R.clip;
     R.i += c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1;           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)

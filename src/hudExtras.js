@@ -1,5 +1,5 @@
 /** On-screen extras: the combo counter (with a warning before the finisher) and the training-mode numbers readout. Pure DOM, fed by gameCore each HUD tick. */
-let box = null, combo = null, readout = null, kc = null, last = { c: '', r: '' };
+let box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcRings = [], kcCanvas = null, last = { c: '', r: '' };
 
 function ensure() {
     if (box) return;
@@ -10,12 +10,18 @@ function ensure() {
     combo.style.cssText = 'position:absolute;right:max(14px,env(safe-area-inset-right));top:34%;text-align:right;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.7);transition:transform .08s;';
     readout = document.createElement('div');
     readout.style.cssText = 'position:absolute;left:max(10px,env(safe-area-inset-left));bottom:max(96px,env(safe-area-inset-bottom));min-width:210px;max-width:290px;padding:8px 10px;border-radius:10px;background:rgba(2,6,23,.72);border:1px solid rgba(148,163,184,.35);color:#e2e8f0;font-size:11px;line-height:1.45;font-variant-numeric:tabular-nums;display:none;';
-    kc = document.createElement('div');                                             // the blue "final blow" screen overlay
-    kc.style.cssText = 'position:absolute;inset:0;display:none;background:radial-gradient(ellipse at center,rgba(30,64,175,0) 35%,rgba(37,99,235,.55) 100%),repeating-linear-gradient(0deg,rgba(56,189,248,.10) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 120px 30px rgba(56,189,248,.65);mix-blend-mode:screen;';
-    const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:16%;text-align:center;font:900 clamp(28px,6vw,64px) system-ui;letter-spacing:.3em;color:#e0f2fe;text-shadow:0 0 24px #38bdf8,0 0 60px #2563eb;';
-    kc.appendChild(kt);
-    box.append(kc, combo, readout);
-    document.body.appendChild(box);
+    kc = document.createElement('div');                                             // the black-and-white "impact frame" for the final blow (lines + flashes, drawn over the canvas)
+    kc.style.cssText = 'position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden;display:none;';
+    kcLines = document.createElement('div');
+    kcLines.style.cssText = 'position:absolute;inset:-20%;background:repeating-conic-gradient(from 3deg at 50% 50%,#fff 0 .9deg,#000 .9deg 2.3deg,#fff 2.3deg 2.7deg,#000 2.7deg 5.1deg,#fff 5.1deg 5.4deg,#000 5.4deg 7.3deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 24%,#000 70%);mask-image:radial-gradient(circle at 50% 50%,transparent 24%,#000 70%);mix-blend-mode:difference;';
+    kcFlash = document.createElement('div');
+    kcFlash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0;';
+    const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:14%;text-align:center;font:900 clamp(30px,7vw,72px) system-ui;letter-spacing:.14em;color:#fff;mix-blend-mode:difference;transform:skewX(-8deg);';
+    kcRings = [];
+    for (let i = 0; i < 4; i++) { const r = document.createElement('div'); r.style.cssText = 'position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;border:6px solid #fff;mix-blend-mode:difference;opacity:0;will-change:transform,opacity;'; kc.appendChild(r); kcRings.push(r); }
+    kc.append(kcLines, kcFlash, kt); kcTxt = kt;
+    box.append(combo, readout);
+    document.body.append(box, kc);
 }
 
 const NEXT = ['', '', '', 'Hit 4: knockback grows', 'Hit 5: stuns turn into knockback', 'Next hit: FINISHER (breaks the combo)'];
@@ -25,7 +31,7 @@ export function tickExtras(S, fighters, me) {
     ensure();
     const playing = S.gameState === 'playing';
     box.style.display = playing ? 'block' : 'none';
-    { const on = playing && S.kcT > 0 && S.kcFull; kc.style.display = on ? 'block' : 'none'; if (on) { const k = Math.min(1, S.kcT / 0.4, ((S.kcDur || 1.2) - S.kcT) / 0.15); kc.style.opacity = (0.55 + 0.45 * Math.sin(S.kcT * 40)) * k; } }
+    impactFrame(S, playing);
     if (!playing) return;
 
     combo.innerHTML = '';
@@ -67,4 +73,35 @@ export function showReward(r) {
     const rank = r.rank ? `<div style="font-weight:800;color:${r.rank.tier.color}">${r.rank.tier.name} · ${r.rank.after} ${r.rank.after >= r.rank.before ? '▲ +' + (r.rank.after - r.rank.before) : '▼ ' + (r.rank.after - r.rank.before)}${r.rank.up ? ' — PROMOTED!' : r.rank.down ? ' — demoted' : ''}</div>` : '';
     const ch = r.done.map(c => `<div style="color:#86efac">✔ Daily: ${c.name} (+${c.coins})</div>`).join('');
     el.innerHTML = `${rank}<div style="color:#fde047;font-weight:800">+${r.gain} 🪙 <span style="opacity:.7;font-weight:600">(${r.coins} total)</span></div>${ch}`;
+}
+
+/** Final blow = a manga-style impact frame: the whole screen flickers white / inverted black-and-white (high contrast), speed lines burst from the centre,
+ *  then it settles into stark black-and-white and fades back to colour. Live (for the two involved) and in replays (wherever the match had one). */
+function impactFrame(S, playing) {
+    if (!kcCanvas) kcCanvas = document.querySelector('canvas');
+    let on = false, e = 0;
+    if (S.replay) { on = S.kcImpT > 0; e = 1.2 - S.kcImpT; }
+    else if (playing && S.kcPause > 0 && S.kcFull) { on = true; e = (S.kcDur || 1.2) - S.kcT; }
+    kc.style.display = on ? 'block' : 'none';
+    if (!on) { if (kcCanvas && kcCanvas.style.filter) kcCanvas.style.filter = ''; return; }
+    let flash = 0, filt = '';
+    if (e < 0.09) flash = 1 - Math.max(0, e - 0.06) / 0.03;                               // flash-bang: instant blinding white, then straight into stark black and white
+    else if (e < 0.14) filt = 'grayscale(1) contrast(2.8) brightness(.85) invert(1)';
+    else if (e < 0.22) filt = 'grayscale(1) contrast(2.8) brightness(.85)';
+    else if (e < 0.29) filt = 'grayscale(1) contrast(2.8) brightness(.85) invert(1)';
+    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (2.4 - 1.0 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ')';
+    else filt = 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
+    if (kcCanvas) kcCanvas.style.filter = filt;
+    kcFlash.style.opacity = flash;
+    const lines = e >= 0.06 && e < 0.9;
+    kcLines.style.opacity = lines ? (e < 0.6 ? 0.7 : 0.7 * (0.9 - e) / 0.3) : 0;
+    kcLines.style.transform = 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.12) + ')';      // lines jitter like hand-drawn frames
+    for (let i = 0; i < kcRings.length; i++) {                                         // wind-pressure rings burst from the point of impact, stretched wide
+        const q = (e - 0.04 - i * 0.07) / 0.55, r = kcRings[i].style;
+        if (q < 0 || q > 1) { r.opacity = 0; continue; }
+        const sc = 0.3 + q * 5.2;
+        r.opacity = (1 - q) * 0.95; r.borderWidth = Math.max(1, 9 * (1 - q)) + 'px';
+        r.transform = 'scale(' + (sc * 1.9).toFixed(3) + ',' + sc.toFixed(3) + ')';
+    }
+    kcTxt.style.opacity = e > 0.14 && e < 1.0 ? 1 : 0;
 }

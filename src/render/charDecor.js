@@ -37,11 +37,10 @@ const BUILD = {
     bulwark(m, c) {
         m.halo.visible = false;
         // a great sword, twice his height, held upright at his left side
-        const sw = c.G(m.armL.wr, 0, 0, 0); sw.rotation.z = 0.06;
+        const sw = c.G(m.armL.wr, 0, 0, 0); sw.rotation.z = 0.06; m.bwSw = sw;
         // a broad cleaver: slanted, serrated tip, dark rune panel down the middle, round guard, wrapped grip
         const bs = new THREE.Shape(); bs.moveTo(-11, 6); bs.lineTo(-11, 100); bs.lineTo(-9, 112);                  // sharp point at the top left
         bs.lineTo(11, 92); bs.lineTo(11, 6); bs.lineTo(-11, 6);
-        const notch = new THREE.Shape(); notch.moveTo(-11, 100); notch.lineTo(-11, 100);
         const bg = new THREE.ExtrudeGeometry(bs, { depth: 3.6, bevelEnabled: true, bevelSize: 0.7, bevelThickness: 0.9, bevelSegments: 1 }); bg.translate(0, 0, -1.8);
         const blade = c.M(bg, c.trim); sw.add(blade);
         for (const [y, w] of [[96, 5], [86, 4], [76, 3.2]]) {                                                     // serrated teeth bitten out of the cutting edge
