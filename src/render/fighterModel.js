@@ -17,6 +17,35 @@ const BLADE_LEN = 40;
 const WHITE = new THREE.Color(0xffffff), YELLOW = new THREE.Color(0xfacc15);
 const ATTACK_FRAMES = 18;
 
+// ---- Bulwark's great-sword melees (frames of a 60-frame, 1 s swing; the hit window opens at frame ~38).
+// columns: lSx, lSz, lE, blade angle (0 up, 90 forward, 180 down, 270 back), lean, torsoY, twist, dy, fwd, lHx, rHx, lK, rK, headX ; [frame, values, easing]
+const BW_KEYS = {
+    UP: [[0, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
+         [38, [-28, 14, 24, 205, 16, 22, 8, -5, 0, 20, -18, 44, 20, 8], 'slow'],                // sinks, blade low behind him ... very slowly
+         [48, [165, 20, 8, 18, -14, -24, -10, 8, 4, -8, 12, 6, 32, -16], 'fast'],               // ... then the full upward slash from the low far side to overhead
+         [60, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
+    SIDE: [[0, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
+         [14, [-26, 24, 22, 236, 8, 34, 16, -2, 0, 12, -12, 34, 16, 4], 'smooth'],             // blade low behind him, point on the floor
+         [38, [-12, 30, 22, 198, 12, 40, 20, -3, 0, 16, -14, 40, 18, 6], 'slow'],               // dragged forward along the floor, slowly, throwing sparks
+         [48, [95, 40, 8, 66, -20, -36, -22, 3, 10, -10, 18, 8, 30, 8], 'fast'],               // then up and across in one sweep
+         [60, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
+    DOWN: [[0, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
+         [38, [168, 8, 16, -12, -10, 10, 0, 3, 0, -8, 8, 14, 14, -12], 'slow'],                // lifted above the head, slowly
+         [48, [40, 10, 8, 168, 28, -14, -8, -8, 8, 20, -14, 50, 30, 18], 'fast'],              // slam down in front of him
+         [60, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
+};
+const BW_UP = new THREE.Vector3(0, 1, 0), BW_REST = new THREE.Euler(0, 0, 0.06);
+function bwEval(T, fr) {
+    let i = 0;
+    while (i < T.length - 2 && fr > T[i + 1][0]) i++;
+    const A = T[i], B = T[i + 1], span = B[0] - A[0];
+    let q = clamp01((fr - A[0]) / span);
+    const e = B[2];
+    q = e === 'slow' ? q * q * q : e === 'fast' ? 1 - (1 - q) * (1 - q) : smooth(q);
+    return A[1].map((v, j) => v + (B[1][j] - v) * q);
+}
+
+
 // ----------------------------------------------------------------- poses
 const POSE_DEFAULT = {
     dy: 0, fwd: 0,
@@ -176,7 +205,7 @@ export class FighterModel {
             }
         }
 
-        this.swK = 0; this.bwSw = null;
+        this.swK = 0; this.bwSw = null; this.bwA = 293; this.bwOn = 0; this.bwFr = -1; this.bwLen = 100;
         this.sway = [];                                       // trailing bits (scarf, ribbons, cape) that swing with movement
         const trailer = (parent, w, h, x, y, z, mat, kind) => { const g = G(parent, x, y, z); const m = M(new THREE.BoxGeometry(w, h, 0.9), mat); m.position.y = -h / 2; g.add(m); g.userData.kind = kind; this.sway.push(g); return g; };
         const HM = {
@@ -710,13 +739,14 @@ export class FighterModel {
         if (!rip && (f.attackTimer <= 0 || !f.attackKind)) return null;
         if (f.isRolling || f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.isHanging || f.grabbedBy) return null;
         const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? (() => { const q = 1 - f.stabT / 60; return q < 0.25 ? 0.16 + 0.3 * smooth(q / 0.25) : q < 0.72 ? 0.46 + 0.02 * (q - 0.25) / 0.47 : 0.48 - 0.16 * smooth((q - 0.72) / 0.28); })() : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
-                      : clamp01((ATTACK_FRAMES - 1 - f.attackTimer + alpha) / ATTACK_FRAMES);
+                      : clamp01(((f.atkN || ATTACK_FRAMES) - 1 - f.attackTimer + alpha) / (f.atkN || ATTACK_FRAMES));
         const w = smooth(u / 0.1) * (1 - smooth(seg(u, 0.72, 1)));
         const k = rip ? 'UP' : f.attackKind;
         const o = {};
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
-        const hv = f.char === 'bulwark', ez = (x) => hv ? Math.pow(x, 3.2) : smooth(x);       // Bulwark: the follow-through starts very slowly (heavy), then whips through; same total time
+        const hv = f.char === 'bulwark', ez = smooth;
+        if (hv && !rip && f.atkN === 60 && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
 
         if (k === 'JAB') {                                   // around-the-world sword spin
             const wind = smooth(seg(u, 0, 0.2));
@@ -833,7 +863,7 @@ export class FighterModel {
         pose.hide = base.hide;                               // Ember fireball: hide body inside the ball
         this.spinYaw = 0;
         const atk = this.#attackOverlay(alpha);
-        if (atk) this.#charAnim(atk);
+        if (atk && !atk.bw) this.#charAnim(atk);
         if (atk) {
             if (atk.spinYaw) this.spinYaw = atk.spinYaw * this.visFacing;
             for (const k in atk.o) pose[k] = lerp(pose[k], atk.o[k], atk.w);
@@ -844,10 +874,12 @@ export class FighterModel {
             if (atk.kind === 'LUNGE') { this.visFacing = f.facing; }
             else if (atk.kind === 'SIDE_LEFT') this.visFacing = -1;
             else if (atk.kind === 'SIDE_RIGHT') this.visFacing = 1;
-            this.#attackFx(atk, dt);
+            if (atk.bw) this.#bwAttackFx(atk, dt); else this.#attackFx(atk, dt);
         } else {
             this.lastAtkU = 0; this.firedAtk = {};
         }
+
+        if (this.bwSw) this.#bwPose(atk, pose, dt);
 
         // ---- facing (yaw) with a 3/4 bias toward the camera
         const targetYaw = this.visFacing * (90 - 24) * D2R;
@@ -863,20 +895,11 @@ export class FighterModel {
 
         this.torso.rotation.set(pose.torsoX * D2R, pose.torsoY * D2R, pose.torsoZ * D2R);
         this.head.rotation.set(pose.headX * D2R, pose.headY * D2R, pose.headZ * D2R);
-        if (this.bwSw) {                                     // Bulwark carries the great sword over his back (left arm swept behind) while moving, jumping or fighting
-            const busy = !!atk || !f.grounded || Math.abs(f.vx) > 1.4;
-            const free = !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging);
-            const want = busy && free ? 1 : 0;
-            this.swK += (want - this.swK) * (1 - Math.exp(-dt * 14));
-            const k = this.swK;
-            const Q = (typeof window !== 'undefined' && window.__bwp) || [125, 18, 95, -2.75, 0, 0];
-            pose.lSx = lerp(pose.lSx, Q[0], k); pose.lSz = lerp(pose.lSz, Q[1], k); pose.lE = lerp(pose.lE, Q[2], k);
-            this.bwSw.rotation.set(k * Q[3], k * Q[4], lerp(0.06, Q[5], k));
-        }
         this.armR.sh.rotation.set(-pose.rSx * D2R, pose.rSy * D2R, pose.rSz * D2R);
         this.armL.sh.rotation.set(-pose.lSx * D2R, pose.lSy * D2R, -pose.lSz * D2R);
         this.armR.el.rotation.set(-pose.rE * D2R, 0, 0);
         this.armL.el.rotation.set(-pose.lE * D2R, 0, 0);
+        if (this.bwSw) this.#bwAim(dt);
         this.legR.hip.rotation.set(-pose.rHx * D2R, 0, pose.rHz * D2R);
         this.legL.hip.rotation.set(-pose.lHx * D2R, 0, -pose.lHz * D2R);
         this.legR.kn.rotation.set(pose.rK * D2R, 0, 0);
@@ -1049,6 +1072,84 @@ export class FighterModel {
         if (this.light) this.light.intensity = 2.5e4 * (flick ? 0.5 : 1);
     }
 
+
+    // ============================================================ Bulwark's great sword
+    /** Poses for the sword: carried over the back while moving, keyframed 1-second melees (very slow wind-up, then the fast swing), the riposte guard / stab. Sets this.bwA (blade angle) and the arms/body in `pose`. */
+    #bwPose(atk, pose, dt) {
+        const f = this.f;
+        const rip = f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0;
+        const busy = !!atk || rip || !f.grounded || Math.abs(f.vx) > 1.4;
+        const free = !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging || f.dizzyTimer > 0);
+        this.swK += ((busy && free ? 1 : 0) - this.swK) * (1 - Math.exp(-dt * 14));
+        const k = this.swK;
+        const CARRY = [125, 18, 95, -67];                                          // arm raised behind the shoulder, blade 23 degrees above horizontal, pointing back
+        let tgt = CARRY.slice(), body = null, a = CARRY[3];
+        if (atk && atk.bw) {
+            const T = BW_KEYS[atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
+            const v = bwEval(T, atk.fr);
+            tgt = [v[0], v[1], v[2], v[3]]; a = v[3]; body = v;
+            pose.lean = v[4]; pose.torsoY = v[5]; pose.twist = v[6]; pose.dy = v[7]; pose.fwd = v[8]; pose.lHx = v[9]; pose.rHx = v[10]; pose.lK = v[11]; pose.rK = v[12]; pose.headX = v[13];
+            pose.rSx = v[0] - 8; pose.rSz = v[1] * 0.5; pose.rE = v[2]; pose.lSx = v[0]; pose.lSz = v[1]; pose.lE = v[2];
+            pose.blade = 0; pose.aura = Math.max(pose.aura, 0.2);
+            this.bwFr = atk.fr;
+        } else if (rip) {
+            tgt = [pose.lSx, pose.lSz, pose.lE, f.stabT > 0 ? 86 : 32]; a = tgt[3]; pose.blade = 0;
+            pose.rSx = pose.lSx - 6; pose.rE = pose.lE; this.bwFr = -1;
+        } else {
+            pose.lSx = lerp(pose.lSx, CARRY[0], k); pose.lSz = lerp(pose.lSz, CARRY[1], k); pose.lE = lerp(pose.lE, CARRY[2], k);
+            this.bwFr = -1;
+        }
+        this.bwA = a; this.bwOn = (atk && atk.bw) || rip ? 1 : 0;
+    }
+
+    /** Aims the blade along the wanted angle (sagittal plane, 0 = up, 90 = forward), whatever the arm does, and keeps its tip on the floor when it would dig in. */
+    #bwAim(dt) {
+        const f = this.f, sw = this.bwSw, k = this.swK;
+        if (k < 0.01) { sw.quaternion.setFromEuler(BW_REST); return; }
+        this.root.updateMatrixWorld(true);
+        const wr = this.armL.wr, q = this._q1 || (this._q1 = new THREE.Quaternion()), q2 = this._q2 || (this._q2 = new THREE.Quaternion());
+        const D = this._d || (this._d = new THREE.Vector3()), H = this._h || (this._h = new THREE.Vector3()), Tp = this._tp || (this._tp = new THREE.Vector3());
+        if (this.bwAc === undefined) this.bwAc = this.bwA;
+        { const dl = ((this.bwA - this.bwAc + 540) % 360) - 180; this.bwAc += dl * (1 - Math.exp(-dt * (this.bwOn ? 60 : 14))); }       // always the short way round
+        const a = (this.bwOn ? this.bwA : this.bwAc) * D2R;
+        D.set(0, Math.cos(a), Math.sin(a));
+        this.tilt.getWorldQuaternion(q); D.applyQuaternion(q);
+        wr.getWorldPosition(H);
+        const L = this.bwLen || 100;
+        let drag = false;
+        if (f.grounded && this.bwOn && this.bwFr >= 0) {                      // the point must not go through the floor: it drags along it instead
+            const dyMin = (this.stageTop + 1.5 - H.y) / L;
+            if (dyMin > -0.98 && D.y < dyMin) {
+                const hz = Math.hypot(D.x, D.z) || 1, hw = Math.sqrt(1 - dyMin * dyMin);
+                D.x = D.x / hz * hw; D.z = D.z / hz * hw; D.y = dyMin; drag = true;
+            }
+        }
+        wr.getWorldQuaternion(q2).invert(); D.applyQuaternion(q2).normalize();
+        const qa = this._q3 || (this._q3 = new THREE.Quaternion()), qr = this._q4 || (this._q4 = new THREE.Quaternion());
+        qa.setFromUnitVectors(BW_UP, D); qr.setFromEuler(BW_REST);
+        sw.quaternion.copy(qr).slerp(qa, k);
+        this.root.updateMatrixWorld(true);
+        const tip = this.bwTipM; if (tip) { tip.getWorldPosition(Tp); this.bwLen = Math.max(40, Tp.distanceTo(H)); }
+        this.bwDrag = drag ? Tp.clone() : null;
+    }
+
+    /** Effects of the Bulwark melees: a bright crescent on the fast part, sparks while the point drags the floor, a shock ring on the slam. */
+    #bwAttackFx(a, dt) {
+        const fx = this.fx; if (!fx) return;
+        const f = this.f, fr = a.fr, col = this.baseColor, fired = this.firedAtk;
+        const once = (key, c) => { if (!fired[key] && c) { fired[key] = true; return true; } return false; };
+        if (this.bwDrag && a.kind !== 'UP' && fr < 52) {                                         // grinding along the ground
+            this._spk = (this._spk || 0) + dt;
+            if (this._spk > 0.04) { this._spk = 0; const p = this.bwDrag.clone(); p.y = this.stageTop + 1; fx.sparks(p, '#fbbf24', 3, 190, 0.28, 'up'); fx.sparks(p, '#ffffff', 1, 120, 0.2, 'up'); }
+        }
+        if (once('go', fr >= 38)) { const tp = this.bwTipM.getWorldPosition(new THREE.Vector3()); fx.sparks(tp, '#e2e8f0', 8, 260, 0.3); }
+        if (a.kind === 'DOWN' && once('slam', fr >= 45)) {
+            const tp = this.bwTipM.getWorldPosition(new THREE.Vector3());
+            if (f.grounded) { const g = new THREE.Vector3(tp.x, this.stageTop + 1, 0); fx.ring(g, 6, 150, 0.45, col, 'ground'); fx.sparks(g, '#fbbf24', 18, 320, 0.45, 'up'); fx.star(g.clone().add(new THREE.Vector3(0, 14, 0)), 60, '#ffffff', 0.18); }
+            else { fx.ring(tp, 6, 80, 0.3, col, 'screen'); fx.sparks(tp, '#fbbf24', 10, 240, 0.3); }
+        }
+    }
+
     // ============================================================ effects tied to the animation
     #attackFx(a, dt) {
         const fx = this.fx; if (!fx) return;
@@ -1109,6 +1210,10 @@ export class FighterModel {
         const get = (o) => o.getWorldPosition(new THREE.Vector3());
 
         // blade (slashes, uppercut, lunge)
+        if (this.bwOn && this.bwTipM && this.bwFr >= 38 && this.bwFr <= 56) {                       // the great sword leaves a long ribbon on its fast part
+            T.blade.setColor(this.baseColor, 3);
+            T.blade.push(get(this.bwBaseM), get(this.bwTipM));
+        }
         if (this.bladeG.visible && pose.blade > 0.35) {
             T.blade.setColor(this.baseColor, 2.4);
             T.blade.push(get(this.bladeBaseM), get(this.bladeTipM));

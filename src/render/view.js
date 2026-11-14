@@ -11,6 +11,7 @@ import { CX, CY, wx, wy, lerp, smooth, clamp01, syncSpace } from './space.js';
 import { buildStage } from './stage.js';
 import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
+import { ImpactRings } from './impactRings.js';
 import { ItemsView } from './items.js';
 import { getGfx, getZoom } from '../gfx.js';
 import { Showcase } from './showcase.js';
@@ -67,6 +68,7 @@ export class View {
         this.fx.flames.K = (innerHeight || 600) * this.pr / (2 * Math.tan(FOV * Math.PI / 360));
         this.models = fighters.map((f, i) => this.makeModel(f, i));
         this.fx.models = this.models;
+        this.impact = new ImpactRings();
         this.items = new ItemsView(scene);
         this.arenaVersion = S.arenaVersion || 0;
         this.themeName = null;
@@ -330,5 +332,6 @@ export class View {
 
         // keep the shadow frustum centred on the action
         this.composer.render(dt);
+        this.impact.render(this.renderer, this.camera, this.models);
     }
 }

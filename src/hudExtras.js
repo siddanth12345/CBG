@@ -1,5 +1,5 @@
 /** On-screen extras: the combo counter (with a warning before the finisher) and the training-mode numbers readout. Pure DOM, fed by gameCore each HUD tick. */
-let box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcRings = [], kcCanvas = null, last = { c: '', r: '' };
+let box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcCanvas = null, last = { c: '', r: '' };
 
 function ensure() {
     if (box) return;
@@ -13,12 +13,10 @@ function ensure() {
     kc = document.createElement('div');                                             // the black-and-white "impact frame" for the final blow (lines + flashes, drawn over the canvas)
     kc.style.cssText = 'position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden;display:none;';
     kcLines = document.createElement('div');
-    kcLines.style.cssText = 'position:absolute;inset:-20%;background:repeating-conic-gradient(from 3deg at 50% 50%,#fff 0 .9deg,#000 .9deg 2.3deg,#fff 2.3deg 2.7deg,#000 2.7deg 5.1deg,#fff 5.1deg 5.4deg,#000 5.4deg 7.3deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 24%,#000 70%);mask-image:radial-gradient(circle at 50% 50%,transparent 24%,#000 70%);mix-blend-mode:difference;';
+    kcLines.style.cssText = 'position:absolute;inset:-20%;background:repeating-conic-gradient(from 3deg at 50% 50%,#fff 0 .9deg,#000 .9deg 2.3deg,#fff 2.3deg 2.7deg,#000 2.7deg 5.1deg,#fff 5.1deg 5.4deg,#000 5.4deg 7.3deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mix-blend-mode:difference;';
     kcFlash = document.createElement('div');
     kcFlash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0;';
     const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:14%;text-align:center;font:900 clamp(30px,7vw,72px) system-ui;letter-spacing:.14em;color:#fff;mix-blend-mode:difference;transform:skewX(-8deg);';
-    kcRings = [];
-    for (let i = 0; i < 4; i++) { const r = document.createElement('div'); r.style.cssText = 'position:absolute;left:50%;top:50%;width:300px;height:300px;margin:-150px 0 0 -150px;border-radius:50%;border:6px solid #fff;mix-blend-mode:difference;opacity:0;will-change:transform,opacity;'; kc.appendChild(r); kcRings.push(r); }
     kc.append(kcLines, kcFlash, kt); kcTxt = kt;
     box.append(combo, readout);
     document.body.append(box, kc);
@@ -86,22 +84,15 @@ function impactFrame(S, playing) {
     if (!on) { if (kcCanvas && kcCanvas.style.filter) kcCanvas.style.filter = ''; return; }
     let flash = 0, filt = '';
     if (e < 0.09) flash = 1 - Math.max(0, e - 0.06) / 0.03;                               // flash-bang: instant blinding white, then straight into stark black and white
-    else if (e < 0.14) filt = 'grayscale(1) contrast(2.8) brightness(.85) invert(1)';
-    else if (e < 0.22) filt = 'grayscale(1) contrast(2.8) brightness(.85)';
-    else if (e < 0.29) filt = 'grayscale(1) contrast(2.8) brightness(.85) invert(1)';
-    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (2.4 - 1.0 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ')';
+    else if (e < 0.14) filt = 'grayscale(1) contrast(5) invert(1)';
+    else if (e < 0.22) filt = 'grayscale(1) contrast(5)';
+    else if (e < 0.29) filt = 'grayscale(1) contrast(5) invert(1)';
+    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (3.2 - 1.6 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ')';
     else filt = 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
     if (kcCanvas) kcCanvas.style.filter = filt;
     kcFlash.style.opacity = flash;
     const lines = e >= 0.06 && e < 0.9;
-    kcLines.style.opacity = lines ? (e < 0.6 ? 0.7 : 0.7 * (0.9 - e) / 0.3) : 0;
+    kcLines.style.opacity = lines ? (e < 0.6 ? 0.85 : 0.85 * (0.9 - e) / 0.3) : 0;
     kcLines.style.transform = 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.12) + ')';      // lines jitter like hand-drawn frames
-    for (let i = 0; i < kcRings.length; i++) {                                         // wind-pressure rings burst from the point of impact, stretched wide
-        const q = (e - 0.04 - i * 0.07) / 0.55, r = kcRings[i].style;
-        if (q < 0 || q > 1) { r.opacity = 0; continue; }
-        const sc = 0.3 + q * 5.2;
-        r.opacity = (1 - q) * 0.95; r.borderWidth = Math.max(1, 9 * (1 - q)) + 'px';
-        r.transform = 'scale(' + (sc * 1.9).toFixed(3) + ',' + sc.toFixed(3) + ')';
-    }
     kcTxt.style.opacity = e > 0.14 && e < 1.0 ? 1 : 0;
 }

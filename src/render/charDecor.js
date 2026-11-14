@@ -37,7 +37,7 @@ const BUILD = {
     bulwark(m, c) {
         m.halo.visible = false;
         // a great sword, twice his height, held upright at his left side
-        const sw = c.G(m.armL.wr, 0, 0, 0); sw.rotation.z = 0.06; m.bwSw = sw;
+        const sw = c.G(m.armL.wr, 0, 0, 0); sw.rotation.z = 0.06; m.bwSw = sw; m.bwBaseM = new THREE.Object3D(); m.bwBaseM.position.y = 12; sw.add(m.bwBaseM); m.bwTipM = new THREE.Object3D(); m.bwTipM.position.y = 106; sw.add(m.bwTipM);
         // a broad cleaver: slanted, serrated tip, dark rune panel down the middle, round guard, wrapped grip
         const bs = new THREE.Shape(); bs.moveTo(-11, 6); bs.lineTo(-11, 100); bs.lineTo(-9, 112);                  // sharp point at the top left
         bs.lineTo(11, 92); bs.lineTo(11, 6); bs.lineTo(-11, 6);

@@ -170,6 +170,7 @@ function placeDuel(move) {
 
 // ----------------------------------------------------------------- tuning (frames @ 60 Hz)
 export const ATTACK_FRAMES = 18;
+export const BW_MELEE = 60;
 const LOCK = 36;              // 0.6 s: after ANY move you can't start another one (you can still walk)
 const lk = (f, n) => (f.char === 'bulwark' || f.char === 'terra') ? Math.round(n * 0.7) : n;   // Bulwark / Terra: 0.7x the lock after a move
 const JUMP_OK = 24;           // ...but you may jump once 0.2 s of that lock has passed (36 - 12)
@@ -343,6 +344,8 @@ const SWING = {
             angle: (f) => f === 1 ? -Math.PI / 5 : Math.PI + Math.PI / 5 },
 };
 
+for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) SWING['BW_' + k] = { ...SWING[k], a: k === 'UP' || k === 'DOWN' ? 38 : 40, b: k === 'UP' || k === 'DOWN' ? 46 : 48 };   // Bulwark: same hit window length, but it opens after the long wind-up
+
 // character-specific side specials (Thunder Dash, Shadow Step, and every travelling dash) are swings with their own hit data
 for (const id in SP) {
     const sp = SP[id].S;
@@ -464,6 +467,7 @@ class Fighter {
         // --- 3D presentation only (never read by game logic) ---
         this.attackKind = null;      // 'JAB' | 'UP' | 'DOWN' | 'SIDE_LEFT' | 'SIDE_RIGHT'
         this.attackSerial = 0;
+        this.atkN = 18;              // length of the current melee in frames (Bulwark's Up / Down / Side melees are 60: a very slow wind-up, then the fast swing)
         this.throwFxT = 0;
         this.px = x; this.py = y;
         this._teleported = true;
@@ -960,7 +964,7 @@ class Fighter {
 
         if (this.attackTimer > 0) {
             const sw = this.swing;
-            if (this.attackHeld && sw && sw.chargeable && ATTACK_FRAMES - this.attackTimer >= sw.a - 1) {
+            if (this.attackHeld && sw && sw.chargeable && this.atkN - this.attackTimer >= sw.a - 1) {
                 // button still held at the wind-up: the swing waits there, charging (up to 1.7 s)
                 this.actionLock = Math.max(this.actionLock, LOCK - sw.a + 1 + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0));
                 if (this.meleeCharge < MELEE_CHARGE_MAX) this.meleeCharge++;   // stays fully charged until you let go
@@ -996,7 +1000,7 @@ class Fighter {
     updateSwing() {
         const sw = this.swing;
         if (!sw) return;
-        const e = ATTACK_FRAMES - this.attackTimer;          // frames elapsed (1..18)
+        const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
         if (this.swingHit || e < sw.a || e > sw.b) {
             this.activeHitbox = null;
             return;
@@ -1843,7 +1847,7 @@ class Fighter {
         this.setMove('BLINK', sp.frames + 3);
         if (sp.armor) this.armorT = sp.frames + 6;
         this.attackKind = d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT';
-        this.attackTimer = ATTACK_FRAMES; this.attackSerial++;
+        this.attackTimer = this.atkN = ATTACK_FRAMES; this.attackSerial++;
         this.swing = SWING['SP_' + this.char + '_S'];
         this.swingHit = false;
         this.swingHitSet = this.swing.multi ? new Set() : null;
@@ -1874,7 +1878,7 @@ class Fighter {
         fx('blink', fromX, fromY, this.x, this.y);
         if (sp.trail) { zapTrails.push({ x1: fromX, y1: fromY, x2: this.x, y2: this.y, life: 24, owner: this, hit: new Set() }); fx('zigzag', fromX, fromY, this.x, this.y, 'volt'); }
         this.attackKind = d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT';
-        this.attackTimer = ATTACK_FRAMES;
+        this.attackTimer = this.atkN = ATTACK_FRAMES;
         this.attackSerial++;
         this.swing = SWING[sp.swing] || SWING.BLINK;
         this.swingHit = false;
@@ -2403,8 +2407,9 @@ class Fighter {
         if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
         this.attackSerial++;
-        this.attackTimer = ATTACK_FRAMES;
-        this.swing = (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
+        const bw = this.char === 'bulwark' && kind !== 'JAB';          // Bulwark's melee: 1 s in all (0.6 s of heavy wind-up, the swing, the recovery)
+        this.attackTimer = this.atkN = bw ? BW_MELEE : ATTACK_FRAMES;
+        this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
         this.swingHit = false;
         if (kind === 'JAB' && this.char === 'zephyr') { spawnWind(this); this.swingHit = true; }   // Zephyr's neutral only sends out the wind tube: no hitbox
         this.swingHitSet = this.swing.multi ? new Set() : null;
@@ -5368,7 +5373,7 @@ function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (
 const REC_FRAMES = 900;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
+    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
     if (rec.length > REC_FRAMES) rec.shift();
     S.recN = (S.recN || 0) + 1;
     pumpClips(rec[rec.length - 1]);
@@ -5403,7 +5408,7 @@ function applyReplayFrame(fr) {
     if (fr.sp) { SPL.t = fr.sp[0]; SPL.cuts = fr.sp.slice(1); applySplit(false); }
     if (fr.bz) { BLAST_ZONES.left = fr.bz[0]; BLAST_ZONES.right = fr.bz[1]; BLAST_ZONES.top = fr.bz[2]; BLAST_ZONES.bottom = fr.bz[3]; S.sudden = !!fr.sd; S.sdT = fr.sdt || 0; }     // the closing kill barrier
     for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
-    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
+    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; if (fr.kc[3] !== undefined) S.kcAtt = fr.kc[3]; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone, clip) {
