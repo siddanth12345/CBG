@@ -13,7 +13,7 @@ import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
 import { ImpactRings } from './impactRings.js';
 import { ItemsView } from './items.js';
-import { getGfx, getZoom } from '../gfx.js';
+import { getReduceFlash, getGfx, getZoom } from '../gfx.js';
 import { Showcase } from './showcase.js';
 
 const FOV = 38;
@@ -83,6 +83,7 @@ export class View {
         this.composer.addPass(this.bloom);
         this.composer.addPass(new OutputPass());
         this.applyTheme();
+        window.addEventListener('cbg-rf', () => this.applyTheme());
 
         this.clientX = window.innerWidth / 2;
         this.clientY = window.innerHeight / 2;
@@ -144,6 +145,7 @@ export class View {
             this.bloom.strength = 0.5; this.bloom.threshold = 0.92;
             this.camera.far = 20000;
         }
+        if (getReduceFlash()) { for (const l of [this.hemi, this.key, this.rim]) l.intensity *= 0.8; this.bloom.strength *= 0.45; r.toneMappingExposure *= 0.9; }       // reduce flashing lights: dimmer lights and glow
         this.camera.updateProjectionMatrix();
     }
 

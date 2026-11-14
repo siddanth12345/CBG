@@ -344,7 +344,7 @@ const SWING = {
             angle: (f) => f === 1 ? -Math.PI / 5 : Math.PI + Math.PI / 5 },
 };
 
-for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) SWING['BW_' + k] = { ...SWING[k], a: k === 'UP' || k === 'DOWN' ? 38 : 40, b: k === 'UP' || k === 'DOWN' ? 46 : 48 };   // Bulwark: same hit window length, but it opens after the long wind-up
+for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) { const b = SWING[k]; SWING['BW_' + k] = { ...b, a: k === 'UP' || k === 'DOWN' ? 38 : 40, b: k === 'UP' || k === 'DOWN' ? 46 : 48, damage: Math.round(b.damage * 1.5 * 10) / 10, bkb: b.bkb * 1.4, kbg: b.kbg * 1.4, w: Math.round(b.w * 1.3), h: Math.round(b.h * 1.3) }; }      // Bulwark: the great sword hits 1.5x as hard and throws 1.4x as far; the hit window opens after the long wind-up
 
 // character-specific side specials (Thunder Dash, Shadow Step, and every travelling dash) are swings with their own hit data
 for (const id in SP) {
@@ -631,12 +631,8 @@ class Fighter {
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
-        if (this.char === 'bulwark') {                                                   // every landing from the air is a small stomp
-            if (!this.grounded) this._airT = (this._airT || 0) + 1;
-            else { if (this._airT >= 10 && !this.hitstun && !this.clashStunTimer && !this.isHanging && !this.swordGroundCd && this.stocks > 0 && !this.out) this.landStomp(false); this._airT = 0; }
-        }
         if (this.swordGroundCd) {      // Sword Lift cancelled early: no Up-F until he is back on the ground, where he stomps and pauses
-            if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); this.landStomp(true); this._airT = 0; }
+            if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); }
             else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30);
         }
         if (this.char === 'bulwark') this.tickRiposte();
@@ -881,6 +877,7 @@ class Fighter {
                 this.throwFxT = 14;
                 S.screenShake = 14;
                 createParticles(target.x, target.y, '#ef4444', 25);
+                startKillCam(this, target);                         // a throw that sends them out of the arena is a final blow too
                 if (this.gripMode) {                                // the fling ends in an explosion
                     this.freezeAirTimer = 30; this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30 + 48); this.grounded = false; this.vx = this.vy = 0;   // 0.5 s hang, then Up is locked for 0.8 s
                     this.gripMode = false; this.gripT = 0;
@@ -1485,17 +1482,6 @@ class Fighter {
     }
 
     /** Bulwark lets go of his Up-F sword: it keeps rising a moment (knocking foes aside), then falls like a Shield Rush sword */
-    /** Bulwark lands: a small stomp (3 damage, 0.3x of the old knockback, half the reach). pause = the longer freeze after hopping off the sword early */
-    landStomp(pause) {
-        const fy = this.y + this.height / 2;
-        for (const t of foesOf(this)) {
-            if (t.stocks <= 0 || t.invincibleTimer > 0 || Math.hypot(t.x - this.x, t.y - fy) > 95 + t.width / 2) continue;
-            if (interaction('SPIRAL', t, true) === 'hit') launch(this, t, { damage: 3, bkb: 2.4, kbg: 0.21, angle: -1.2, mirror: true, x: this.x, y: fy });
-        }
-        fx('stomp', this.x, fy, 130, 0, 'iron'); S.screenShake = Math.max(S.screenShake, pause ? 8 : 4); audio.playStomp();
-        this.freezeTimer = Math.max(this.freezeTimer, 18); this.vx = 0;           // 0.3 s of the same get-up animation as his Down-air stomp
-    }
-
     launchSwordFly() {
         const rem = Math.max(0, this._swordRemain || 0); this._swordRemain = 0;              // hopped off early: the sword still climbs the rest of the way up before it drops
         const v0 = 12.15, N = 16 + 2 * rem, g = 0.9, y0 = this.y + this.height / 2 - 103, px = this.x;
@@ -3759,7 +3745,7 @@ function emberCounter(em, foe) {
 /** Kill cam ("final blow"): when a hit will really knock the victim out, play freezes completely for a moment (zoom + blue screen for the two involved),
  *  then the hit's velocity is released. The prediction follows the knockback, the whole stun (hit-stun + any stun after it) and then asks whether the victim could
  *  still get back with their own jumps from where the stun leaves them. */
-const KC_DUR = 1.2;                                          // seconds of real time (72 frozen steps)
+const KC_DUR = 2.0;                                          // seconds of real time (120 frozen steps)
 export function willKO(def) {
     let x = def.x, y = def.y, vx = def.vx, vy = def.vy;
     const hs = Math.max(0, def.hitstun), H = hs + Math.max(0, def.clashStunTimer) + Math.max(0, def._stunAfter || 0);          // the whole time they cannot act
@@ -3786,6 +3772,7 @@ export function willKO(def) {
 }
 function applyKillCam(ai, di) {
     S.kcT = KC_DUR; S.kcDur = KC_DUR; S.kcDef = di; S.kcAtt = ai;
+    { const d = fighters[di], h = S.kcHold && S.kcHold.f === d ? S.kcHold : d; S.kcVx = h ? h.vx || 0 : 0; S.kcVy = h ? h.vy || 0 : 0; }       // the way the victim is about to fly (the impact rings point along it)
     const me = S.demo ? -1 : (S.match ? S.mySlot : 0);
     S.kcFull = !S.demo && (me === ai || me === di);
 }
@@ -4089,18 +4076,18 @@ function updateDrops() {
             for (const t of foesOf(d.owner)) {
                 const caught = d.caught.includes(t);
                 if (t.stocks <= 0 || (t.invincibleTimer > 0 && !caught)) continue;
-                if (!caught && Math.hypot(t.x - d.x, t.y - d.y) > 230 + t.width / 2) continue;
+                if (!caught && Math.hypot(t.x - d.x, t.y - d.y) > 115 + t.width / 2) continue;
                 if (!caught && interaction('SPIRAL', t, true) !== 'hit') continue;
                 launch(d.owner, t, { damage: caught ? 7 : 5, bkb: 11, kbg: 0.9, angle: caught ? -1.4 : -1.0, mirror: !caught, x: d.x, y: d.y });
                 if (caught) t.invincibleTimer = Math.max(t.invincibleTimer, t.hitstun + 2);
             }
-            fx('quake', d.x, d.y, 460, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playBurst();
+            fx('quake', d.x, d.y, 230, 0, STYLE_OF[d.owner.char] + '@'); fx('stomp', d.x, d.y, d.w * 2, 0, 'iron'); S.screenShake = Math.max(S.screenShake, 14); audio.playBurst();
             continue;
         }
         if (d.y >= d.yl && !up) {
             drops.splice(i, 1);
             if (d.fly && d.surface) {                                            // impact: area knockback; anyone dragged to or below the surface is thrown up
-                const sy = d.yl + d.off, R = 230;
+                const sy = d.yl + d.off, R = 115;                  // Sword Lift's landing burst: half the old area
                 for (const t of foesOf(d.owner)) {
                     const caught = d.caught.includes(t);
                     if (t.stocks <= 0 || (t.invincibleTimer > 0 && !caught)) continue;
@@ -5373,7 +5360,7 @@ function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (
 const REC_FRAMES = 900;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
+    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt, S.kcVx, S.kcVy] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
     if (rec.length > REC_FRAMES) rec.shift();
     S.recN = (S.recN || 0) + 1;
     pumpClips(rec[rec.length - 1]);
@@ -5408,7 +5395,7 @@ function applyReplayFrame(fr) {
     if (fr.sp) { SPL.t = fr.sp[0]; SPL.cuts = fr.sp.slice(1); applySplit(false); }
     if (fr.bz) { BLAST_ZONES.left = fr.bz[0]; BLAST_ZONES.right = fr.bz[1]; BLAST_ZONES.top = fr.bz[2]; BLAST_ZONES.bottom = fr.bz[3]; S.sudden = !!fr.sd; S.sdT = fr.sdt || 0; }     // the closing kill barrier
     for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
-    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; if (fr.kc[3] !== undefined) S.kcAtt = fr.kc[3]; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
+    if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; if (fr.kc[3] !== undefined) S.kcAtt = fr.kc[3]; S.kcVx = fr.kc[4] || 0; S.kcVy = fr.kc[5] || 0; S.kcDur = KC_DUR; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
 export function startReplay(onDone, clip) {

@@ -85,9 +85,8 @@ export const BRIEF = {
         S: ['Shield Rush', 'Tap side F for an armoured charge. Swords fall along the path you ran.'],
         U: ['Sword Lift', 'Tap up F to ride up on a floating sword as high as Zephyr rises. Foes above you are speared and carried up. Melee hops you off early; the sword flies on, then falls dragging them down and bursts on landing. 0.3 s recovery.'],
         M: ['Riposte', 'Neutral melee is a sword uppercut counter: 0.7 s open window, 0.7 s aftermath if nothing comes, 1 s cooldown (none after a successful counter). A successful counter up close is a 0.8 s stab-and-pull (1 s of i-frames for both, 1.8 s stun, bleeding); a counter meeting a DOWN move clashes and stuns both of you like a grab clash. Every projectile (cores, rocks, bubbles, rockets, items) flies back (homing ones home to their owner, straight ones 2x faster); up close it ends in a stab: 1.8 s stun and bleeding.'],
-        DG: ['Seismic Stomp', 'On the ground, down F winds up, then a big shockwave. Knockback is soft. Bulwark is stunned 0.75 s after the Suplex slam, and 0.67 s after a grab throw.'],
+        DG: ['Sword Plunge', 'On the ground, down F raises the great sword overhead, then drives it into the floor for a big shockwave. Knockback is soft. Bulwark is stunned 0.75 s after the Suplex slam, and 0.67 s after a grab throw.'],
         DA: ['Anvil Drop', 'In the air, down F is one heavy plunge. No small hits. Knockback is soft. He is stunned 0.6 s when he lands.'],
-        L: ['Landing stomp', 'Every time Bulwark lands from the air he stomps: 3 damage, light knockback, a small radius, and 0.3 s of get-up animation.'],
     },
     zephyr: {
         N: ['Gale Burst', 'Hold F for a big wind blast (twice the old size) that shoves everyone around you away. Fully charged, it goes off by itself 1 s later. Afterwards you are tired for 0.7 s and the charge is on cooldown for 4 s more.'],

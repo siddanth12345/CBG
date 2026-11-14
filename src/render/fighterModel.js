@@ -30,8 +30,9 @@ const BW_KEYS = {
          [48, [95, 40, 8, 66, -20, -36, -22, 3, 10, -10, 18, 8, 30, 8], 'fast'],               // then up and across in one sweep
          [60, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
     DOWN: [[0, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
-         [38, [168, 8, 16, -12, -10, 10, 0, 3, 0, -8, 8, 14, 14, -12], 'slow'],                // lifted above the head, slowly
-         [48, [40, 10, 8, 168, 28, -14, -8, -8, 8, 20, -14, 50, 30, 18], 'fast'],              // slam down in front of him
+         [26, [168, 8, 16, -12, -10, 10, 0, 3, 0, -8, 8, 14, 14, -12], 'slow'],                // lifted above the head, slowly
+         [38, [152, 10, 30, 176, -4, 8, 0, 2, 0, -6, 6, 18, 18, -6], 'smooth'],                // turned point-down, held high in both hands
+         [48, [55, 10, 8, 178, 28, -14, -8, -8, 8, 20, -14, 50, 30, 18], 'fast'],              // driven straight down into the floor in front of him
          [60, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
 };
 const BW_UP = new THREE.Vector3(0, 1, 0), BW_REST = new THREE.Euler(0, 0, 0.06);
@@ -1078,20 +1079,22 @@ export class FighterModel {
     #bwPose(atk, pose, dt) {
         const f = this.f;
         const rip = f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0;
-        const busy = !!atk || rip || !f.grounded || Math.abs(f.vx) > 1.4;
-        const free = !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging || f.dizzyTimer > 0);
+        const pound = f.sx && f.sx.k === 'pound' && !atk;               // his Down-F on the ground is the same plunge, timed to its wind-up
+        const busy = true;                                              // the sword is always carried over the shoulder, standing still too
+        const free = pound || (atk && atk.bw) || !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging || f.dizzyTimer > 0);
         this.swK += ((busy && free ? 1 : 0) - this.swK) * (1 - Math.exp(-dt * 14));
         const k = this.swK;
         const CARRY = [125, 18, 95, -67];                                          // arm raised behind the shoulder, blade 23 degrees above horizontal, pointing back
         let tgt = CARRY.slice(), body = null, a = CARRY[3];
-        if (atk && atk.bw) {
-            const T = BW_KEYS[atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
-            const v = bwEval(T, atk.fr);
+        if ((atk && atk.bw) || pound) {
+            const T = BW_KEYS[pound ? 'DOWN' : atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
+            const W = 20, pt = f.sx ? f.sx.t : 0, fr = pound ? Math.min(60, pt < W ? 38 * pt / W : 38 + (pt - W) * 1.7) : atk.fr;
+            const v = bwEval(T, fr);
             tgt = [v[0], v[1], v[2], v[3]]; a = v[3]; body = v;
             pose.lean = v[4]; pose.torsoY = v[5]; pose.twist = v[6]; pose.dy = v[7]; pose.fwd = v[8]; pose.lHx = v[9]; pose.rHx = v[10]; pose.lK = v[11]; pose.rK = v[12]; pose.headX = v[13];
             pose.rSx = v[0] - 8; pose.rSz = v[1] * 0.5; pose.rE = v[2]; pose.lSx = v[0]; pose.lSz = v[1]; pose.lE = v[2];
             pose.blade = 0; pose.aura = Math.max(pose.aura, 0.2);
-            this.bwFr = atk.fr;
+            this.bwFr = pound ? -1 : atk.fr;
         } else if (rip) {
             tgt = [pose.lSx, pose.lSz, pose.lE, f.stabT > 0 ? 86 : 32]; a = tgt[3]; pose.blade = 0;
             pose.rSx = pose.lSx - 6; pose.rE = pose.lE; this.bwFr = -1;
@@ -1099,7 +1102,7 @@ export class FighterModel {
             pose.lSx = lerp(pose.lSx, CARRY[0], k); pose.lSz = lerp(pose.lSz, CARRY[1], k); pose.lE = lerp(pose.lE, CARRY[2], k);
             this.bwFr = -1;
         }
-        this.bwA = a; this.bwOn = (atk && atk.bw) || rip ? 1 : 0;
+        this.bwA = a; this.bwOn = (atk && atk.bw) || rip || pound ? 1 : 0;
     }
 
     /** Aims the blade along the wanted angle (sagittal plane, 0 = up, 90 = forward), whatever the arm does, and keeps its tip on the floor when it would dig in. */

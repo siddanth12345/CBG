@@ -2,6 +2,7 @@
 // drawn here in 3D, the `fxEvents` it emits become sparks, flashes and rings, and
 // animation-driven effects (slash crescents, punch rings, dash ghosts) are spawned by
 // the fighter models through the small API at the bottom of this class.
+import { getReduceFlash } from '../gfx.js';
 import * as THREE from 'three';
 import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX, BLAST_ZONES } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
@@ -351,7 +352,7 @@ export class Effects {
         m.position.copy(pos); m.position.z += 8; m.rotation.z = Math.random() * 3; m.renderOrder = 7;
         this.scene.add(m);
         this.timed.push({ obj: m, t: 0, dur: life, step: (u) => {
-            m.scale.setScalar(size * lerp(0.35, 1.05, 1 - Math.pow(1 - u, 2))); mat.opacity = (1 - u * u);
+            m.scale.setScalar(size * lerp(0.35, 1.05, 1 - Math.pow(1 - u, 2))); mat.opacity = (1 - u * u) * (getReduceFlash() ? 0.3 : 1);
             m.rotation.z += 0.04;
         }, free: () => mat.dispose() });
     }

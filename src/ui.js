@@ -3,7 +3,7 @@ import { charOf, getMyChar, brief } from './characters.js';
 import { S } from './gameCore.js';
 import { Guide } from './guide.js';
 import { getLayout, setMode } from './layout.js';
-import { getGfx, setGfx, getHitboxes, setHitboxes, getZoom, setZoom } from './gfx.js';
+import { getGfx, setGfx, getHitboxes, setHitboxes, getZoom, setZoom, getReduceFlash, setReduceFlash } from './gfx.js';
 import { getNfToggle, setNfToggle, getNfBtn, setNfBtn } from './controls.js';
 import { touchMode } from './layout.js';
 import { audio } from './gameCore.js';
@@ -278,6 +278,8 @@ export class UI {
               <span class="lm-seg">${[[0, 'Hold'], [1, 'Toggle']].map(([m, t]) => `<button class="lm-segb${(getNfToggle() ? 1 : 0) === m ? ' on' : ''}" data-nftoggle="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Show hitboxes<small class="lm-sub">Draws the red attack boxes (for learning the moves). Off by default</small></span>
               <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getHitboxes() ? 1 : 0) === m ? ' on' : ''}" data-hb="${m}">${t}</button>`).join('')}</span></div>
+            <div class="lm-row"><span>Reduce flashing lights<small class="lm-sub">Fewer full-screen flashes, dimmer lights and glow, and a smoother fade for final blows. Recommended if bright flashes bother you</small></span>
+              <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getReduceFlash() ? 1 : 0) === m ? ' on' : ''}" data-rf="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Fullscreen<small class="lm-sub">Also the corner button on phones</small></span><button class="lm-key" data-fs>Toggle fullscreen</button></div>
             <h4 class="lm-group">PC controls (keyboard &amp; mouse)</h4>`;
         group = 'PC';
@@ -293,6 +295,7 @@ export class UI {
         rows.querySelectorAll('[data-zoom]').forEach(b => b.addEventListener('click', () => { setZoom(b.dataset.zoom); this.renderSettings(); }));
         rows.querySelectorAll('[data-nfbtn]').forEach(b => b.addEventListener('click', () => { setNfBtn(b.dataset.nfbtn === '1'); this.renderSettings(); }));
         rows.querySelectorAll('[data-nftoggle]').forEach(b => b.addEventListener('click', () => { setNfToggle(b.dataset.nftoggle === '1'); this.renderSettings(); }));
+        rows.querySelectorAll('[data-rf]').forEach(b => b.addEventListener('click', () => { setReduceFlash(b.dataset.rf === '1'); this.renderSettings(); }));
         rows.querySelectorAll('[data-hb]').forEach(b => b.addEventListener('click', () => { setHitboxes(b.dataset.hb === '1'); this.renderSettings(); }));
         rows.querySelectorAll('[data-vol]').forEach(inp => {
             const apply = () => {

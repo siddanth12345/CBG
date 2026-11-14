@@ -8,6 +8,12 @@ const HKEY = 'cbg.hitboxes';
 export const getHitboxes = () => { try { return localStorage.getItem(HKEY) === '1'; } catch (e) { return false; } };
 export function setHitboxes(on) { try { localStorage.setItem(HKEY, on ? '1' : '0'); } catch (e) { /* blocked */ } window.dispatchEvent(new CustomEvent('cbg-hb')); }
 
+// Reduce flashing lights: no full-screen flashes or flicker, dimmer lights and glow, and a smoother final-blow transition. Remembered on this device.
+const RKEY = 'cbg.reduceFlash';
+let rfOn = false; try { rfOn = localStorage.getItem(RKEY) === '1'; } catch (e) { /* blocked */ }
+export const getReduceFlash = () => rfOn;
+export function setReduceFlash(on) { rfOn = !!on; try { localStorage.setItem(RKEY, on ? '1' : '0'); } catch (e) { /* blocked */ } window.dispatchEvent(new CustomEvent('cbg-rf')); }
+
 // Camera zoom (this player's own view only; it is never shared with other players):
 //   all    = frame every fighter (the default)      stage  = lock on the stage (zooms out to include you if you leave it)
 //   player = frame you and the nearest fighter      full   = always the whole map (not recommended)
