@@ -6,6 +6,7 @@
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
 import { BW_KEYS, bwEval } from './bwSword.js';
+import { MELEE, buildMelee } from './melees.js';
 import { tickExtras, notify, showReward } from './hudExtras.js';
 import { perksFor, reportMatch, perkStat, BOT_NAMES, MOD_NAMES } from './meta.js';
 import { AI_PRIOR } from './aiPrior.js';
@@ -337,6 +338,7 @@ function bwTipOffset(f, kind, fr) {
     return { x: tx, y };
 }
 const PI = Math.PI;
+const MELEE_CACHE = {};
 const ZS = {};
 for (const dr of [1, -1]) {
     const sfx = dr === 1 ? '_R' : '_L';
@@ -1026,17 +1028,25 @@ class Fighter {
     // ------------------------------------------------------------ swings (J attack, Blink slash)
 
     updateSwing() {
-        const sw = this.swing;
+        let sw = this.swing;
         if (!sw) return;
         const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
+        let st = null;
+        if (sw.stages) {                                 // a move with several hit windows in a row
+            const i = sw.stages.findIndex(q => e >= q.a && e <= q.b);
+            if (i !== this._stg) { this._stg = i; if (i >= 0) { this.swingHit = false; if (sw.stages[i].step) this.vx += sw.d * sw.stages[i].step; } }
+            st = i >= 0 ? sw.stages[i] : null;
+        }
         if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable)) { const l = this.zLeap; this.zLeap = null; if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy); this.vx = l.vx; }
         if (this.zLock && e >= this.zLock) { this.freezeTimer = Math.max(this.freezeTimer, this.zLockN); this.zLock = 0; this.vx *= 0.3; }      // Zephyr's stagger / stumble
-        if (this.swingHit || e < sw.a || e > sw.b) {
+        if (this.swingHit || e < sw.a || e > sw.b || (sw.stages && !st)) {
             this.activeHitbox = null;
             return;
         }
-        const k = (e - sw.a) / Math.max(1, sw.b - sw.a);
-        let p = sw.path(k, this.facing);
+        const sw0 = sw;
+        const k = st ? (e - st.a) / Math.max(1, st.b - st.a) : (e - sw.a) / Math.max(1, sw.b - sw.a);
+        let p = st ? { x: sw0.d * (typeof st.px === 'function' ? st.px(k) : st.px), y: typeof st.py === 'function' ? st.py(k) : st.py } : sw.path(k, this.facing);
+        if (st) sw = { ...sw0, ...st, type: 'J' };
         if (sw.tip) p = bwTipOffset(this, sw.tip, (e - 0.5) / this.atkN * 60);       // Bulwark: the hitbox is centred on the tip of the great sword, wherever the swing has taken it
         const cm = 1 + MELEE_CHARGE_BONUS * (this.meleeCharge / MELEE_CHARGE_MAX);          // charged swing: up to +30%
         const fl = this.heldItem && this.heldItem.type === 'FIRESTICK' ? this.heldItem.len : 1;   // firestick: longer reach
@@ -1054,8 +1064,8 @@ class Fighter {
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
             damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), radial: !!sw.radial, type: sw.type,
-            multi: !!sw.multi, fire: fl > 1, stun: sw.stun || 0, burn,
-            fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : null,
+            multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: sw.stun || 0, burn,
+            fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && st.bkb <= 6 && !st.pull && !st.stun) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
         };
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
     }
@@ -2425,6 +2435,15 @@ class Fighter {
             } else if (aimDirection === 'UP') zv = this.grounded ? 'UG' : 'UA';
             else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
         }
+        let mv = null;                                                  // everyone else's new melees (melees.js): side / running side / opposite side / up / down
+        if (this.char !== 'zephyr' && MELEE[this.char]) {
+            let v = '';
+            if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
+                zdir = aimDirection === 'SIDE_LEFT' ? -1 : 1;
+                v = zdir === -this.facing ? 'K' : (this.grounded && Math.abs(this.vx) > 3 && Math.sign(this.vx) === zdir) ? 'T' : 'H';
+            } else if (aimDirection === 'UP') v = 'UG'; else if (aimDirection === 'DOWN') v = 'SL';
+            if (v && MELEE[this.char][v]) { mv = MELEE[this.char][v]; zv = v; if (!zdir) zdir = this.facing; }
+        }
         switch (aimDirection) {
             case 'UP': kind = 'UP'; break;
             case 'DOWN': kind = 'DOWN'; break;
@@ -2434,12 +2453,17 @@ class Fighter {
         if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
         this.attackSerial++;
-        const bw = this.char === 'bulwark' && kind !== 'JAB';          // Bulwark's melee: 1 s in all (0.6 s of heavy wind-up, the swing, the recovery)
+        const bw = this.char === 'bulwark' && kind !== 'JAB' && !mv;          // Bulwark's melee: 1 s in all (0.6 s of heavy wind-up, the swing, the recovery)
         this.attackTimer = this.atkN = bw ? BW_MELEE : ATTACK_FRAMES;
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
-        this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zLeap = null;
-        if (zv) {
-            const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + (zv === 'T' ? 'K' : zv) + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
+        this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zLeap = null; this._stg = -1;
+        if (mv) {
+            this.swing = (MELEE_CACHE[this.char + zv + zdir] ||= buildMelee(mv, zdir));
+            this.attackTimer = this.atkN = mv.n;
+            if (mv.leap) this.zLeap = { vx: zdir * mv.leap.vx, vy: mv.leap.vy, g: mv.leap.g };
+            if (mv.lock) { this.zLock = mv.lock[0]; this.zLockN = mv.lock[1]; }
+        } else if (zv) {
+            const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
             this.swing = SWING[key];
             this.attackTimer = this.atkN = zv === 'T' ? 34 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
             if (zv === 'T') { this.zLeap = { vx: zdir * 16.5, vy: -8, g: true }; this.zLock = 22; this.zLockN = 18; }                    // running: a flying kick forward that carries 1.5x as far as the backwards one, then a 0.3 s stagger
@@ -3876,7 +3900,7 @@ function launch(attacker, defender, hb) {
         if (hb.stun && zapGate(defender)) {       // Volt's 3rd stun on the same foe inside 10 s is a plain melee-strength knockback instead
             hb = { ...hb, stun: 0, lift: 0, radial: false, mirror: false, damage: hb.damage, bkb: 9, kbg: 0.9, angle: defender.x >= attacker.x ? -0.6 : Math.PI + 0.6 };
         } else if (hb.stun) hb = { ...hb, stun: 30 };                 // every Volt stun lasts 0.5 s
-        defender.invincibleTimer = Math.max(defender.invincibleTimer, 36);   // 0.6 s of i-frames for anyone Volt hits
+        if (!hb.chain) defender.invincibleTimer = Math.max(defender.invincibleTimer, 36);   // 0.6 s of i-frames for anyone Volt hits (not between the hits of one chained melee)
     }
     if (attacker && attacker !== defender && defender.sx && defender.sx.k === 'roll' && defender.sx.ph === 'roll') {   // rolling Ember: takes 90% damage, no knockback, the roll just PAUSES 0.5 s (the roll's timer pauses too) and then carries on
         defender.damage += hb.damage * 0.9; defender.lastHitBy = attacker; defender.lastHitT = 0; defender.sx.pause = 30;

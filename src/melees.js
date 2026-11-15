@@ -1,0 +1,69 @@
+// Every non-Zephyr character's side / up / down melees (Zephyr's own live in gameCore.js). Each move is a list of timed hit windows ("stages") so a move can hit several times in a row.
+// Coordinates are for a right-facing fighter (x forward, y up = negative, centre of the body = 0,0) and are mirrored by the direction of the move; angles are for a right-facing hit (negative = upward).
+//   H  = side melee                 T = side melee while running on the ground the way you face (a dash)
+//   K  = side melee opposite to the way you face (a hop / leap in the aimed direction)
+//   UG = up melee                   SL = down melee
+// move: n = frames, leap = {vx, vy, g} (applied when any charge is released), lock = [frame, frames] (a stagger after the hit), ch = chargeable, st = hit windows:
+//   a, b = first / last frame, w, h = box, x, y = centre (number or fn of k 0..1), dmg, bkb, kbg, ang, step = a little forward push at the start of the window, pull = launch toward the attacker, stun, radial.
+const PI = Math.PI;
+const m = (n, st, o = {}) => ({ n, st, ch: true, ...o });
+const s = (a, b, w, h, x, y, dmg, bkb, kbg, ang, o = {}) => ({ a, b, w, h, x, y, dmg, bkb, kbg, ang, ...o });
+
+export const MELEE = {
+    luminent: {
+        H: m(22, [s(5, 8, 56, 46, 52, -6, 5, 6, 0.6, -0.3), s(12, 15, 86, 30, 74, -4, 5, 11, 1.2, -0.5)]),                                  // draw-cut, then the light line it left detonates
+        T: m(30, [s(4, 12, 70, 40, (k) => 30 + 30 * k, 0, 5, 5, 0.5, -0.2), s(17, 20, 84, 50, -44, 0, 6, 11, 1.2, -0.45)], { leap: { vx: 15, vy: 0, g: false } }),   // slide-through slash, the line explodes behind him
+        K: m(24, [s(5, 9, 60, 56, 40, 0, 5, 6, 0.6, -0.3), s(10, 15, 72, 72, 112, -4, 6, 11, 1.2, -0.4)], { leap: { vx: 8, vy: -3, g: false } }),   // spin-back cut + a thrown crescent of light
+        UG: m(22, [s(4, 9, 56, 74, 30, -36, 5, 5, 0.5, -PI / 2), s(12, 16, 112, 112, 0, -86, 6, 12, 1.25, -PI / 2)]),                          // rising flip, a sun-ring at the top
+        SL: m(24, [s(5, 8, 40, 40, 44, 24, 4, 3, 0.3, -PI / 2), s(14, 18, 52, 74, 72, 16, 7, 12, 1.25, -1.2)]),                              // blade into the floor, a light spike erupts a beat later
+    },
+    umbra: {
+        H: m(18, [s(4, 7, 60, 44, 48, -4, 4, 4, 0.4, -0.3), s(11, 14, 66, 50, 54, -4, 6, 11, 1.2, -0.35)]),                                  // double cross-slash, the shadow's second cut lands late
+        T: m(28, [s(3, 14, 60, 40, (k) => 20 + 30 * k, 0, 4, 4, 0.4, -0.3), s(15, 18, 56, 40, 36, 0, 6, 11, 1.2, -0.4)], { leap: { vx: 17, vy: 0, g: false } }),   // slips through the floor-shadow and stabs as he surfaces
+        K: m(24, [s(5, 8, 50, 40, 56, -2, 4, 4, 0.4, -0.3), s(13, 16, 56, 44, 88, -2, 6, 11, 1.2, -0.35)], { leap: { vx: 7, vy: -2, g: false } }),  // a decoy stabs first, he reappears and stabs again
+        UG: m(22, [s(4, 9, 50, 80, 28, -30, 3, 2.5, 0.2, -PI / 2), s(11, 14, 60, 92, 20, -52, 5, 10, 1.2, -PI / 2)]),                          // a hook that drags the foe up by the shadow
+        SL: m(24, [s(6, 10, 46, 40, 46, 22, 5, 0, 0, -PI / 2, { stun: 24 }), s(16, 19, 56, 56, 50, 8, 5, 8, 1, -0.6)]),                      // pins the shadow: they are rooted for a moment
+    },
+    volt: {
+        H: m(24, [s(4, 6, 52, 40, 46, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(9, 11, 52, 40, 52, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(14, 17, 60, 46, 58, -4, 5, 11, 1.2, -0.35, { step: 5 })]),   // three sparking jabs, stepping in each time
+        T: m(28, [s(3, 14, 72, 56, (k) => 30 + 20 * k, -2, 7, 11, 1.2, -0.3)], { leap: { vx: 17, vy: 0, g: false }, lock: [16, 16] }),         // lightning-rod charge, he staggers while the current discharges
+        K: m(22, [s(5, 9, 56, 44, 40, 8, 4, 5, 0.5, -0.3), s(11, 16, 122, 70, 62, -10, 5, 11, 1.2, -0.4)], { leap: { vx: 10, vy: -6, g: true } }),   // reverse kick, then arcs jump toward the foe
+        UG: m(22, [s(4, 8, 46, 70, 26, -30, 5, 5, 0.5, -PI / 2), s(11, 15, 112, 92, 0, -62, 5, 11, 1.2, -PI / 2)]),                            // conductor uppercut, the arc catches anyone overhead
+        SL: m(26, [s(8, 16, 200, 26, 0, 30, 8, 11, 1.2, -0.5, { radial: true })]),                                                              // grounding stomp: a flat shock ring both ways
+    },
+    ember: {
+        H: m(20, [s(6, 10, 62, 56, 50, -14, 8, 11, 1.2, -0.5), s(13, 17, 82, 36, 72, 4, 3, 5, 0.5, -0.3)]),                                  // flaming haymaker, embers fall after it
+        T: m(28, [s(3, 16, 84, 30, (k) => 30 + 30 * k, 20, 6, 7, 0.7, -0.5)], { leap: { vx: 15, vy: 0, g: false } }),                           // fire-slide scorching the ground
+        K: m(24, [s(5, 14, 60, 40, (k) => 34 + 30 * k, 6, 7, 11, 1.2, -PI / 5)], { leap: { vx: 13, vy: -4, g: true } }),                       // rocket kick that blasts him backwards
+        UG: m(22, [s(4, 12, 44, 100, 24, (k) => -10 - 90 * k, 8, 12, 1.3, -PI / 2)]),                                                          // dragon-fist with a fire trail
+        SL: m(26, [s(6, 9, 60, 40, 30, 34, 7, 9, 1, -1.2), s(11, 14, 80, 24, 36, 34, 2, 3, 0.3, -0.6), s(18, 21, 80, 24, 36, 34, 2, 3, 0.3, -0.6)]),   // stomp, then the fire patch burns twice more
+    },
+    tide: {
+        H: m(22, [s(6, 12, 100, 40, 60, 6, 6, 4, 0.4, 0, { pull: true }), s(15, 18, 56, 46, 36, 0, 5, 11, 1.2, -0.4)]),                       // staff sweep drags the foe in, then shoves them out
+        T: m(28, [s(3, 16, 90, 60, (k) => 32 + 20 * k, -4, 7, 11, 1.2, -0.3)], { leap: { vx: 14, vy: 0, g: false }, lock: [18, 14] }),        // surf-ride tackle on a wave
+        K: m(24, [s(4, 14, 90, 50, (k) => 50 + 30 * k, 0, 6, 11, 1.2, -0.4)], { leap: { vx: 13, vy: -3, g: false } }),                         // pushes off backward on a wave, sweeping as he goes
+        UG: m(22, [s(8, 16, 50, 130, 60, -45, 7, 12, 1.3, -PI / 2)]),                                                                          // geyser flick
+        SL: m(26, [s(6, 9, 44, 40, 36, 30, 3, 2, 0.2, -PI / 2), s(10, 20, 140, 20, 60, 34, 1, 0, 0, -PI / 2, { stun: 14 })]),                  // staff plant, a slowing puddle spreads
+    },
+    terra: {
+        H: m(26, [s(8, 13, 64, 54, 50, -6, 10, 12, 1.25, -0.4), s(15, 19, 90, 36, 90, 4, 3, 5, 0.5, -0.3)]),                                  // boulder-fist hook, debris flies on
+        T: m(30, [s(4, 16, 90, 70, (k) => 34 + 20 * k, -2, 9, 12, 1.25, -0.35)], { leap: { vx: 11, vy: 0, g: false }, lock: [18, 18] }),       // shoulder-plow
+        K: m(26, [s(6, 9, 50, 40, 34, 30, 6, 8, 1, -0.6), s(11, 16, 90, 36, 100, 26, 4, 9, 1, -0.5)], { leap: { vx: 9, vy: -5, g: true } }),   // backward stone-stomp kicks debris at the foe
+        UG: m(26, [s(10, 18, 50, 150, 70, -20, 10, 13, 1.3, -PI / 2)]),                                                                        // a pillar rises in front of him
+        SL: m(28, [s(8, 11, 90, 50, 40, 26, 9, 10, 1.1, -1.2), s(13, 19, 120, 30, 110, 30, 4, 8, 1, -0.6)]),                                  // two-fist hammer, a ground wave runs out
+    },
+    bulwark: {
+        T: m(30, [s(4, 16, 90, 80, 46, -4, 8, 11, 1.2, -0.3)], { leap: { vx: 12, vy: 0, g: false }, lock: [18, 16] }),                         // shield ram, the sword trailing behind
+        K: m(26, [s(8, 14, 110, 70, 70, -10, 8, 11, 1.2, -0.4)], { leap: { vx: 8, vy: -2, g: false } }),                                        // guard-step back, counter-swing
+    },
+};
+
+/** build the playable swing for one move and one direction (d = +1 / -1: the way the move is aimed) */
+export function buildMelee(spec, d) {
+    const st = spec.st.map((q) => ({
+        a: q.a, b: q.b, w: q.w, h: q.h, damage: q.dmg, bkb: q.bkb, kbg: q.kbg, stun: q.stun || 0, pull: !!q.pull, step: q.step || 0, radial: !!q.radial,
+        path: () => null, px: q.x, py: q.y,
+        angle: () => q.pull ? (d === 1 ? PI + 0.15 : -0.15) : (d === 1 ? q.ang : PI - q.ang),
+    }));
+    return { type: 'J', chargeable: !!spec.ch, a: st[0].a, b: st[st.length - 1].b, stages: st, damage: st[0].damage, bkb: st[0].bkb, kbg: st[0].kbg, w: st[0].w, h: st[0].h, path: () => ({ x: 0, y: 0 }), angle: st[0].angle, n: spec.n, leap: spec.leap || null, lock: spec.lock || null, d };
+}

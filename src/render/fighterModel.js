@@ -721,7 +721,7 @@ export class FighterModel {
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
         const hv = f.char === 'bulwark', ez = smooth;
-        if (f.char === 'zephyr' && f.zv && !rip) return this.#zephMelee(f, u);
+        if (f.zv && !rip) return this.#zephMelee(f, u);
         if (hv && !rip && f.atkN === BW_MELEE && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
 
         if (k === 'JAB') {                                   // around-the-world sword spin
@@ -798,13 +798,24 @@ export class FighterModel {
             o.lSx = lerp(lerp(20, -26, wind), 48, sw); o.lSx = lerp(o.lSx, 20, rec); o.lE = 34;
             o.lean = lerp(lerp(0, -14, wind), 18, sw) * (1 - rec); o.torsoY = lerp(lerp(0, -26, wind), 22, sw) * (1 - rec); o.twist = lerp(lerp(0, -8, wind), 10, sw) * (1 - rec);
             o.fwd = 10 * sw * (1 - rec); o.dy = -2 * wind * (1 - rec); o.rHx = 26 * sw * (1 - rec); o.lHx = -22 * sw * (1 - rec); o.rK = 16; o.lK = 22; o.headX = -6 * sw;
-        } else if (v === 'K' || v === 'T') {
-            const sg = v === 'T' ? -1 : 1;                                  // T = the same flying kick, but forward (feet lead the way)
-            const tuck = Sg(0, 0.18), thr = Sg(0.18, 0.34), back = Sg(0.8, 1), lie = f.grounded || v === 'T' ? Sg(0.6, 0.7) * (1 - Sg(0.86, 1)) : 0;
-            o.pitch = sg * (-82 * tuck - 8 * lie) * (1 - back);
+        } else if (v === 'T') {                                          // running leap: a thrusting punch, then a 0.3 s stagger
+            const pun = Sg(0, 0.2), stag = Sg(0.5, 0.65) * (1 - Sg(0.82, 1)), rec = Sg(0.82, 1), chg = f.attackHeld && f.swing && f.swing.chargeable && f.atkN - f.attackTimer >= f.swing.a - 1;
+            o.rSx = lerp(lerp(20, 96, pun), 36, stag); o.rE = lerp(30, 3, pun); o.rSz = 6; o.lSx = lerp(lerp(20, -34, pun), 70, stag); o.lE = 30;
+            o.lean = lerp(24 * pun, 34, stag) * (1 - rec * 0.6); o.fwd = 14 * pun * (1 - stag); o.torsoY = -18 * pun * (1 - stag);
+            o.rHx = lerp(42 * pun, 52, stag); o.lHx = lerp(-34 * pun, -26, stag); o.rK = lerp(20, 64, stag); o.lK = lerp(24, 40, stag); o.headX = 12 * stag; o.dy = -5 * stag;
+            if (chg) { o.rSx = -20; o.rE = 70; o.lSx = 40; o.lean = 22; o.dy = -9; o.rK = 76; o.lK = 70; o.rHx = 36; o.lHx = -20; o.torsoY = 18; }       // charging: coiled low, about to spring
+        } else if (v === 'K') {
+            const sg = 1, kz = f.char === 'zephyr' ? 1 : 0.55, chg = f.attackHeld && f.swing && f.swing.chargeable && f.atkN - f.attackTimer >= f.swing.a - 1;
+            const tuck = Sg(0, 0.18), thr = Sg(0.18, 0.34), back = Sg(0.8, 1), lie = f.grounded ? Sg(0.6, 0.7) * (1 - Sg(0.86, 1)) : 0;
+            o.pitch = sg * kz * (-82 * tuck - 8 * lie) * (1 - back);
             o.rHx = lerp(lerp(0, 92, tuck), 4, thr); o.rK = lerp(lerp(8, 122, tuck), 3, thr); o.lHx = lerp(0, -22, tuck); o.lK = lerp(8, 46, tuck);
             o.rSx = 56; o.lSx = 70; o.rSz = 44; o.lSz = 44; o.rE = 20; o.lE = 20; o.dy = -22 * lie; o.headX = -10 * tuck;
             o.rHx *= (1 - back); o.rK = lerp(o.rK, 8, back);
+            if (chg) { o.pitch = 0; o.rSx = 30; o.lSx = 60; o.dy = -9; o.rK = 80; o.lK = 70; o.rHx = 40; o.lHx = -24; o.lean = -8; o.torsoY = 14; }       // charging: crouched, about to spring
+        } else if (v === 'SL') {                                         // down melee for the others: weapon / fists up, then a slam
+            const up = Sg(0, 0.3), sl = Sg(0.3, 0.46), rec = Sg(0.7, 1);
+            o.rSx = lerp(lerp(20, 172, up), 40, sl); o.lSx = lerp(lerp(20, 172, up), 44, sl); o.rE = lerp(30, 4, sl); o.lE = lerp(30, 6, sl); o.rSz = 10; o.lSz = 10;
+            o.lean = lerp(lerp(0, -12, up), 26, sl) * (1 - rec); o.dy = lerp(0, 6, sl) * (1 - rec); o.rK = lerp(8, 34, sl); o.lK = lerp(8, 34, sl); o.torsoY = 0;
         } else if (v === 'UG') {
             const crouch = Sg(0, 0.22) * (1 - Sg(0.22, 0.36)), pun = Sg(0.22, 0.42) * (1 - Sg(0.68, 1));
             o.rSx = lerp(lerp(8, -22, crouch), 176, pun); o.rE = lerp(56, 4, pun); o.rSz = 10; o.lSx = lerp(30, 60, pun); o.lE = 40;
