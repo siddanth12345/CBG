@@ -44,8 +44,8 @@ export const CHARS = {
     },
     umbra: {
         id: 'umbra', name: 'Umbra', role: 'Trickster', walk: 1.15, orb: 1.0, blink: 1.1, scale: 0.96,
-        desc: 'A shadow assassin with twin daggers, a hood and a cape. Quick on its feet, slashes in tight crosses.',
-        look: { suit: 0x111827, trim: 0x6b7280, head: 'hood', weapon: 'dagger', anim: 'dagger', extra: 'cape' },
+        desc: 'A shadow assassin with twin daggers, a top hat and a cape. Quick on its feet, slashes in tight crosses and throws playing cards.',
+        look: { suit: 0x111827, trim: 0x6b7280, head: 'tophat', weapon: 'dagger', anim: 'dagger', extra: 'cape' },
         art: { skin: '#6b7280', feature: 'hood' },
     },
     terra: {

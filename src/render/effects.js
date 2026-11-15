@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 600;
+        this.MAXS = 600; this.sCap = 600;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
@@ -377,6 +377,7 @@ export class Effects {
 
     /** radial spark streaks. dir: undefined = all around, 'up' / 'down' bias */
     sparks(pos, color, count, speed, life = 0.3, dir) {
+        count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
@@ -392,6 +393,7 @@ export class Effects {
     }
 
     balls(pos, color, count, speed, life = 0.75) {
+        count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
@@ -407,6 +409,7 @@ export class Effects {
 
     /** directional spark spray (used for hits) */
     spray(pos, angle, color, count, speed, spread = 0.9, life = 0.32) {
+        count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
@@ -891,7 +894,9 @@ export class Effects {
 
     update(dt, models) {
         if (this._fxClear !== S.fxClear) { this._fxClear = S.fxClear; this.clearAll(); }
-        if (this.timed.length > 140) for (let i = 0; i < this.timed.length - 140; i++) this.timed[i].t = Math.max(this.timed[i].t, this.timed[i].dur - 0.05);      // too many at once: let the oldest finish now
+        const cap = Math.max(24, Math.round(140 * (S.fxLod || 1)));
+        if (this.timed.length > cap) for (let i = 0; i < this.timed.length - cap; i++) this.timed[i].t = Math.max(this.timed[i].t, this.timed[i].dur - 0.05);      // too many at once: let the oldest finish now
+        this.sCap = Math.round(this.MAXS * (S.fxLod || 1));
         this.suddenWall(dt);
         this.#consumeEvents();
         const M = this.tmpM, Q = this.tmpQ, V = this.tmpV, Sc = this.tmpS, C = this.tmpC;
@@ -909,7 +914,8 @@ export class Effects {
 
         // ---- core particles
         let n = 0;
-        for (let i = 0; i < particles.length && n < this.MAXP; i++) {
+        const pcap = Math.round(this.MAXP * (S.fxLod || 1));
+        for (let i = 0; i < particles.length && n < pcap; i++) {
             const p = particles[i];
             const r = Math.max(0.6, p.radius * (0.35 + 0.9 * p.alpha)) * 1.6;
             V.set(wx(p.x), wy(p.y), p.z || 0); Sc.set(r, r, r);
@@ -936,7 +942,7 @@ export class Effects {
         for (const s of this.sparks_) {
             const k = 1 - s.t / s.life;
             if (s.ball) {
-                if (nb >= this.MAXS) continue;
+                if (nb >= this.sCap) continue;
                 const r = (s.r || 4) * (0.75 + 0.35 * k);
                 Sc.set(r, r * (0.82 + 0.2 * k), r);
                 M.compose(s.p, Q.identity(), Sc);
@@ -945,7 +951,7 @@ export class Effects {
                 nb++;
                 continue;
             }
-            if (n >= this.MAXS) continue;
+            if (n >= this.sCap) continue;
             const sp = s.v.length();
             if (sp < 0.001) continue;
             const len = Math.min(46, 5 + sp * 0.07) * (0.35 + k * 0.65);

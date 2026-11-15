@@ -59,7 +59,7 @@ export class FighterModel {
         this.tumble = 0;
         this.lastJumps = fighter.jumpsLeft;
         this.wasAir = false;
-        this.flipT = 99;
+        this.flipT = 99; this.hopT = 99;
         this.lastAtkU = 0;
         this.lastSerial = fighter.attackSerial;
         this.lastThrow = 0;
@@ -213,9 +213,12 @@ export class FighterModel {
                     c.position.set(Math.sin(a) * 6.5, 20 + Math.cos(a) * 3, -2); c.rotation.z = -a * 0.9; head.add(c);
                 }
             },
-            hood: () => {
-                const hd = M(new THREE.SphereGeometry(10.8, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), suit); hd.position.set(0, 10.2, -1.4); hd.scale.set(1.04, 1.06, 1.1); head.add(hd);
-                const tip = M(new THREE.ConeGeometry(4.2, 12, 8), suit); tip.position.set(0, 21, -7); tip.rotation.x = -1.1; head.add(tip);
+            tophat: () => {                                                  // Umbra: a tall top hat with a glowing band
+                const brim = M(new THREE.CylinderGeometry(12.4, 12.4, 1.4, 24), armorDark); brim.position.set(0, 19.4, -0.6); brim.rotation.x = -0.08; head.add(brim);
+                const crown = M(new THREE.CylinderGeometry(7.4, 8.2, 12, 20), armorDark); crown.position.set(0, 26, -0.8); crown.rotation.x = -0.08; head.add(crown);
+                const band = M(new THREE.CylinderGeometry(8.35, 8.35, 2.4, 20), glow); band.position.set(0, 21.4, -0.7); band.rotation.x = -0.08; head.add(band);
+                const top = M(new THREE.CylinderGeometry(7.4, 7.4, 0.5, 20), trim); top.position.set(0, 32.2, -1.1); top.rotation.x = -0.08; head.add(top);
+                this.hat = crown;
             },
             rocks: () => {
                 for (let i = 0; i < 5; i++) {
@@ -834,6 +837,8 @@ export class FighterModel {
             o.rHx = lerp(lerp(0, 104, tuck), 6, thr) * (1 - back); o.lHx = lerp(lerp(0, 96, tuck), 2, thr) * (1 - back); o.rK = lerp(lerp(8, 120, tuck), 2, thr); o.lK = lerp(lerp(8, 126, tuck), 2, thr);
             o.pitch = 20 * thr * (1 - back); o.rSx = 120; o.lSx = 120; o.rSz = 48; o.lSz = 48; o.lean = -6 * thr; o.dy = 4 * thr;
         }
+        if (f.char !== 'zephyr') { const y = this.#styleTweak(f, v, u, o, Sg); if (y) spinYaw = y; }
+        if (f.char !== 'zephyr' && this.charLook.weapon !== 'fist' && !this.bwSw) o.blade = Sg(0, 0.08) * (1 - Sg(0.9, 1));        // weapon characters keep their weapon out for the whole move
         return { w: 1, kind: 'ZM', u, o, spinYaw };
     }
 
@@ -855,6 +860,91 @@ export class FighterModel {
             m.visible = true; m.position.set(h.x, h.y, 0); m.quaternion.setFromUnitVectors(this._zz || (this._zz = new THREE.Vector3(0, 0, 1)), d.normalize());
             const r = (f.char === 'zephyr' ? Math.max(hb.w, hb.h) * 2 : Math.max(hb.w, hb.h)) / 2; m.scale.set(r * (1 - 0.1 * i), r * (1 - 0.1 * i), r * 0.5); m.material.opacity = 0.75 - 0.2 * i;
         }
+    }
+
+    /** Umbra's melees throw playing cards that ride the hitbox (the up attacks hurl his top hat instead) */
+    #umbraCards(f) {
+        const hb = f.zv && f.attackTimer > 0 ? f.activeHitbox : null;
+        if (!this.uCards) {
+            if (!hb) return;
+            this.uCards = [];
+            const cg = new THREE.BoxGeometry(7, 10.5, 0.5);
+            for (let i = 0; i < 4; i++) {
+                const m = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xfecaca : 0xf8fafc })); m.visible = false; m.renderOrder = 8; this.root.add(m); this.uCards.push(m);
+            }
+            const hat = new THREE.Group();
+            const dk = new THREE.MeshBasicMaterial({ color: 0x111827 });
+            const br = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 1.4, 20), dk); const cr = new THREE.Mesh(new THREE.CylinderGeometry(6.6, 7.4, 11, 18), dk); cr.position.y = 6;
+            const bd = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 7.5, 2.2, 18), new THREE.MeshBasicMaterial({ color: 0xa78bfa })); bd.position.y = 1.8;
+            hat.add(br, cr, bd); hat.visible = false; hat.renderOrder = 8; this.root.add(hat); this.uHat = hat;
+        }
+        const hatMove = f.zv === 'UG' || f.zv === 'UA';
+        if (!hb) { for (const m of this.uCards) m.visible = false; this.uHat.visible = false; return; }
+        const cx = hb.x - f.x, cy = -(hb.y - f.y), r = Math.max(hb.w, hb.h) * 0.5;
+        this.uHat.visible = hatMove;
+        if (hatMove) { this.uHat.position.set(cx, cy - 6, 0); this.uHat.rotation.set(0.3, this.t * 18, this.t * 9); }
+        for (let i = 0; i < this.uCards.length; i++) {
+            const m = this.uCards[i], a = this.t * 22 + i * Math.PI / 2;
+            m.visible = !hatMove;
+            m.position.set(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.55, 2);
+            m.rotation.set(0, a, a * 1.3);
+        }
+    }
+
+    /** gives each character's melee its own body language on top of the shared pose (returns a yaw spin, or 0) */
+    #styleTweak(f, v, u, o, Sg) {
+        const sw = (a, b) => Sg(a, b), P2 = Math.PI * 2;
+        switch (f.char) {
+            case 'luminent':                                                 // clean two-handed sword work
+                if (v === 'H') { o.lSx = o.rSx; o.lE = o.rE; o.twist *= 1.6; }
+                else if (v === 'T') { o.pitch = -14; o.rHx = 62; o.lHx = -58; o.rSx = 70; o.lSx = 70; o.rE = 14; o.lE = 14; }
+                else if (v === 'K') { o.rSx = 100; o.lSx = 100; o.rE = 20; o.lE = 20; return P2 * sw(0.12, 0.6); }
+                else if (v === 'UG') { o.spin = 360 * sw(0.18, 0.78); o.rSx = 150; o.lSx = 150; o.rK = 70; o.lK = 70; o.rHx = 60; o.lHx = 40; }
+                else if (v === 'SL') { o.lean = 34 * sw(0.28, 0.45); o.rSx = lerp(176, 84, sw(0.3, 0.46)); o.lSx = o.rSx; o.rHx = 50 * sw(0.3, 0.46); o.lHx = -30 * sw(0.3, 0.46); }
+                break;
+            case 'umbra':                                                    // low and twisting, one blade then the other
+                o.dy = Math.min(o.dy, -7 * Math.sin(Math.PI * Math.min(1, u * 1.2)));
+                if (v === 'H') { const a2 = sw(0.45, 0.62); o.lSx = lerp(40, 160, a2) * (1 - sw(0.7, 1)) + 20 * sw(0.7, 1); o.lE = 10; o.twist = (o.twist || 0) - 26 * a2 * (1 - sw(0.7, 1)); }
+                else if (v === 'T') { o.pitch = -52 * sw(0, 0.18) * (1 - sw(0.8, 1)); o.rSx = 120; o.lSx = 20; o.rHx = 20; o.lHx = -40; o.rK = 40; o.lK = 70; }
+                else if (v === 'K') { o.spin = -360 * sw(0.1, 0.7); o.rSx = 140; o.lSx = 140; o.rK = 90; o.lK = 90; }
+                else if (v === 'UG') { o.dy = -16 * sw(0, 0.2) * (1 - sw(0.3, 0.5)); o.lean = 22 * sw(0, 0.25) * (1 - sw(0.5, 0.8)); o.lSx = 110; o.lE = 40; }
+                else if (v === 'SL') { o.dy = -20 * sw(0.1, 0.34) * (1 - sw(0.8, 1)); o.rSx = lerp(60, 20, sw(0.3, 0.46)); o.lSx = 50; o.twist = -30 * sw(0.1, 0.3); o.lean = 12; }
+                break;
+            case 'volt':                                                     // fast, small, alternating punches
+                if (v === 'H') { const a1 = Math.sin(Math.PI * Math.min(1, sw(0.1, 0.3) * (1 - sw(0.3, 0.38)) * 1)), a2 = Math.sin(Math.PI * Math.min(1, sw(0.38, 0.5) * (1 - sw(0.5, 0.58)))), a3 = sw(0.62, 0.72) * (1 - sw(0.85, 1)); o.rSx = 20 + 76 * a1 + 76 * a3; o.lSx = 20 + 76 * a2; o.rE = 14; o.lE = 14; o.lean = 8 + 8 * (a1 + a2 + a3); o.fwd = 4 * (a1 + a2) + 8 * a3; o.torsoY = 14 * a1 - 14 * a2; }
+                else if (v === 'T') { o.lean = 40; o.rSx = -30; o.lSx = -30; o.rE = 40; o.lE = 40; o.rHx = 40; o.lHx = -40; }
+                else if (v === 'K') { o.pitch *= 0.8; o.rSx = 100; o.lSx = 20; }
+                else if (v === 'UG') { o.rSx = lerp(0, 178, sw(0.15, 0.3)) * (1 - sw(0.6, 0.9)) + 20 * sw(0.6, 0.9); o.lSx = 24; }
+                else if (v === 'SL') { const kn = sw(0, 0.3) * (1 - sw(0.3, 0.4)); o.rHx = 110 * kn; o.rK = 120 * kn + 8; o.dy = -4 * kn + 6 * sw(0.3, 0.45) * (1 - sw(0.7, 1)); o.rSx = 120; o.lSx = 120; o.rSz = 40; o.lSz = 40; }
+                break;
+            case 'ember':                                                    // big hot swings, a lot of body
+                if (v === 'H') { o.twist *= 1.5; o.rSz = 50; return P2 * 0.5 * sw(0.28, 0.6); }
+                else if (v === 'T') { o.pitch = -20 * sw(0, 0.2); o.dy = -14 * sw(0, 0.2); o.rHx = 92 * sw(0, 0.2); o.lK = 110 * sw(0, 0.2); o.lHx = 30 * sw(0, 0.2); o.rSx = 50; o.lSx = 50; o.rSz = 56; o.lSz = 56; }
+                else if (v === 'K') { o.pitch *= 1.1; o.rSx = 20; o.lSx = 20; o.rSz = 10; o.lSz = 10; }
+                else if (v === 'UG') { o.dy = lerp(o.dy, 12, sw(0.2, 0.4)); o.rHx = 14; o.lHx = -16; o.rK = 66; o.lK = 20; o.rSx = 178; o.lSx = 60; }
+                else if (v === 'SL') { const kn = sw(0, 0.28) * (1 - sw(0.28, 0.42)); o.rHx = 100 * kn; o.rK = 100 * kn + 8; o.rSx = 120 * kn; o.lSx = 120 * kn; o.dy += 8 * sw(0.28, 0.45) * (1 - sw(0.7, 1)); }
+                break;
+            case 'tide':                                                     // staff: spins and sweeps, flowing
+                if (v === 'H') { o.rSx = 90; o.lSx = 90; o.rSz = 20; o.lSz = 20; o.rE = 10; o.lE = 10; return P2 * sw(0.2, 0.62); }
+                else if (v === 'T') { o.dy = -10 * sw(0, 0.2); o.rK = 70; o.lK = 20; o.rHx = 40; o.lHx = -30; o.rSz = 80; o.lSz = 80; o.rSx = 70; o.lSx = 70; o.lean = 30; }
+                else if (v === 'K') { o.lean = -20 * sw(0, 0.2); o.rSz = 70; o.lSz = 70; o.rSx = 80; o.lSx = 80; o.pitch *= 0.5; }
+                else if (v === 'UG') { o.rSx = 172; o.lSx = 172; o.rSz = 20; o.lSz = 20; o.dy = 8 * sw(0.2, 0.4) * (1 - sw(0.6, 0.9)); o.lean = -6; }
+                else if (v === 'SL') { o.rSx = lerp(176, 60, sw(0.3, 0.46)); o.lSx = lerp(176, 30, sw(0.3, 0.46)); o.rSz = 14; o.lSz = 14; o.lean = 20 * sw(0.3, 0.46) * (1 - sw(0.7, 1)); }
+                break;
+            case 'terra':                                                    // slow, heavy, planted
+                o.dy -= 5 * Math.sin(Math.PI * Math.min(1, u * 1.1));
+                if (v === 'H') { o.rSx = lerp(-40, 96, sw(0.25, 0.5)); o.lSx = 30; o.rE = 20; o.lean = lerp(-10, 26, sw(0.25, 0.5)); o.twist *= 1.5; }
+                else if (v === 'T') { o.lean = 42; o.rSx = 60; o.lSx = 60; o.rE = 120; o.lE = 120; o.rSz = 30; o.lSz = 30; o.rK = 40; o.lK = 40; }
+                else if (v === 'K') { const st2 = sw(0.12, 0.3) * (1 - sw(0.5, 0.8)); o.pitch *= 0.3; o.rHx = 100 * st2; o.rK = 20; o.rSx = 40; o.lSx = 40; }
+                else if (v === 'UG') { const cr = sw(0, 0.3); o.dy -= 12 * cr * (1 - sw(0.3, 0.45)); o.rSx = lerp(-10, 176, sw(0.3, 0.5)); o.lSx = o.rSx; o.rK = 70 * cr; o.lK = 70 * cr; o.lean = lerp(24, -8, sw(0.3, 0.5)); }
+                else if (v === 'SL') { o.dy -= 8 * sw(0, 0.3); o.rK = 40; o.lK = 40; o.rSz = 26; o.lSz = 26; }
+                break;
+            case 'bulwark':                                                  // shield first
+                if (v === 'T') { o.lSx = 92; o.lE = 100; o.lSz = 6; o.rSx = -10; o.rE = 20; o.lean = 30; }
+                else if (v === 'K') { o.lSx = 150; o.lE = 60; o.lSz = 10; o.rSx = 40; o.lean = -10; }
+                break;
+        }
+        return 0;
     }
 
     // ============================================================ per-frame update
@@ -891,7 +981,9 @@ export class FighterModel {
         // ---- pose
         const airNow = !f.grounded && !f.isHanging;
         this.tugT += dt;
-        if (airNow && this.wasAir && f.jumpsLeft < this.lastJumps) {   // mid-air jump -> somersault (balloon jumps tug the string instead)
+        this.hopT += dt;
+        if (f.jumpsLeft < this.lastJumps && f.attackTimer > 0) this.hopT = 0;       // jumping in the middle of a move: no somersault, the knees just tuck for the hop
+        else if (airNow && this.wasAir && f.jumpsLeft < this.lastJumps) {   // mid-air jump -> somersault (balloon jumps tug the string instead)
             if (f.balloon && f.maxJumps - f.jumpsLeft > charOf(f.char).jumps) this.tugT = 0; else this.flipT = 0;
         }
         this.wasAir = airNow;
@@ -927,6 +1019,10 @@ export class FighterModel {
         }
 
         if (this.bwSw) this.#bwPose(atk, pose, dt);
+        if (atk && this.hopT < 0.4) {                       // a jump inside a move: legs bend like a hop, whatever the move's own pose is
+            const b = Math.sin(Math.PI * this.hopT / 0.4);
+            pose.rK = Math.max(pose.rK, 16 + 80 * b); pose.lK = Math.max(pose.lK, 16 + 80 * b); pose.rHx = Math.max(pose.rHx, 38 * b); pose.lHx = Math.max(pose.lHx, 22 * b);
+        }
 
         // ---- facing (yaw) with a 3/4 bias toward the camera
         const targetYaw = this.visFacing * (90 - 24) * D2R;
@@ -948,6 +1044,7 @@ export class FighterModel {
         this.armL.el.rotation.set(-pose.lE * D2R, 0, 0);
         if (this.bwSw) this.#bwAim(dt);
         if (f.char === 'zephyr') this.#zephRings(f);
+        else if (f.char === 'umbra') this.#umbraCards(f);
         this.legR.hip.rotation.set(-pose.rHx * D2R, 0, pose.rHz * D2R);
         this.legL.hip.rotation.set(-pose.lHx * D2R, 0, -pose.lHz * D2R);
         this.legR.kn.rotation.set(pose.rK * D2R, 0, 0);

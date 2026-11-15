@@ -338,7 +338,6 @@ function bwTipOffset(f, kind, fr) {
     return { x: tx, y };
 }
 const PI = Math.PI;
-const MELEE_CACHE = {};
 const ZS = {};
 for (const dr of [1, -1]) {
     const sfx = dr === 1 ? '_R' : '_L';
@@ -370,6 +369,7 @@ const SWING = {
 };
 
 Object.assign(SWING, ZS);
+for (const c in MELEE) for (const v in MELEE[c]) for (const d of [1, -1]) SWING['M_' + c + '_' + v + '_' + d] = buildMelee(MELEE[c][v], d);      // named, so an online guest can look the swing up
 for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) { const b = SWING[k]; SWING['BW_' + k] = { ...b, a: k === 'UP' || k === 'DOWN' ? 29 : 31, b: k === 'UP' || k === 'DOWN' ? 35 : 37, tip: k === 'UP' ? 'UP' : k === 'DOWN' ? 'DOWN' : 'SIDE', damage: Math.round(b.damage * 1.5 * 10) / 10, bkb: b.bkb * 1.4, kbg: b.kbg * 1.4, w: Math.round(b.w * 1.69), h: Math.round(b.h * 1.69) }; }      // Bulwark: the great sword hits 1.5x as hard and throws 1.4x as far; the hit window opens after the long wind-up
 
 // character-specific side specials (Thunder Dash, Shadow Step, and every travelling dash) are swings with their own hit data
@@ -493,6 +493,7 @@ class Fighter {
         // --- 3D presentation only (never read by game logic) ---
         this.attackKind = null;      // 'JAB' | 'UP' | 'DOWN' | 'SIDE_LEFT' | 'SIDE_RIGHT'
         this.attackSerial = 0;
+        this.airDown = false;        // a down melee started in the air: it spikes the foe downwards
         this.zv = '';                // Zephyr's melee variant: H haymaker, T running thrust, K backwards drop kick, UG uppercut, UA bicycle kick, DG iron sweep, DA double-leg stomp
         this.zLeap = null;           // Zephyr's leap, applied when the wind-up ends (after any charge)
         this.zLock = 0;              // frame of the swing at which he staggers / lies down (0 = never)
@@ -1063,7 +1064,7 @@ class Fighter {
         }
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
-            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: sw.angle(this.facing, this.grounded), radial: !!sw.radial, type: sw.type,
+            damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: this.airDown ? Math.PI / 2 - 0.3 * this.facing : sw.angle(this.facing, this.grounded), radial: this.airDown ? false : !!sw.radial, type: sw.type,
             multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: sw.stun || 0, burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && st.bkb <= 6 && !st.pull && !st.stun) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
         };
@@ -1734,12 +1735,8 @@ class Fighter {
             if (full) { rb *= 0.7; rk *= 0.7; }   // blue end knockback 0.7×
             // white end 8; blue end 12 (1.5× white) — both drag then launch
             const endDmg = full ? 12 : (mid ? 8 : 0);
-            // white/blue end KB aims where the user is pointing (mouse PC / joystick+matrix mobile)
-            const aim = aimOf(this);
-            let adx = aim.x - this.x, ady = aim.y - this.y;
-            let alen = Math.hypot(adx, ady);
-            if (alen < 8) { adx = this.facing || 1; ady = -0.25; alen = Math.hypot(adx, ady); }
-            const aimAng = Math.atan2(ady, adx);
+            // white/blue end knockback goes the way of a side melee in the direction the fireball was rolling (always reliable, no aiming needed)
+            const rd = x.d || this.facing || 1, aimAng = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
             for (const f of foesOf(this)) {
                 if (f._rollCarry !== this) continue;
                 f._rollCarry = null;
@@ -2336,6 +2333,7 @@ class Fighter {
         if (this.buryT > 0) { this._wantOut = true; return false; }          // jumping while buried in a whirlpool = getting out of it
         if (this.hitstun > 0 || this.isShielding || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.grabHolding || this.isRolling) return false;
         if (this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0) return false;
+        if (this.attackHeld && this.attackTimer > 0) return false;                                  // charging a melee: you cannot jump out of it
         // rolling: jump WITH the ball (same height); cancel only after 0.6 s — does not extend roll life
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'roll') {
             if (this.sx.jumpCancelT > 0) return false;          // already mid jump-cancel
@@ -2456,9 +2454,10 @@ class Fighter {
         const bw = this.char === 'bulwark' && kind !== 'JAB' && !mv;          // Bulwark's melee: 1 s in all (0.6 s of heavy wind-up, the swing, the recovery)
         this.attackTimer = this.atkN = bw ? BW_MELEE : ATTACK_FRAMES;
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
+        this.airDown = aimDirection === 'DOWN' && !this.grounded;
         this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zLeap = null; this._stg = -1;
         if (mv) {
-            this.swing = (MELEE_CACHE[this.char + zv + zdir] ||= buildMelee(mv, zdir));
+            this.swing = SWING['M_' + this.char + '_' + zv + '_' + zdir];
             this.attackTimer = this.atkN = mv.n;
             if (mv.leap) this.zLeap = { vx: zdir * mv.leap.vx, vy: mv.leap.vy, g: mv.leap.g };
             if (mv.lock) { this.zLock = mv.lock[0]; this.zLockN = mv.lock[1]; }
@@ -3247,7 +3246,7 @@ class AIBot extends Fighter {
 
 const particles = [];
 function dripBlood(x, y) {
-    const room = Math.max(0, 220 - particles.length);
+    const room = Math.max(0, Math.round(220 * (S.fxLod || 1)) - particles.length);
     const n = Math.min(9, room);
     for (let i = 0; i < n; i++) {
         particles.push({
@@ -3264,7 +3263,7 @@ function createParticles(x, y, color, count = 10) {
     if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 60) recBuf.p.push([x, y, color, count]);
     if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
     // hard cap so ledge thrash / KO spam can't melt the frame rate
-    const room = Math.max(0, 220 - particles.length);
+    const room = Math.max(0, Math.round(220 * (S.fxLod || 1)) - particles.length);
     count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
         particles.push({
@@ -5216,7 +5215,7 @@ export function applyRemote(ev, slot = 1) {
     }
 }
 
-const FKEYS = Object.keys(new Fighter(0, 0, '#000', 'k')).filter(k => !['color', 'name', 'isAI', 'startX', 'width', 'height', 'home', 'heldItem', 'lastHitBy', 'burnBy', 'swingHitSet', '_acc', '_since', '_slowK', '_upd', 'px', 'py'].includes(k));
+const FKEYS = Object.keys(new Fighter(0, 0, '#000', 'k')).filter(k => !['color', 'name', 'isAI', 'startX', 'width', 'height', 'home', 'heldItem', 'lastHitBy', 'burnBy', 'swingHitSet', 'swingHit', 'zLeap', 'zLock', 'zLockN', 'airDown', 'aiChargeGoal', '_acc', '_since', '_slowK', '_upd', 'px', 'py'].includes(k));
 const REFS = ['grabHolding', 'grabbedBy', 'grabVictim', 'suplexTarget', 'bombBy'];
 const SWING_NAMES = Object.keys(SWING);
 const r2 = (v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v;

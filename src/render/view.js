@@ -57,6 +57,7 @@ export class View {
         sc.left = -1500; sc.right = 1500; sc.top = 1000; sc.bottom = -1000; sc.near = 100; sc.far = 4500;
         key.shadow.bias = -0.0004; key.shadow.normalBias = 1.2;
         scene.add(key, key.target);
+        this.dl = new THREE.PointLight(0xffffff, 0, 900, 1.3); this.scene.add(this.dl);      // impact-frame light: always in the scene (intensity 0) so toggling it never recompiles shaders
         const rim = this.rim = new THREE.DirectionalLight(0x8b5cf6, 1.6);
         rim.position.set(1100, 600, -1400);
         scene.add(rim);
@@ -163,12 +164,12 @@ export class View {
             for (const l of [this.hemi, this.key, this.rim]) { l._i = l.intensity; l.intensity = l === this.rim ? 0.9 : 0.08; }
             this.bloom.strength *= 0.4;
             if (st.decor) st.decor.visible = false; st.stars.visible = false; for (const g of st.rocks) g.visible = false;
-            if (!this.dl) { this.dl = new THREE.PointLight(0xffffff, 40, 900, 1.3); this.scene.add(this.dl); }
-            this.dl.visible = true; this.#darkLight(m);
+            
+            this.dl.intensity = 40; this.#darkLight(m);
         } else {
             for (const l of [this.hemi, this.key, this.rim]) if (l._i != null) l.intensity = l._i;
             if (st.decor) st.decor.visible = true; for (const g of st.rocks) g.visible = this.inMatch !== false;
-            if (this.dl) this.dl.visible = false;
+            if (this.dl) this.dl.intensity = 0;
             this.applyTheme(); this.applyQuality();
         }
     }
@@ -187,6 +188,7 @@ export class View {
         const sh = m && q < 2;
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
+        S.fxLod = q >= 3 ? 0.2 : q >= 2 ? 0.3 : q >= 1 ? 0.6 : 1;         // particle / effect budget follows the quality level
     }
 
     resize() {
