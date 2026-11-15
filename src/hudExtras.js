@@ -12,7 +12,7 @@ function ensure() {
     readout = document.createElement('div');
     readout.style.cssText = 'position:absolute;left:max(10px,env(safe-area-inset-left));bottom:max(96px,env(safe-area-inset-bottom));min-width:210px;max-width:290px;padding:8px 10px;border-radius:10px;background:rgba(2,6,23,.72);border:1px solid rgba(148,163,184,.35);color:#e2e8f0;font-size:11px;line-height:1.45;font-variant-numeric:tabular-nums;display:none;';
     kc = document.createElement('div');                                             // the black-and-white "impact frame" for the final blow (lines + flashes, drawn over the canvas)
-    kc.style.cssText = 'position:fixed;inset:0;z-index:28;pointer-events:none;overflow:hidden;display:none;';
+    kc.style.cssText = 'position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden;display:none;';
     kcLines = document.createElement('div');
     kcLines.style.cssText = 'position:absolute;inset:-20%;background:repeating-conic-gradient(from 3deg at 50% 50%,#fff 0 .9deg,#000 .9deg 2.3deg,#fff 2.3deg 2.7deg,#000 2.7deg 5.1deg,#fff 5.1deg 5.4deg,#000 5.4deg 7.3deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mix-blend-mode:difference;';
     kcFlash = document.createElement('div');
@@ -74,21 +74,30 @@ export function showReward(r) {
     el.innerHTML = `${rank}<div style="color:#fde047;font-weight:800">+${r.gain} 🪙 <span style="opacity:.7;font-weight:600">(${r.coins} total)</span></div>${ch}`;
 }
 
-/** Final blow = a manga-style impact frame: the whole screen goes dark in one cut (black and white, silhouettes only) with white speed lines, the 3D air rings fly in (impactRings.js),
- *  then it fades back to colour. 2 s in all. With "Reduce flashing lights" the cut becomes a slow fade, no jitter and dimmer lines. Live (for the two involved) and in replays. */
+/** Final blow = a manga-style impact frame: the whole screen flickers white / inverted black-and-white (high contrast), speed lines burst from the centre,
+ *  then it settles into stark black-and-white and fades back to colour. Live (for the two involved) and in replays (wherever the match had one). */
 function impactFrame(S, playing) {
-    if (!kcCanvas) kcCanvas = document.getElementById('gameCanvas') || document.querySelector('canvas');
-    const D = S.kcDur || 2;
+    if (!kcCanvas) kcCanvas = document.querySelector('canvas');
     let on = false, e = 0;
-    if (S.replay) { on = S.kcImpT > 0; e = D - S.kcImpT; }
-    else if (playing && S.kcPause > 0 && S.kcFull) { on = true; e = D - S.kcT; }
+    if (S.replay) { on = S.kcImpT > 0; e = 1.2 - S.kcImpT; }
+    else if (playing && S.kcPause > 0 && S.kcFull) { on = true; e = (S.kcDur || 1.2) - S.kcT; }
     kc.style.display = on ? 'block' : 'none';
     if (!on) { if (kcCanvas && kcCanvas.style.filter) kcCanvas.style.filter = ''; return; }
-    const rf = getReduceFlash(), sm = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
-    const dk = (rf ? sm(e / 0.45) : 1) * (1 - sm((e - (D - (rf ? 0.5 : 0.3))) / (rf ? 0.5 : 0.3)));      // 0 = normal colours, 1 = fully dark
-    kcCanvas.style.filter = dk <= 0.001 ? '' : 'grayscale(' + dk.toFixed(3) + ') brightness(' + (1 - 0.8 * dk).toFixed(3) + ') contrast(' + (1 + 0.9 * dk).toFixed(3) + ')';
-    kcFlash.style.opacity = 0;
-    kcLines.style.opacity = (rf ? 0.28 : 0.6) * dk * (e < 0.15 ? Math.min(1, e / 0.15) : 1);
-    kcLines.style.transform = rf ? 'scale(' + (1 + e * 0.04) + ')' : 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.1) + ')';      // lines jitter like hand-drawn frames
-    kcTxt.style.opacity = Math.min(1, e / 0.2) * dk;
+    let flash = 0, filt = '';
+    if (getReduceFlash()) {                                                                // reduced flashing: no white flash-bang, no inverted flicker, a short smooth fade into black and white
+        const k = Math.min(1, e / 0.3);
+        filt = e < 0.95 ? 'grayscale(' + k.toFixed(2) + ') contrast(' + (1 + 1.6 * k * (1 - Math.min(1, Math.max(0, (e - 0.29) / 0.66)))).toFixed(2) + ') brightness(' + (1 - 0.25 * k).toFixed(2) + ')' : 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
+    }
+    else if (e < 0.09) flash = 1 - Math.max(0, e - 0.06) / 0.03;                               // flash-bang: instant blinding white, then straight into stark black and white
+    else if (e < 0.14) filt = 'grayscale(1) contrast(5) invert(1)';
+    else if (e < 0.22) filt = 'grayscale(1) contrast(5)';
+    else if (e < 0.29) filt = 'grayscale(1) contrast(5) invert(1)';
+    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (3.2 - 1.6 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ')';
+    else filt = 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
+    if (kcCanvas) kcCanvas.style.filter = filt;
+    kcFlash.style.opacity = flash;
+    const lines = e >= 0.06 && e < 0.9;
+    kcLines.style.opacity = lines ? (getReduceFlash() ? 0.4 : 1) * (e < 0.6 ? 0.85 : 0.85 * (0.9 - e) / 0.3) : 0;
+    kcLines.style.transform = getReduceFlash() ? 'scale(' + (1 + e * 0.12) + ')' : 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.12) + ')';      // lines jitter like hand-drawn frames
+    kcTxt.style.opacity = 0;                                                                // no "FINAL BLOW" text
 }

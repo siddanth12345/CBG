@@ -57,7 +57,7 @@ const PAGES = [
                 <div class="lm-card"><h4>Grab · PC <kbd>${k('grab')}</kbd> · Mobile: Grab button</h4>
                     <p>PC: aim with the mouse, press grab. Mobile: <b>drag the Grab button</b> toward your target and <b>release</b> (it snaps back; a grab only fires once aimed and released). Grab <b>beats shield</b>, loses to nearly everything else, and its knockback is 0.7x a melee and grows with damage. It also picks up and throws items.</p></div>
                 <div class="lm-card"><h4>Items (custom matches)</h4>
-                    <p>Grab an item to pick it up or use it. <b>Ball</b>: throw for 10 damage, bounces back, 2 throws. <b>Strawberry</b>: heals 30%. <b>Balloon</b>: 7 jumps (Jump); a melee hit pops it and floats the victim for 2 s. <b>Firestick</b>: 5x melee reach, shrinks 0.5 per hit; thrown like a spear it pins its victim for 15 damage until it lands. <b>Clock</b>: throw it, and after 1 s a bubble slows orbs and items inside to 0.3x for 15 s (never the fighters).</p></div>
+                    <p>Grab an item to pick it up or use it. <b>Ball</b>: throw for 10 damage, bounces back, 2 throws. <b>Strawberry</b>: heals 30%. <b>Balloon</b>: 7 jumps (Jump); a melee hit pops it and floats the victim for 2 s. <b>Firestick</b>: 2.5x melee reach, shrinks 0.5 per hit; thrown like a spear it pins its victim for 15 damage until it lands. <b>Clock</b>: throw it, and after 1 s a bubble slows orbs and items inside to 0.3x for 15 s (never the fighters).</p></div>
             </div>`,
     },
     {

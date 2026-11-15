@@ -16,7 +16,7 @@ export const ITEM_INFO = {
     },
     FIRESTICK: {
         name: 'Firestick', icon: '🔥',
-        desc: 'Grab it and all your melee attacks get a 5x longer hitbox. The stick loses 0.5 length every time you hit or get hit, and burns out after 6 reductions. Aim a grab to throw it like a spear: whoever it hits takes 15 damage and gets stuck to it until it hits the ground. If it flies below the stage tip they are freed and get their jumps back. Each hit costs it 0.5 length.',
+        desc: 'Grab it and all your melee attacks get a 2.5x longer hitbox. The stick loses 0.5 length every time you hit or get hit, and burns out after 5 hits. Aim a grab to throw it like a spear: whoever it hits takes 15 damage and gets stuck to it until it hits the ground. If it flies below the stage tip they are freed and get their jumps back. Each hit costs it 0.5 length.',
     },
     CLOCK: {
         name: 'Clock', icon: '⏰',

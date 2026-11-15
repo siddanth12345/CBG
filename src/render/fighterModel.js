@@ -7,7 +7,7 @@
 // is authored once, facing forward.
 import { charOf } from '../characters.js';
 import * as THREE from 'three';
-import { S, viewerFighter } from '../gameCore.js';
+import { S, viewerFighter, BW_MELEE } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { buildDecor, tickDecor, disposeDecor } from './charDecor.js';
 import { Trail } from './trail.js';
@@ -19,34 +19,8 @@ const ATTACK_FRAMES = 18;
 
 // ---- Bulwark's great-sword melees (frames of a 60-frame, 1 s swing; the hit window opens at frame ~38).
 // columns: lSx, lSz, lE, blade angle (0 up, 90 forward, 180 down, 270 back), lean, torsoY, twist, dy, fwd, lHx, rHx, lK, rK, headX ; [frame, values, easing]
-const BW_KEYS = {
-    UP: [[0, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
-         [38, [-28, 14, 24, 205, 16, 22, 8, -5, 0, 20, -18, 44, 20, 8], 'slow'],                // sinks, blade low behind him ... very slowly
-         [48, [165, 20, 8, 18, -14, -24, -10, 8, 4, -8, 12, 6, 32, -16], 'fast'],               // ... then the full upward slash from the low far side to overhead
-         [60, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
-    SIDE: [[0, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
-         [14, [-26, 24, 22, 236, 8, 34, 16, -2, 0, 12, -12, 34, 16, 4], 'smooth'],             // blade low behind him, point on the floor
-         [38, [-12, 30, 22, 198, 12, 40, 20, -3, 0, 16, -14, 40, 18, 6], 'slow'],               // dragged forward along the floor, slowly, throwing sparks
-         [48, [95, 40, 8, 66, -20, -36, -22, 3, 10, -10, 18, 8, 30, 8], 'fast'],               // then up and across in one sweep
-         [60, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
-    DOWN: [[0, [125, 18, 95, -67, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
-         [26, [168, 8, 16, -12, -10, 10, 0, 3, 0, -8, 8, 14, 14, -12], 'slow'],                // lifted above the head, slowly
-         [38, [152, 10, 30, 176, -4, 8, 0, 2, 0, -6, 6, 18, 18, -6], 'smooth'],                // turned point-down, held high in both hands
-         [48, [55, 10, 8, 178, 28, -14, -8, -8, 8, 20, -14, 50, 30, 18], 'fast'],              // driven straight down into the floor in front of him
-         [60, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
-};
+import { BW_KEYS, bwEval } from '../bwSword.js';
 const BW_UP = new THREE.Vector3(0, 1, 0), BW_REST = new THREE.Euler(0, 0, 0.06);
-function bwEval(T, fr) {
-    let i = 0;
-    while (i < T.length - 2 && fr > T[i + 1][0]) i++;
-    const A = T[i], B = T[i + 1], span = B[0] - A[0];
-    let q = clamp01((fr - A[0]) / span);
-    const e = B[2];
-    q = e === 'slow' ? q * q * q : e === 'fast' ? 1 - (1 - q) * (1 - q) : smooth(q);
-    return A[1].map((v, j) => v + (B[1][j] - v) * q);
-}
-
-
 // ----------------------------------------------------------------- poses
 const POSE_DEFAULT = {
     dy: 0, fwd: 0,
@@ -740,14 +714,15 @@ export class FighterModel {
         if (!rip && (f.attackTimer <= 0 || !f.attackKind)) return null;
         if (f.isRolling || f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.isHanging || f.grabbedBy) return null;
         const u = rip ? (f.riposteT > 0 ? 0.13 : f.stabT > 0 ? (() => { const q = 1 - f.stabT / 60; return q < 0.25 ? 0.16 + 0.3 * smooth(q / 0.25) : q < 0.72 ? 0.46 + 0.02 * (q - 0.25) / 0.47 : 0.48 - 0.16 * smooth((q - 0.72) / 0.28); })() : 0.62 + 0.38 * (1 - f.riposteAfter / 42))
-                      : clamp01(((f.atkN || ATTACK_FRAMES) - 1 - f.attackTimer + alpha) / (f.atkN || ATTACK_FRAMES));
+                      : clamp01(((f.atkN || ATTACK_FRAMES) - 1 - f.attackTimer + ((f.attackHeld && f.swing && f.swing.chargeable && (f.atkN - f.attackTimer >= f.swing.a - 1)) ? 0 : alpha)) / (f.atkN || ATTACK_FRAMES));
         const w = smooth(u / 0.1) * (1 - smooth(seg(u, 0.72, 1)));
         const k = rip ? 'UP' : f.attackKind;
         const o = {};
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
         const hv = f.char === 'bulwark', ez = smooth;
-        if (hv && !rip && f.atkN === 60 && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
+        if (f.char === 'zephyr' && f.zv && !rip) return this.#zephMelee(f, u);
+        if (hv && !rip && f.atkN === BW_MELEE && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
 
         if (k === 'JAB') {                                   // around-the-world sword spin
             const wind = smooth(seg(u, 0, 0.2));
@@ -812,6 +787,69 @@ export class FighterModel {
         return null;
     }
 
+    /** Zephyr's melees: haymaker (H), running thrust (T), backwards drop kick (K), uppercut (UG), bicycle kick (UA), iron sweep (DG), double-leg stomp (DA) */
+    #zephMelee(f, u) {
+        const v = f.zv, o = {}, ez = smooth, Sg = (a, b) => ez(seg(u, a, b));
+        let spinYaw = 0;
+        Object.assign(o, { rSx: 20, lSx: 20, rSz: 12, lSz: 12, rE: 20, lE: 20, rHx: 0, lHx: 0, rK: 8, lK: 8, lean: 0, dy: 0, fwd: 0, torsoY: 0, twist: 0, headX: 0, pitch: 0, spin: 0 });
+        if (v === 'H') {
+            const wind = Sg(0, 0.3), sw = Sg(0.3, 0.55), rec = Sg(0.68, 1);
+            o.rSx = lerp(lerp(20, 168, wind), 84, sw); o.rSx = lerp(o.rSx, 20, rec); o.rE = lerp(44, 6, sw); o.rSz = 20;
+            o.lSx = lerp(lerp(20, -26, wind), 48, sw); o.lSx = lerp(o.lSx, 20, rec); o.lE = 34;
+            o.lean = lerp(lerp(0, -14, wind), 18, sw) * (1 - rec); o.torsoY = lerp(lerp(0, -26, wind), 22, sw) * (1 - rec); o.twist = lerp(lerp(0, -8, wind), 10, sw) * (1 - rec);
+            o.fwd = 10 * sw * (1 - rec); o.dy = -2 * wind * (1 - rec); o.rHx = 26 * sw * (1 - rec); o.lHx = -22 * sw * (1 - rec); o.rK = 16; o.lK = 22; o.headX = -6 * sw;
+        } else if (v === 'T') {
+            const pun = Sg(0, 0.16), stag = Sg(0.28, 0.43) * (1 - Sg(0.7, 1)), rec = Sg(0.7, 1);
+            o.rSx = lerp(lerp(20, 96, pun), 36, stag); o.rE = lerp(30, 3, pun); o.rSz = 6; o.lSx = lerp(lerp(20, -34, pun), 70, stag); o.lE = 30;
+            o.lean = lerp(24 * pun, 34, stag) * (1 - rec * 0.6); o.fwd = 14 * pun * (1 - stag); o.torsoY = -18 * pun * (1 - stag);
+            o.rHx = lerp(42 * pun, 52, stag); o.lHx = lerp(-34 * pun, -26, stag); o.rK = lerp(20, 64, stag); o.lK = lerp(24, 40, stag); o.headX = 12 * stag; o.dy = -5 * stag;
+        } else if (v === 'K') {
+            const tuck = Sg(0, 0.18), thr = Sg(0.18, 0.34), back = Sg(0.8, 1), lie = f.grounded ? Sg(0.6, 0.7) * (1 - Sg(0.86, 1)) : 0;
+            o.pitch = (-82 * tuck - 8 * lie) * (1 - back);
+            o.rHx = lerp(lerp(0, 92, tuck), 4, thr); o.rK = lerp(lerp(8, 122, tuck), 3, thr); o.lHx = lerp(0, -22, tuck); o.lK = lerp(8, 46, tuck);
+            o.rSx = 56; o.lSx = 70; o.rSz = 44; o.lSz = 44; o.rE = 20; o.lE = 20; o.dy = -22 * lie; o.headX = -10 * tuck;
+            o.rHx *= (1 - back); o.rK = lerp(o.rK, 8, back);
+        } else if (v === 'UG') {
+            const crouch = Sg(0, 0.22) * (1 - Sg(0.22, 0.36)), pun = Sg(0.22, 0.42) * (1 - Sg(0.68, 1));
+            o.rSx = lerp(lerp(8, -22, crouch), 176, pun); o.rE = lerp(56, 4, pun); o.rSz = 10; o.lSx = lerp(30, 60, pun); o.lE = 40;
+            o.lean = lerp(14 * crouch, -10, pun); o.dy = -6 * crouch + 10 * pun; o.rK = 64 * crouch + 8; o.lK = 56 * crouch + 8; o.rHx = 28 * crouch - 10 * pun; o.lHx = 14 * crouch; o.torsoY = -22 * crouch + 20 * pun; o.headX = -16 * pun;
+        } else if (v === 'UA') {
+            const sp = Sg(0.12, 0.86), p = u * 40;
+            o.spin = 360 * sp; o.rSx = 54; o.lSx = 54; o.rSz = 56; o.lSz = 56; o.rE = 30; o.lE = 30;
+            o.rHx = 72 * Math.sin(p); o.lHx = -72 * Math.sin(p); o.rK = 56 - 46 * Math.sin(p); o.lK = 56 + 46 * Math.sin(p); o.dy = -3;
+        } else if (v === 'DG') {
+            const crouch = Sg(0, 0.2) * (1 - Sg(0.82, 1)), sp = Sg(0.2, 0.74);
+            spinYaw = Math.PI * 2 * sp;
+            o.dy = -17 * crouch; o.rHx = 90 * crouch; o.rK = lerp(8, 2, crouch); o.lHx = 34 * crouch; o.lK = lerp(8, 118, crouch);
+            o.rSx = 40; o.lSx = 40; o.rSz = 64; o.lSz = 64; o.lean = 8 * crouch; o.headX = 6 * crouch;
+        } else if (v === 'DA') {
+            const tuck = Sg(0, 0.25), thr = Sg(0.25, 0.4), back = Sg(0.82, 1);
+            o.rHx = lerp(lerp(0, 104, tuck), 6, thr) * (1 - back); o.lHx = lerp(lerp(0, 96, tuck), 2, thr) * (1 - back); o.rK = lerp(lerp(8, 120, tuck), 2, thr); o.lK = lerp(lerp(8, 126, tuck), 2, thr);
+            o.pitch = 20 * thr * (1 - back); o.rSx = 120; o.lSx = 120; o.rSz = 48; o.lSz = 48; o.lean = -6 * thr; o.dy = 4 * thr;
+        }
+        return { w: 1, kind: 'ZM', u, o, spinYaw };
+    }
+
+    /** Zephyr's melees: three wind rings (as wide as the hitbox) that ride the hitbox */
+    #zephRings(f) {
+        const hb = f.zv && f.attackTimer > 0 ? f.activeHitbox : null;
+        if (!this.zRings) {
+            if (!hb) return;
+            const g = new THREE.TorusGeometry(1, 0.06, 10, 56); this.zRings = []; this.zHist = [];
+            for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.visible = false; m.renderOrder = 8; this.root.add(m); this.zRings.push(m); }
+        }
+        if (hb) { this.zHist.unshift({ x: hb.x - f.x, y: -(hb.y - f.y) }); if (this.zHist.length > 10) this.zHist.pop(); } else if (this.zHist.length) this.zHist.pop();
+        const H = this.zHist, d = this._zd || (this._zd = new THREE.Vector3());
+        for (let i = 0; i < 3; i++) {
+            const m = this.zRings[i], h = H[Math.min(H.length - 1, i * 2)];
+            if (!hb || !h) { m.visible = false; continue; }
+            const h1 = H[Math.min(H.length - 1, i * 2 + 1)] || h;
+            d.set(h.x - h1.x, h.y - h1.y, 0); if (d.lengthSq() < 0.01) d.set(f.facing, 0.2, 0);
+            m.visible = true; m.position.set(h.x, h.y, 0); m.quaternion.setFromUnitVectors(this._zz || (this._zz = new THREE.Vector3(0, 0, 1)), d.normalize());
+            const r = Math.max(hb.w, hb.h) / 2; m.scale.set(r * (1 - 0.1 * i), r * (1 - 0.1 * i), r * 0.5); m.material.opacity = 0.75 - 0.2 * i;
+        }
+    }
+
     // ============================================================ per-frame update
     update(dt, alpha, nowSec) {
         const f = this.f;
@@ -873,6 +911,7 @@ export class FighterModel {
                 pose.twist += Math.sin(this.t * 55) * 2.4 * c; pose.dy += Math.sin(this.t * 70) * 0.8 * c; pose.aura = Math.max(pose.aura, 0.35 + 0.65 * c);
             }
             if (atk.kind === 'LUNGE') { this.visFacing = f.facing; }
+            else if (atk.kind === 'ZM') this.visFacing = f.facing;
             else if (atk.kind === 'SIDE_LEFT') this.visFacing = -1;
             else if (atk.kind === 'SIDE_RIGHT') this.visFacing = 1;
             if (atk.bw) this.#bwAttackFx(atk, dt); else this.#attackFx(atk, dt);
@@ -901,6 +940,7 @@ export class FighterModel {
         this.armR.el.rotation.set(-pose.rE * D2R, 0, 0);
         this.armL.el.rotation.set(-pose.lE * D2R, 0, 0);
         if (this.bwSw) this.#bwAim(dt);
+        if (f.char === 'zephyr') this.#zephRings(f);
         this.legR.hip.rotation.set(-pose.rHx * D2R, 0, pose.rHz * D2R);
         this.legL.hip.rotation.set(-pose.lHx * D2R, 0, -pose.lHz * D2R);
         this.legR.kn.rotation.set(pose.rK * D2R, 0, 0);

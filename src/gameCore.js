@@ -5,6 +5,7 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
+import { BW_KEYS, bwEval } from './bwSword.js';
 import { tickExtras, notify, showReward } from './hudExtras.js';
 import { perksFor, reportMatch, perkStat, BOT_NAMES, MOD_NAMES } from './meta.js';
 import { AI_PRIOR } from './aiPrior.js';
@@ -170,7 +171,7 @@ function placeDuel(move) {
 
 // ----------------------------------------------------------------- tuning (frames @ 60 Hz)
 export const ATTACK_FRAMES = 18;
-export const BW_MELEE = 60;
+export const BW_MELEE = 46;                      // Bulwark's Up / Down / Side melees: 46 frames (the keyframes in bwSword.js run on a 60-frame scale; 1.3x faster than before)
 const LOCK = 36;              // 0.6 s: after ANY move you can't start another one (you can still walk)
 const lk = (f, n) => (f.char === 'bulwark' || f.char === 'terra') ? Math.round(n * 0.7) : n;   // Bulwark / Terra: 0.7x the lock after a move
 const JUMP_OK = 24;           // ...but you may jump once 0.2 s of that lock has passed (36 - 12)
@@ -325,6 +326,28 @@ const arc = (r, a0, a1) => (k, f) => {
     const a = rad(a0 + (a1 - a0) * k);
     return { x: f * Math.cos(a) * r, y: -Math.sin(a) * r };
 };
+/** where the tip of Bulwark's great sword is (relative to his centre) at keyframe `fr`: hand from the raised arm, plus the blade along its angle; it never goes below the floor */
+function bwTipOffset(f, kind, fr) {
+    const v = bwEval(BW_KEYS[kind], Math.max(0, Math.min(60, fr))), d = f.facing, psi = v[0] * Math.PI / 180, al = v[3] * Math.PI / 180;
+    const hx = d * (4 + 36 * Math.sin(psi)), hy = -20 + 36 * Math.cos(psi);
+    const tx = hx + d * 106 * Math.sin(al), ty = hy - 106 * Math.cos(al);
+    let y = ty;
+    const over = f.x + tx > STAGE.x - 10 && f.x + tx < STAGE.x + STAGE.width + 10;
+    if (over && f.y + y > STAGE.y - 4 && f.y < STAGE.y) y = STAGE.y - 4 - f.y;                  // a blade that would dig in drags along the floor
+    return { x: tx, y };
+}
+const PI = Math.PI;
+const ZS = {};
+for (const dr of [1, -1]) {
+    const sfx = dr === 1 ? '_R' : '_L';
+    ZS['ZH' + sfx] = { type: 'J', a: 7, b: 13, w: 84, h: 74, damage: 11, bkb: 12.5, kbg: 1.25, path: (k, f) => { const a = rad(78 - 68 * k); return { x: f * Math.cos(a) * 80, y: -Math.sin(a) * 74 - 4 }; }, angle: () => dr === 1 ? -PI / 4 : PI + PI / 4 };           // 45 degree overhead haymaker: from overhead to in front of him, never down
+    ZS['ZT' + sfx] = { type: 'J', a: 4, b: 10, w: 100, h: 54, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
+    ZS['ZK' + sfx] = { type: 'J', a: 5, b: 15, w: 100, h: 72, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
+}
+ZS.ZUG = { type: 'J', a: 4, b: 11, w: 64, h: 92, damage: 9.5, bkb: 12.5, kbg: 1.3, path: (k, f) => ({ x: f * 28, y: -8 - 96 * k }), angle: (f) => -PI / 2 + 0.25 * f };                                                       // uppercut: from the fist and up
+ZS.ZUA = { type: 'J', a: 5, b: 21, w: 104, h: 104, damage: 10, bkb: 12, kbg: 1.2, path: (k, f) => { const t = PI / 2 + k * 2 * PI * -f; return { x: Math.cos(t) * 54, y: -Math.sin(t) * 54 }; }, angle: () => -PI / 2 };      // bicycle kick: the hitbox circles his whole body
+ZS.ZDG = { type: 'J', a: 5, b: 17, w: 76, h: 48, damage: 9.5, bkb: 12, kbg: 1.2, path: (k, f) => ({ x: f * Math.cos(k * 2 * PI) * 66, y: 24 }), angle: () => -PI / 5, radial: true };                                   // iron sweep: a low spin round him
+ZS.ZDA = { type: 'J', a: 6, b: 17, w: 68, h: 98, damage: 11, bkb: 11, kbg: 1.2, path: (k, f) => ({ x: f * 20, y: 60 }), angle: (f) => PI / 2 - 0.3 * f };                                                                   // both legs thrust down, tilted 20 degrees to his facing
 const SWING = {
     // neutral melee: a sword spin around the body (both sides, air and ground) that only launches UP
     JAB:  { type: 'J', a: 5, b: 15, w: 150, h: 74, damage: 7, bkb: 13, kbg: 1.05, multi: true, path: () => ({ x: 0, y: -4 }),
@@ -344,7 +367,8 @@ const SWING = {
             angle: (f) => f === 1 ? -Math.PI / 5 : Math.PI + Math.PI / 5 },
 };
 
-for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) { const b = SWING[k]; SWING['BW_' + k] = { ...b, a: k === 'UP' || k === 'DOWN' ? 38 : 40, b: k === 'UP' || k === 'DOWN' ? 46 : 48, damage: Math.round(b.damage * 1.5 * 10) / 10, bkb: b.bkb * 1.4, kbg: b.kbg * 1.4, w: Math.round(b.w * 1.3), h: Math.round(b.h * 1.3) }; }      // Bulwark: the great sword hits 1.5x as hard and throws 1.4x as far; the hit window opens after the long wind-up
+Object.assign(SWING, ZS);
+for (const k of ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT']) { const b = SWING[k]; SWING['BW_' + k] = { ...b, a: k === 'UP' || k === 'DOWN' ? 29 : 31, b: k === 'UP' || k === 'DOWN' ? 35 : 37, tip: k === 'UP' ? 'UP' : k === 'DOWN' ? 'DOWN' : 'SIDE', damage: Math.round(b.damage * 1.5 * 10) / 10, bkb: b.bkb * 1.4, kbg: b.kbg * 1.4, w: Math.round(b.w * 1.69), h: Math.round(b.h * 1.69) }; }      // Bulwark: the great sword hits 1.5x as hard and throws 1.4x as far; the hit window opens after the long wind-up
 
 // character-specific side specials (Thunder Dash, Shadow Step, and every travelling dash) are swings with their own hit data
 for (const id in SP) {
@@ -467,6 +491,10 @@ class Fighter {
         // --- 3D presentation only (never read by game logic) ---
         this.attackKind = null;      // 'JAB' | 'UP' | 'DOWN' | 'SIDE_LEFT' | 'SIDE_RIGHT'
         this.attackSerial = 0;
+        this.zv = '';                // Zephyr's melee variant: H haymaker, T running thrust, K backwards drop kick, UG uppercut, UA bicycle kick, DG iron sweep, DA double-leg stomp
+        this.zLock = 0;              // frame of the swing at which he staggers / lies down (0 = never)
+        this.zLockN = 0;             // ... for this many frames
+        this.ffT = 0;                // frames left of the final-blow flight: it leaves a trail of wide air rings
         this.atkN = 18;              // length of the current melee in frames (Bulwark's Up / Down / Side melees are 60: a very slow wind-up, then the fast swing)
         this.throwFxT = 0;
         this.px = x; this.py = y;
@@ -631,6 +659,7 @@ class Fighter {
         if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
+        if (this.ffT > 0) this.ffT = (this.out || this.stocks <= 0) ? Math.min(this.ffT, 1) - 1 : this.ffT - 1;
         if (this.swordGroundCd) {      // Sword Lift cancelled early: no Up-F until he is back on the ground, where he stomps and pauses
             if (this.grounded) { this.swordGroundCd = false; this.cd.SPIRAL = Math.min(this.cd.SPIRAL, 18); }
             else this.cd.SPIRAL = Math.max(this.cd.SPIRAL, 30);
@@ -994,16 +1023,19 @@ class Fighter {
     }
 
     // ------------------------------------------------------------ swings (J attack, Blink slash)
+
     updateSwing() {
         const sw = this.swing;
         if (!sw) return;
         const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
+        if (this.zLock && e >= this.zLock) { this.freezeTimer = Math.max(this.freezeTimer, this.zLockN); this.zLock = 0; this.vx *= 0.3; }      // Zephyr's stagger / stumble
         if (this.swingHit || e < sw.a || e > sw.b) {
             this.activeHitbox = null;
             return;
         }
         const k = (e - sw.a) / Math.max(1, sw.b - sw.a);
-        const p = sw.path(k, this.facing);
+        let p = sw.path(k, this.facing);
+        if (sw.tip) p = bwTipOffset(this, sw.tip, (e - 0.5) / this.atkN * 60);       // Bulwark: the hitbox is centred on the tip of the great sword, wherever the swing has taken it
         const cm = 1 + MELEE_CHARGE_BONUS * (this.meleeCharge / MELEE_CHARGE_MAX);          // charged swing: up to +30%
         const fl = this.heldItem && this.heldItem.type === 'FIRESTICK' ? this.heldItem.len : 1;   // firestick: longer reach
         const reach = 1 + (fl - 1) * 0.6;
@@ -2383,12 +2415,19 @@ class Fighter {
                 if (live.length) { for (const o of live) bombBurst(o); this.actionLock = Math.max(this.actionLock, 14); return true; }
             }
         }
-        let kind = 'JAB';
+        let kind = 'JAB', zv = '', zdir = 0;
+        if (this.char === 'zephyr') {                                  // Zephyr's melees depend on where he is and which way he is going
+            if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
+                zdir = aimDirection === 'SIDE_LEFT' ? -1 : 1;
+                zv = zdir === -this.facing ? 'K' : (this.grounded && Math.abs(this.vx) > 3 && Math.sign(this.vx) === zdir) ? 'T' : 'H';
+            } else if (aimDirection === 'UP') zv = this.grounded ? 'UG' : 'UA';
+            else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
+        }
         switch (aimDirection) {
             case 'UP': kind = 'UP'; break;
             case 'DOWN': kind = 'DOWN'; break;
-            case 'SIDE_LEFT': kind = 'SIDE_LEFT'; this.facing = -1; break;
-            case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; this.facing = 1; break;
+            case 'SIDE_LEFT': kind = 'SIDE_LEFT'; if (zv !== 'K') this.facing = -1; break;
+            case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; if (zv !== 'K') this.facing = 1; break;
         }
         if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
@@ -2396,6 +2435,17 @@ class Fighter {
         const bw = this.char === 'bulwark' && kind !== 'JAB';          // Bulwark's melee: 1 s in all (0.6 s of heavy wind-up, the swing, the recovery)
         this.attackTimer = this.atkN = bw ? BW_MELEE : ATTACK_FRAMES;
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
+        this.zv = zv; this.zLock = 0; this.zLockN = 0;
+        if (zv) {
+            const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
+            this.swing = SWING[key];
+            this.attackTimer = this.atkN = zv === 'T' ? 28 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
+            if (zv === 'T') { this.zLock = 12; this.zLockN = 18; this.vx = zdir * Math.max(Math.abs(this.vx), 9); }                                 // thrust, then a 0.3 s stagger
+            if (zv === 'K') {                                                                                                          // flying backwards drop kick
+                if (this.grounded) { this.grounded = false; this.vy = -8; this.vx = zdir * 11; this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
+                else { this.vx = zdir * 9; this.vy = Math.min(this.vy, -2); }
+            }
+        }
         this.swingHit = false;
         if (kind === 'JAB' && this.char === 'zephyr') { spawnWind(this); this.swingHit = true; }   // Zephyr's neutral only sends out the wind tube: no hitbox
         this.swingHitSet = this.swing.multi ? new Set() : null;
@@ -3249,7 +3299,7 @@ const CLOCK_SLOW = 0.3;
 const CLOCK_ARM = 60;                   // 1 s after the throw the bubble starts
 const CLOCK_LIFE = 480;                 // the clock lasts 8 s in total from the moment it is first picked up (held or thrown, it can run out in your hand)
 const REST_LIFE = { BALL: 3600, STRAWBERRY: 1800, BALLOON: 1800, FIRESTICK: 1800, CLOCK: 1800 };
-const STICK_MAX_LEN = 5;
+const STICK_MAX_LEN = 2.5;
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function spawnItem(type) {
@@ -3324,7 +3374,7 @@ function burnItem(it) {
     it.reductions++;
     it.len = STICK_MAX_LEN - 0.5 * it.reductions;
     fx('burn', it.x, it.y);
-    if (it.reductions >= 6) { it.st = 'dead'; if (it.holder) { it.holder.heldItem = null; it.holder.heldId = 0; it.holder = null; } }
+    if (it.reductions >= 5) { it.st = 'dead'; if (it.holder) { it.holder.heldItem = null; it.holder.heldId = 0; it.holder = null; } }
 }
 function burnStick(f) { if (f.heldItem && f.heldItem.type === 'FIRESTICK') burnItem(f.heldItem); }
 
@@ -3745,7 +3795,7 @@ function emberCounter(em, foe) {
 /** Kill cam ("final blow"): when a hit will really knock the victim out, play freezes completely for a moment (zoom + blue screen for the two involved),
  *  then the hit's velocity is released. The prediction follows the knockback, the whole stun (hit-stun + any stun after it) and then asks whether the victim could
  *  still get back with their own jumps from where the stun leaves them. */
-const KC_DUR = 2.0;                                          // seconds of real time (120 frozen steps)
+const KC_DUR = 1.2;                                          // seconds of real time (72 frozen steps)
 export function willKO(def) {
     let x = def.x, y = def.y, vx = def.vx, vy = def.vy;
     const hs = Math.max(0, def.hitstun), H = hs + Math.max(0, def.clashStunTimer) + Math.max(0, def._stunAfter || 0);          // the whole time they cannot act
@@ -3763,12 +3813,15 @@ export function willKO(def) {
             else { y = py; vy = Math.abs(vy) * 0.3; }                                                                                  // bonks the underside
         }
     }
-    // control is back: only a victim who is far beyond what their jumps and a recovery move can reach counts (they can always cancel upward speed by diving)
+    // control is back. Free flight: they keep their speed (air friction) while they turn round, so anyone still fast and already past the edge is gone;
+    // otherwise only a victim beyond what their jumps and recovery move can reach counts.
     const ch = charOf(def.char), jumps = Math.max(1, ch.jumps || 3), walk = ch.walk || 1;
-    const dyBelow = Math.max(0, y - top) + Math.max(0, vy) * 12;
-    const dxOut = Math.max(0, sx0 - x, x - sx1) + (((x < sx0 && vx < -4) || (x > sx1 && vx > 4)) ? Math.abs(vx) * 6 : 0);
-    const reachY = 2250 + jumps * 100, reachX = 1550 + jumps * 100 * walk;
-    return dyBelow > reachY || dxOut > reachX || dyBelow / reachY + dxOut / reachX > 1.25;
+    const out = (X, Y) => ({ dx: Math.max(0, sx0 - X, X - sx1), dy: Math.max(0, Y - top) });
+    const e0 = out(x, y);
+    if (e0.dy > 450 + jumps * 70 || e0.dx > 400 + jumps * 80 * walk) return true;                                                   // simply too far to climb back
+    let fx_ = x, fy_ = y, fvx = vx, fvy = vy;
+    for (let i = 0; i < 40; i++) { fvx *= WORLD.airFriction; fvy = Math.min(fvy + WORLD.gravity, WORLD.terminalVelocity); fx_ += fvx; fy_ += fvy; if (fx_ < BLAST_ZONES.left || fx_ > BLAST_ZONES.right || fy_ > BLAST_ZONES.bottom || fy_ < BLAST_ZONES.top) { const e1 = out(x, y); return e1.dx > 230 || e1.dy > 200 || Math.hypot(vx, vy) > 22; } }       // would still sail into the barrier within 0.7 s of getting control
+    return false;
 }
 function applyKillCam(ai, di) {
     S.kcT = KC_DUR; S.kcDur = KC_DUR; S.kcDef = di; S.kcAtt = ai;
@@ -3795,6 +3848,7 @@ function launch(attacker, defender, hb) {
         const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
         if (m !== 1 || k !== 1) hb = { ...hb, damage: (hb.damage || 0) * m, bkb: (hb.bkb || 0) * k };
     }
+    if (attacker && attacker !== defender && (attacker.char === 'bulwark' || (attacker.char === 'terra' && hb.type === 'J'))) { const km = attacker.char === 'bulwark' ? 0.6 : 0.7; hb = { ...hb, bkb: (hb.bkb || 0) * km, kbg: (hb.kbg || 0) * km }; }      // balance: all Bulwark knockback x0.6, Terra melees x0.7
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
     if (attacker && attacker !== defender && attacker._edgeBoost && attacker.cloakT > 0 && hb.damage) { hb = { ...hb, damage: hb.damage * 1.5 }; attacker._edgeBoost = false; }      // Umbra: the hit after a re-backstab inside the cloak
     if (attacker && attacker !== defender && attacker.bleedT > 0) hb = { ...hb, damage: (hb.damage || 0) * 0.5, bkb: (hb.bkb || 0) * 0.5, kbg: (hb.kbg || 0) * 0.5 }; // bleeding fighters deal 50% less damage and knockback
@@ -5457,7 +5511,7 @@ export function step() {
     if (S.replay) { tickReplay(); return; }
     if (S.kcPause > 0) {                                     // final blow
         if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') recordFrame();                  // the freeze is part of the replay too: everything is frozen, then the hit's velocity is released unchanged
-        if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y }); S.kcHold = null; }
+        if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y, ffT: 100 }); S.kcHold = null; }
         return;
     }
     if (S.sudden && S.online !== 'guest' && (S.gameState === 'playing' || S.gameState === 'countdown')) { S.sdT = (S.sdT || 0) + 1; applySuddenBlast(S.sdT); }
