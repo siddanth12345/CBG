@@ -798,14 +798,10 @@ export class FighterModel {
             o.lSx = lerp(lerp(20, -26, wind), 48, sw); o.lSx = lerp(o.lSx, 20, rec); o.lE = 34;
             o.lean = lerp(lerp(0, -14, wind), 18, sw) * (1 - rec); o.torsoY = lerp(lerp(0, -26, wind), 22, sw) * (1 - rec); o.twist = lerp(lerp(0, -8, wind), 10, sw) * (1 - rec);
             o.fwd = 10 * sw * (1 - rec); o.dy = -2 * wind * (1 - rec); o.rHx = 26 * sw * (1 - rec); o.lHx = -22 * sw * (1 - rec); o.rK = 16; o.lK = 22; o.headX = -6 * sw;
-        } else if (v === 'T') {
-            const pun = Sg(0, 0.16), stag = Sg(0.28, 0.43) * (1 - Sg(0.7, 1)), rec = Sg(0.7, 1);
-            o.rSx = lerp(lerp(20, 96, pun), 36, stag); o.rE = lerp(30, 3, pun); o.rSz = 6; o.lSx = lerp(lerp(20, -34, pun), 70, stag); o.lE = 30;
-            o.lean = lerp(24 * pun, 34, stag) * (1 - rec * 0.6); o.fwd = 14 * pun * (1 - stag); o.torsoY = -18 * pun * (1 - stag);
-            o.rHx = lerp(42 * pun, 52, stag); o.lHx = lerp(-34 * pun, -26, stag); o.rK = lerp(20, 64, stag); o.lK = lerp(24, 40, stag); o.headX = 12 * stag; o.dy = -5 * stag;
-        } else if (v === 'K') {
-            const tuck = Sg(0, 0.18), thr = Sg(0.18, 0.34), back = Sg(0.8, 1), lie = f.grounded ? Sg(0.6, 0.7) * (1 - Sg(0.86, 1)) : 0;
-            o.pitch = (-82 * tuck - 8 * lie) * (1 - back);
+        } else if (v === 'K' || v === 'T') {
+            const sg = v === 'T' ? -1 : 1;                                  // T = the same flying kick, but forward (feet lead the way)
+            const tuck = Sg(0, 0.18), thr = Sg(0.18, 0.34), back = Sg(0.8, 1), lie = f.grounded || v === 'T' ? Sg(0.6, 0.7) * (1 - Sg(0.86, 1)) : 0;
+            o.pitch = sg * (-82 * tuck - 8 * lie) * (1 - back);
             o.rHx = lerp(lerp(0, 92, tuck), 4, thr); o.rK = lerp(lerp(8, 122, tuck), 3, thr); o.lHx = lerp(0, -22, tuck); o.lK = lerp(8, 46, tuck);
             o.rSx = 56; o.lSx = 70; o.rSz = 44; o.lSz = 44; o.rE = 20; o.lE = 20; o.dy = -22 * lie; o.headX = -10 * tuck;
             o.rHx *= (1 - back); o.rK = lerp(o.rK, 8, back);
@@ -846,7 +842,7 @@ export class FighterModel {
             const h1 = H[Math.min(H.length - 1, i * 2 + 1)] || h;
             d.set(h.x - h1.x, h.y - h1.y, 0); if (d.lengthSq() < 0.01) d.set(f.facing, 0.2, 0);
             m.visible = true; m.position.set(h.x, h.y, 0); m.quaternion.setFromUnitVectors(this._zz || (this._zz = new THREE.Vector3(0, 0, 1)), d.normalize());
-            const r = Math.max(hb.w, hb.h) / 2; m.scale.set(r * (1 - 0.1 * i), r * (1 - 0.1 * i), r * 0.5); m.material.opacity = 0.75 - 0.2 * i;
+            const r = (f.char === 'zephyr' ? Math.max(hb.w, hb.h) * 2 : Math.max(hb.w, hb.h)) / 2; m.scale.set(r * (1 - 0.1 * i), r * (1 - 0.1 * i), r * 0.5); m.material.opacity = 0.75 - 0.2 * i;
         }
     }
 

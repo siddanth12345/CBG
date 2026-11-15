@@ -340,14 +340,14 @@ const PI = Math.PI;
 const ZS = {};
 for (const dr of [1, -1]) {
     const sfx = dr === 1 ? '_R' : '_L';
-    ZS['ZH' + sfx] = { type: 'J', a: 7, b: 13, w: 84, h: 74, damage: 11, bkb: 12.5, kbg: 1.25, path: (k, f) => { const a = rad(78 - 68 * k); return { x: f * Math.cos(a) * 80, y: -Math.sin(a) * 74 - 4 }; }, angle: () => dr === 1 ? -PI / 4 : PI + PI / 4 };           // 45 degree overhead haymaker: from overhead to in front of him, never down
-    ZS['ZT' + sfx] = { type: 'J', a: 4, b: 10, w: 100, h: 54, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
-    ZS['ZK' + sfx] = { type: 'J', a: 5, b: 15, w: 100, h: 72, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
+    ZS['ZH' + sfx] = { type: 'J', chargeable: true, a: 7, b: 13, w: 42, h: 37, damage: 11, bkb: 12.5, kbg: 1.25, path: (k, f) => { const a = rad(78 - 68 * k); return { x: f * Math.cos(a) * 80, y: -Math.sin(a) * 74 - 4 }; }, angle: () => dr === 1 ? -PI / 4 : PI + PI / 4 };           // 45 degree overhead haymaker: from overhead to in front of him, never down
+    ZS['ZT' + sfx] = { type: 'J', chargeable: true, a: 4, b: 10, w: 50, h: 27, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
+    ZS['ZK' + sfx] = { type: 'J', chargeable: true, a: 5, b: 15, w: 50, h: 36, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
 }
-ZS.ZUG = { type: 'J', a: 4, b: 11, w: 64, h: 92, damage: 9.5, bkb: 12.5, kbg: 1.3, path: (k, f) => ({ x: f * 28, y: -8 - 96 * k }), angle: (f) => -PI / 2 + 0.25 * f };                                                       // uppercut: from the fist and up
-ZS.ZUA = { type: 'J', a: 5, b: 21, w: 104, h: 104, damage: 10, bkb: 12, kbg: 1.2, path: (k, f) => { const t = PI / 2 + k * 2 * PI * -f; return { x: Math.cos(t) * 54, y: -Math.sin(t) * 54 }; }, angle: () => -PI / 2 };      // bicycle kick: the hitbox circles his whole body
-ZS.ZDG = { type: 'J', a: 5, b: 17, w: 76, h: 48, damage: 9.5, bkb: 12, kbg: 1.2, path: (k, f) => ({ x: f * Math.cos(k * 2 * PI) * 66, y: 24 }), angle: () => -PI / 5, radial: true };                                   // iron sweep: a low spin round him
-ZS.ZDA = { type: 'J', a: 6, b: 17, w: 68, h: 98, damage: 11, bkb: 11, kbg: 1.2, path: (k, f) => ({ x: f * 20, y: 60 }), angle: (f) => PI / 2 - 0.3 * f };                                                                   // both legs thrust down, tilted 20 degrees to his facing
+ZS.ZUG = { type: 'J', chargeable: true, a: 4, b: 11, w: 32, h: 46, damage: 9.5, bkb: 12.5, kbg: 1.3, path: (k, f) => ({ x: f * 28, y: -8 - 96 * k }), angle: (f) => -PI / 2 + 0.25 * f };                                                       // uppercut: from the fist and up
+ZS.ZUA = { type: 'J', chargeable: true, a: 5, b: 21, w: 52, h: 52, damage: 10, bkb: 12, kbg: 1.2, path: (k, f) => { const t = PI / 2 + k * 2 * PI * -f; return { x: Math.cos(t) * 54, y: -Math.sin(t) * 54 }; }, angle: () => -PI / 2 };      // bicycle kick: the hitbox circles his whole body
+ZS.ZDG = { type: 'J', chargeable: true, a: 5, b: 17, w: 38, h: 24, damage: 9.5, bkb: 12, kbg: 1.2, path: (k, f) => ({ x: f * Math.cos(k * 2 * PI) * 66, y: 24 }), angle: () => -PI / 5, radial: true };                                   // iron sweep: a low spin round him
+ZS.ZDA = { type: 'J', chargeable: true, a: 6, b: 17, w: 34, h: 49, damage: 11, bkb: 11, kbg: 1.2, path: (k, f) => ({ x: f * 20, y: 60 }), angle: (f) => PI / 2 - 0.3 * f };                                                                   // both legs thrust down, tilted 20 degrees to his facing
 const SWING = {
     // neutral melee: a sword spin around the body (both sides, air and ground) that only launches UP
     JAB:  { type: 'J', a: 5, b: 15, w: 150, h: 74, damage: 7, bkb: 13, kbg: 1.05, multi: true, path: () => ({ x: 0, y: -4 }),
@@ -2437,10 +2437,10 @@ class Fighter {
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
         this.zv = zv; this.zLock = 0; this.zLockN = 0;
         if (zv) {
-            const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
+            const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + (zv === 'T' ? 'K' : zv) + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
             this.swing = SWING[key];
-            this.attackTimer = this.atkN = zv === 'T' ? 28 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
-            if (zv === 'T') { this.zLock = 12; this.zLockN = 18; this.vx = zdir * Math.max(Math.abs(this.vx), 9); }                                 // thrust, then a 0.3 s stagger
+            this.attackTimer = this.atkN = zv === 'T' ? 34 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
+            if (zv === 'T') { this.grounded = false; this.vy = -8; this.vx = zdir * 16.5; this.zLock = 22; this.zLockN = 18; }                    // running: a flying kick forward that carries 1.5x as far as the backwards one, then a 0.3 s stagger
             if (zv === 'K') {                                                                                                          // flying backwards drop kick
                 if (this.grounded) { this.grounded = false; this.vy = -8; this.vx = zdir * 11; this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
                 else { this.vx = zdir * 9; this.vy = Math.min(this.vy, -2); }
@@ -3848,7 +3848,7 @@ function launch(attacker, defender, hb) {
         const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
         if (m !== 1 || k !== 1) hb = { ...hb, damage: (hb.damage || 0) * m, bkb: (hb.bkb || 0) * k };
     }
-    if (attacker && attacker !== defender && (attacker.char === 'bulwark' || (attacker.char === 'terra' && hb.type === 'J'))) { const km = attacker.char === 'bulwark' ? 0.6 : 0.7; hb = { ...hb, bkb: (hb.bkb || 0) * km, kbg: (hb.kbg || 0) * km }; }      // balance: all Bulwark knockback x0.6, Terra melees x0.7
+    if (attacker && attacker !== defender && (attacker.char === 'bulwark' || attacker.char === 'zephyr' || (attacker.char === 'terra' && hb.type === 'J'))) { const km = attacker.char === 'bulwark' ? 0.6 : 0.7; hb = { ...hb, bkb: (hb.bkb || 0) * km, kbg: (hb.kbg || 0) * km }; }      // balance: all Bulwark knockback x0.6, Terra melees x0.7
     if (attacker && attacker !== defender && DMG_MULT[attacker.char] && hb.damage) hb = { ...hb, damage: hb.damage * DMG_MULT[attacker.char] };      // balance pass
     if (attacker && attacker !== defender && attacker._edgeBoost && attacker.cloakT > 0 && hb.damage) { hb = { ...hb, damage: hb.damage * 1.5 }; attacker._edgeBoost = false; }      // Umbra: the hit after a re-backstab inside the cloak
     if (attacker && attacker !== defender && attacker.bleedT > 0) hb = { ...hb, damage: (hb.damage || 0) * 0.5, bkb: (hb.bkb || 0) * 0.5, kbg: (hb.kbg || 0) * 0.5 }; // bleeding fighters deal 50% less damage and knockback
