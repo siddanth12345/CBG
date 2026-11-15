@@ -18,7 +18,9 @@ function ensure() {
     kcFlash = document.createElement('div');
     kcFlash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0;';
     const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:14%;text-align:center;font:900 clamp(30px,7vw,72px) system-ui;letter-spacing:.14em;color:#fff;mix-blend-mode:difference;transform:skewX(-8deg);';
-    kc.append(kcLines, kcFlash, kt); kcTxt = kt;
+    const dots = document.createElement('div');                                    // manga screen-tone: the lit parts look hand-shaded and flat, 2D
+    dots.style.cssText = 'position:absolute;inset:0;background-image:radial-gradient(circle,#000 38%,transparent 42%);background-size:6px 6px;mix-blend-mode:multiply;opacity:.4;';
+    kc.append(dots, kcLines, kcFlash, kt); kcTxt = kt;
     box.append(combo, readout);
     document.body.append(box, kc);
 }
@@ -92,12 +94,12 @@ function impactFrame(S, playing) {
     else if (e < 0.14) filt = 'grayscale(1) contrast(5) invert(1)';
     else if (e < 0.22) filt = 'grayscale(1) contrast(5)';
     else if (e < 0.29) filt = 'grayscale(1) contrast(5) invert(1)';
-    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (3.2 - 1.6 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ')';
+    else if (e < 0.95) filt = 'grayscale(1) contrast(' + (4.2 - 1.4 * Math.min(1, (e - 0.29) / 0.66)).toFixed(2) + ') brightness(0.9)';
     else filt = 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
     if (kcCanvas) kcCanvas.style.filter = filt;
     kcFlash.style.opacity = flash;
     const lines = e >= 0.06 && e < 0.9;
-    kcLines.style.opacity = lines ? (getReduceFlash() ? 0.4 : 1) * (e < 0.6 ? 0.85 : 0.85 * (0.9 - e) / 0.3) : 0;
+    kcLines.style.opacity = lines ? 0.35 * (getReduceFlash() ? 0.4 : 1) * (e < 0.6 ? 0.85 : 0.85 * (0.9 - e) / 0.3) : 0;
     kcLines.style.transform = getReduceFlash() ? 'scale(' + (1 + e * 0.12) + ')' : 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.12) + ')';      // lines jitter like hand-drawn frames
     kcTxt.style.opacity = 0;                                                                // no "FINAL BLOW" text
 }

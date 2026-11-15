@@ -341,8 +341,8 @@ const ZS = {};
 for (const dr of [1, -1]) {
     const sfx = dr === 1 ? '_R' : '_L';
     ZS['ZH' + sfx] = { type: 'J', chargeable: true, a: 7, b: 13, w: 42, h: 37, damage: 11, bkb: 12.5, kbg: 1.25, path: (k, f) => { const a = rad(78 - 68 * k); return { x: f * Math.cos(a) * 80, y: -Math.sin(a) * 74 - 4 }; }, angle: () => dr === 1 ? -PI / 4 : PI + PI / 4 };           // 45 degree overhead haymaker: from overhead to in front of him, never down
-    ZS['ZT' + sfx] = { type: 'J', chargeable: true, a: 4, b: 10, w: 50, h: 27, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
-    ZS['ZK' + sfx] = { type: 'J', chargeable: true, a: 5, b: 15, w: 50, h: 36, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
+    ZS['ZT' + sfx] = { type: 'J', a: 4, b: 10, w: 50, h: 27, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
+    ZS['ZK' + sfx] = { type: 'J', a: 5, b: 15, w: 50, h: 36, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
 }
 ZS.ZUG = { type: 'J', chargeable: true, a: 4, b: 11, w: 32, h: 46, damage: 9.5, bkb: 12.5, kbg: 1.3, path: (k, f) => ({ x: f * 28, y: -8 - 96 * k }), angle: (f) => -PI / 2 + 0.25 * f };                                                       // uppercut: from the fist and up
 ZS.ZUA = { type: 'J', chargeable: true, a: 5, b: 21, w: 52, h: 52, damage: 10, bkb: 12, kbg: 1.2, path: (k, f) => { const t = PI / 2 + k * 2 * PI * -f; return { x: Math.cos(t) * 54, y: -Math.sin(t) * 54 }; }, angle: () => -PI / 2 };      // bicycle kick: the hitbox circles his whole body

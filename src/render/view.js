@@ -149,6 +149,31 @@ export class View {
         this.camera.updateProjectionMatrix();
     }
 
+    /** Final-blow impact frame: the world goes black. The only light left is a hard white pool around the victim, so just the ground near them, the fighters and the rings show */
+    impactDark() {
+        let on = false;
+        if (S.replay) on = S.kcImpT > 0; else on = S.gameState === 'playing' && S.kcPause > 0 && !!S.kcFull;
+        const def = on ? fighters[S.kcDef] : null, m = def && this.models.find(x => x.f === def);
+        on = on && !!m;
+        if (on === !!this.dark) { if (on) this.#darkLight(m); return; }
+        this.dark = on;
+        const st = this.stage;
+        if (on) {
+            this.scene.background = new THREE.Color(0x000000); this.scene.fog = null;
+            for (const l of [this.hemi, this.key, this.rim]) { l._i = l.intensity; l.intensity = l === this.rim ? 0.9 : 0.08; }
+            this.bloom.strength *= 0.4;
+            if (st.decor) st.decor.visible = false; st.stars.visible = false; for (const g of st.rocks) g.visible = false;
+            if (!this.dl) { this.dl = new THREE.PointLight(0xffffff, 40, 900, 1.3); this.scene.add(this.dl); }
+            this.dl.visible = true; this.#darkLight(m);
+        } else {
+            for (const l of [this.hemi, this.key, this.rim]) if (l._i != null) l.intensity = l._i;
+            if (st.decor) st.decor.visible = true; for (const g of st.rocks) g.visible = this.inMatch !== false;
+            if (this.dl) this.dl.visible = false;
+            this.applyTheme(); this.applyQuality();
+        }
+    }
+    #darkLight(m) { if (this.dl) this.dl.position.set(m.root.position.x, m.root.position.y + 40, 260); }
+
     applyQuality() {
         const g = getGfx(), dpr = window.devicePixelRatio || 1;
         const q = g === 'high' ? 0 : g === 'medium' ? 1 : g === 'low' ? 2 : this.q;       // auto uses the frame-time ladder
@@ -333,6 +358,7 @@ export class View {
         } else this.fx.clearEvents();
 
         // keep the shadow frustum centred on the action
+        this.impactDark();
         this.composer.render(dt);
         this.impact.render(this.renderer, this.camera, this.models);
     }
