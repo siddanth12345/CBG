@@ -18,11 +18,11 @@ export const MELEE = {
         SL: m(24, [s(5, 8, 40, 40, 44, 24, 4, 3, 0.3, -PI / 2), s(14, 18, 52, 74, 72, 16, 7, 12, 1.25, -1.2)]),                              // blade into the floor, a light spike erupts a beat later
     },
     umbra: {
-        H: m(18, [s(4, 7, 60, 44, 48, -4, 4, 4, 0.4, -0.3), s(11, 14, 66, 50, 54, -4, 6, 11, 1.2, -0.35)]),                                  // double cross-slash, the shadow's second cut lands late
-        T: m(28, [s(3, 14, 60, 40, (k) => 20 + 30 * k, 0, 4, 4, 0.4, -0.3), s(15, 18, 56, 40, 36, 0, 6, 11, 1.2, -0.4)], { leap: { vx: 17, vy: 0, g: false } }),   // slips through the floor-shadow and stabs as he surfaces
-        K: m(24, [s(5, 8, 50, 40, 56, -2, 4, 4, 0.4, -0.3), s(13, 16, 56, 44, 88, -2, 6, 11, 1.2, -0.35)], { leap: { vx: 7, vy: -2, g: false } }),  // a decoy stabs first, he reappears and stabs again
-        UG: m(22, [s(4, 9, 50, 80, 28, -30, 3, 2.5, 0.2, -PI / 2), s(11, 14, 60, 92, 20, -52, 5, 10, 1.2, -PI / 2)]),                          // a hook that drags the foe up by the shadow
-        SL: m(24, [s(6, 10, 46, 40, 46, 22, 5, 0, 0, -PI / 2, { stun: 24 }), s(16, 19, 56, 56, 50, 8, 5, 8, 1, -0.6)]),                      // pins the shadow: they are rooted for a moment
+        H: m(18, [s(4, 7, 120, 34, 84, -6, 4, 4, 0.4, -0.3), s(11, 14, 150, 38, 104, -4, 6, 11, 1.2, -0.35)]),                                // a rainbow whip: two long cracks, the second one lands hard
+        T: m(28, [s(3, 14, 110, 36, (k) => 40 + 40 * k, 0, 4, 4, 0.4, -0.3), s(15, 18, 120, 36, 70, 0, 6, 11, 1.2, -0.4)], { leap: { vx: 17, vy: 0, g: false } }),   // slides in cracking the rainbow whip
+        K: m(24, [s(5, 8, 56, 52, 56, -2, 4, 4, 0.4, -0.3), s(13, 16, 62, 56, 92, -2, 6, 11, 1.2, -0.35)], { leap: { vx: 7, vy: -2, g: false } }),  // three cards are flung out behind him
+        UG: m(22, [s(4, 9, 50, 80, 28, -30, 3, 2.5, 0.2, -PI / 2), s(11, 14, 70, 92, 20, -56, 5, 10, 1.2, -PI / 2)]),                          // he takes his top hat off and hurls it upward
+        SL: m(24, [s(6, 10, 56, 90, 0, 58, 5, 0, 0, -PI / 2, { stun: 24 }), s(16, 19, 66, 84, 0, 56, 5, 8, 1, -PI / 2)]),                    // cards fan out straight below him
     },
     volt: {
         H: m(24, [s(4, 6, 52, 40, 46, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(9, 11, 52, 40, 52, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(14, 17, 60, 46, 58, -4, 5, 11, 1.2, -0.35, { step: 5 })]),   // three sparking jabs, stepping in each time
@@ -52,9 +52,8 @@ export const MELEE = {
         UG: m(26, [s(10, 18, 50, 150, 70, -20, 10, 13, 1.3, -PI / 2)]),                                                                        // a pillar rises in front of him
         SL: m(28, [s(8, 11, 90, 50, 40, 26, 9, 10, 1.1, -1.2), s(13, 19, 120, 30, 110, 30, 4, 8, 1, -0.6)]),                                  // two-fist hammer, a ground wave runs out
     },
-    bulwark: {
-        T: m(30, [s(4, 16, 90, 80, 46, -4, 8, 11, 1.2, -0.3)], { leap: { vx: 12, vy: 0, g: false }, lock: [18, 16] }),                         // shield ram, the sword trailing behind
-        K: m(26, [s(8, 14, 110, 70, 70, -10, 8, 11, 1.2, -0.4)], { leap: { vx: 8, vy: -2, g: false } }),                                        // guard-step back, counter-swing
+    bulwark: {                                                                                                                                  // no running lunge: running side attacks use his normal great-sword sweep
+        K: m(26, [s(8, 16, 120, 36, 95, -6, 8, 11, 1.2, -0.25)], { leap: { vx: 5, vy: 0, g: false } }),                                       // thrusts the great-sword straight out behind him
     },
 };
 

@@ -57,7 +57,6 @@ export class View {
         sc.left = -1500; sc.right = 1500; sc.top = 1000; sc.bottom = -1000; sc.near = 100; sc.far = 4500;
         key.shadow.bias = -0.0004; key.shadow.normalBias = 1.2;
         scene.add(key, key.target);
-        this.dl = new THREE.PointLight(0xffffff, 0, 900, 1.3); this.scene.add(this.dl);      // impact-frame light: always in the scene (intensity 0) so toggling it never recompiles shaders
         const rim = this.rim = new THREE.DirectionalLight(0x8b5cf6, 1.6);
         rim.position.set(1100, 600, -1400);
         scene.add(rim);
@@ -98,7 +97,7 @@ export class View {
     }
 
     makeModel(f, i) {
-        const m = new FighterModel(this.scene, f, { variant: i === 0 ? 'hero' : 'rival', fx: this.fx, light: i < 2 });
+        const m = new FighterModel(this.scene, f, { variant: i === 0 ? 'hero' : 'rival', fx: this.fx, light: i < 2 && getGfx() !== 'low' });
         m.setStageBounds(STAGE.x, STAGE.x + STAGE.width, this.stage.topY);
         if (this.inMatch === false) m.root.visible = false;
         return m;
@@ -150,30 +149,16 @@ export class View {
         this.camera.updateProjectionMatrix();
     }
 
-    /** Final-blow impact frame: the world goes black. The only light left is a hard white pool around the victim, so just the ground near them, the fighters and the rings show */
+    /** Final-blow impact frame: the whole world goes pitch black. Only the white streak behind the victim and the air rings (drawn on their own canvas) are left. */
     impactDark() {
         let on = false;
-        if (S.replay) on = S.kcImpT > 0; else on = S.gameState === 'playing' && S.kcPause > 0 && !!S.kcFull;
-        const def = on ? fighters[S.kcDef] : null, m = def && this.models.find(x => x.f === def);
-        on = on && !!m;
-        if (on === !!this.dark) { if (on) this.#darkLight(m); return; }
+        if (S.replay) on = S.kcImpT > 0; else on = S.gameState === 'playing' && S.kcVis > 0 && !!S.kcFull;
+        if (on === !!this.dark) return;
         this.dark = on;
-        const st = this.stage;
-        if (on) {
-            this.scene.background = new THREE.Color(0x000000); this.scene.fog = null;
-            for (const l of [this.hemi, this.key, this.rim]) { l._i = l.intensity; l.intensity = l === this.rim ? 0.9 : 0.08; }
-            this.bloom.strength *= 0.4;
-            if (st.decor) st.decor.visible = false; st.stars.visible = false; for (const g of st.rocks) g.visible = false;
-            
-            this.dl.intensity = 40; this.#darkLight(m);
-        } else {
-            for (const l of [this.hemi, this.key, this.rim]) if (l._i != null) l.intensity = l._i;
-            if (st.decor) st.decor.visible = true; for (const g of st.rocks) g.visible = this.inMatch !== false;
-            if (this.dl) this.dl.intensity = 0;
-            this.applyTheme(); this.applyQuality();
-        }
+        this.scene.visible = !on;
+        if (on) { this._bg = this.scene.background; this._fog = this.scene.fog; this.scene.background = new THREE.Color(0x000000); this.scene.fog = null; }
+        else { this.scene.background = this._bg; this.scene.fog = this._fog; this.applyTheme(); this.applyQuality(); }
     }
-    #darkLight(m) { if (this.dl) this.dl.position.set(m.root.position.x, m.root.position.y + 40, 260); }
 
     applyQuality() {
         const g = getGfx(), dpr = window.devicePixelRatio || 1;

@@ -98,7 +98,7 @@ export const BRIEF = {
     },
     ember: {
         N: ['Flamethrower', 'Hold F and aim a stream of fire. A longer hold means a longer flame and a stronger end burst.'],
-        S: ['Fireball Roll', 'Tap side F to roll in a fireball. It carries people. Charge it: red carries, white then knocks back, blue is a faster white. It beats Core charges.'],
+        S: ['Fireball Roll', 'Tap side F to roll in a fireball. It carries people. Charge it: red carries, white then knocks back, blue is a faster white. Its damage burns over time once they are off the fireball. It beats Core charges.'],
         U: ['Phoenix Dash', 'Tap up F, charge in place, then fly where you aim. Grab, melee, side, up, down, and Cores beat the dash itself. The homing rockets are separate.'],
         DG: ['Cluster Bomb', 'On the ground, down F primes you. Then a neutral melee throws sticky fire bubbles.'],
         DA: ['Meteor Fist', 'In the air, down F is a straight punch. The floor hit stuns and does not knock back.'],

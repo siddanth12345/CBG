@@ -26,7 +26,7 @@ export class Trail {
             vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
             side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
         }));
-        this.mesh.frustumCulled = false;
+        this.mesh.frustumCulled = false; this.mesh.visible = false;
         this.mesh.renderOrder = 6;
         scene.add(this.mesh);
     }
@@ -65,10 +65,11 @@ export class Trail {
                 col[c + 3] = fade * taper * (v === 0 ? 0.95 : 0.55);
             }
         }
+        this.mesh.visible = n > 1;                                            // nothing to draw: skip the whole mesh
         this.geo.setDrawRange(0, Math.max(0, n - 1) * 6);
         this.geo.attributes.position.needsUpdate = true;
         this.geo.attributes.color.needsUpdate = true;
     }
 
-    clear() { this.samples.length = 0; this.geo.setDrawRange(0, 0); }
+    clear() { this.samples.length = 0; this.geo.setDrawRange(0, 0); this.mesh.visible = false; }
 }

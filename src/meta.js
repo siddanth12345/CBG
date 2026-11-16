@@ -83,9 +83,31 @@ export const tierOf = (r) => { let t = TIERS[0]; for (const x of TIERS) if (r >=
 export const botFor = (r) => { const t = tierOf(r); return { bot: t.bot, mod: t.mods.length ? t.mods[Math.floor(Math.random() * t.mods.length)] : '', tier: t }; };
 
 const blank = () => ({ coins: 100, owned: [], slots: {}, rating: RANK.start, wins: 0, losses: 0, daily: { day: '', done: [] }, hist: [] });
-let M = blank();
-try { const raw = localStorage.getItem(KEY); if (raw) M = { ...blank(), ...JSON.parse(raw) }; } catch (e) { /* private window */ }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(M)); } catch (e) { /* ignore */ } };
+let M = blank(), scope = 'guest';
+/** Progress belongs to whoever is playing: a guest starts from nothing (this tab only), an account keeps its own copy, and the account's copy also travels inside the account's saved data. */
+const keyFor = () => scope === 'guest' ? null : KEY + ':' + scope;
+const save = () => { const k = keyFor(); try { if (k) localStorage.setItem(k, JSON.stringify(M)); } catch (e) { /* ignore */ } };
+export const metaExport = () => JSON.parse(JSON.stringify(M));
+export function setMetaScope(sc, data) {
+    scope = sc || 'guest'; M = blank();
+    const k = keyFor();
+    try {
+        let raw = data || null;
+        if (!raw && k) { const l = localStorage.getItem(k); if (l) raw = JSON.parse(l); }
+        if (!raw && k) { const old = localStorage.getItem(KEY); if (old) { raw = JSON.parse(old); localStorage.removeItem(KEY); } }       // progress from before accounts owned it moves to the first account that signs in
+        if (raw) M = { ...blank(), ...raw };
+    } catch (e) { /* private window */ }
+    save(); for (const fn of listeners) fn(M);
+}
+/** transfer: add what a guest earned on top of the current progress */
+export function mergeMeta(g) {
+    if (!g) return;
+    M.coins += Math.max(0, (g.coins || 0) - 100); M.owned = [...new Set([...(M.owned || []), ...(g.owned || [])])];
+    M.wins += g.wins || 0; M.losses += g.losses || 0; M.hist = [...(M.hist || []), ...(g.hist || [])].slice(-40);
+    for (const c in (g.slots || {})) if (!(M.slots[c] || []).some(Boolean)) M.slots[c] = g.slots[c];
+    if ((g.rating || 0) > M.rating) M.rating = g.rating;
+    changed();
+}
 const listeners = new Set();
 export const onMetaChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const changed = () => { save(); for (const fn of listeners) fn(M); };

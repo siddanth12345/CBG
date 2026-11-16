@@ -9,6 +9,7 @@ import { getClient, getAccountClient, supabaseConfigured } from './net/supa.js';
 import { EMAILJS_SERVICE, EMAILJS_TEMPLATE, EMAILJS_KEY } from './net/config.js';
 import { exportBindings, importBindings, setBindingsPersister } from './controls.js';
 import * as Borgs from './friends.js';
+import { metaExport, setMetaScope, mergeMeta, onMetaChange } from './meta.js';
 
 export const ACC = { status: 'loading', userId: null, username: '' };   // status: loading | signedOut | guest | user
 const subs = new Set();
@@ -164,7 +165,7 @@ export const cloudAccounts = async () => { await pick(); return chosen !== Local
 
 // ------------------------------------------------------------------ saved data
 const GUEST_KEY = 'luminary-guest-data';
-const collect = () => ({ controls: exportBindings(), borgs: Borgs.serializeBorgs(), stats: { ...stats } });
+const collect = () => ({ controls: exportBindings(), borgs: Borgs.serializeBorgs(), stats: { ...stats }, meta: metaExport() });
 
 let saveT = 0;
 export function persist() {
@@ -177,6 +178,7 @@ async function persistNow() {
 }
 setBindingsPersister(() => { if (ACC.status === 'user' || ACC.status === 'guest') persist(); });
 Borgs.setBorgsPersister(() => persist());
+onMetaChange(() => { if (ACC.status === 'user' || ACC.status === 'guest') persist(); });
 
 /** apply saved data. merge = keep what this guest has and add the account's on top (transfer) */
 function applyData(d, merge) {
@@ -194,7 +196,10 @@ function applyData(d, merge) {
 
 async function enterUser(r, merge) {
     const data = await backend.load(r.userId);
+    const guestMeta = merge && ACC.status === 'guest' ? metaExport() : null;
     set({ status: 'user', userId: r.userId, username: r.username });
+    setMetaScope('user:' + r.userId, data && data.meta);                       // this account's own coins / perks / rank (a guest's are only added on a transfer)
+    if (guestMeta) mergeMeta(guestMeta);
     applyData(data, merge);
     await persistNow();
     Borgs.reloadRequests();
@@ -235,8 +240,11 @@ export function playAsGuest() {
     if (ACC.status === 'guest') return;
     stats.wins = stats.losses = 0;
     Borgs.hydrateBorgs([], false);
+    let gd = null;
+    try { gd = JSON.parse(sessionStorage.getItem(GUEST_KEY) || 'null'); } catch (e) { /* fresh guest */ }
+    setMetaScope('guest', gd && gd.meta);                                       // a guest starts with nothing
     try {
-        const d = JSON.parse(sessionStorage.getItem(GUEST_KEY) || 'null');
+        const d = gd;
         if (d) applyData(d, false);
     } catch (e) { /* fresh guest */ }
     set({ status: 'guest', userId: null, username: displayName() });
@@ -248,6 +256,7 @@ export async function signOut() {
     try { sessionStorage.removeItem(GUEST_KEY); } catch (e) { /* ignore */ }
     set({ status: 'signedOut', userId: null, username: '' });
     stats.wins = stats.losses = 0;
+    setMetaScope('guest');
     Borgs.hydrateBorgs([], false);
     Borgs.reloadRequests();
     afterChange();

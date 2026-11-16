@@ -17,6 +17,11 @@ export const BW_KEYS = {
          [48, [55, 10, 8, 178, 28, -14, -8, -8, 8, 20, -14, 50, 30, 18], 'fast'],              // driven straight down into the floor in front of him
          [60, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']],
 };
+BW_KEYS.BACK = [[0, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0]],
+         [8, [60, 10, 40, 100, -3, -4, -14, -1, 1, 10, -10, 22, 10, -3], 'smooth'],             // the great-sword is drawn in close, point forward, body coiled
+         [12, [-70, 8, 4, 268, 2, 4, 16, -2, -2, -14, 16, 30, 12, 4], 'fast'],               // then driven straight out behind him
+         [18, [-74, 8, 4, 266, 2, 4, 18, -2, -2, -14, 16, 30, 12, 4], 'smooth'],
+         [26, [125, 18, 95, 293, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0], 'smooth']];
 export function bwEval(T, fr) {
     let i = 0;
     while (i < T.length - 2 && fr > T[i + 1][0]) i++;

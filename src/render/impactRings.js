@@ -23,9 +23,11 @@ export class ImpactRings {
         this.rings = [];
         const geo = new THREE.TorusGeometry(1, 0.15, 16, 72);                       // unit ring: radius 1, fat tube (15 %), scaled per use
         for (let i = 0; i < 3; i++) {
-            const mat = new THREE.MeshBasicMaterial({ color: COLS[0], transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+            const mat = new THREE.MeshBasicMaterial({ color: COLS[0], transparent: true, opacity: 0, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
             const m = new THREE.Mesh(geo, mat); m.visible = false; m.renderOrder = 10 + i; this.scene.add(m); this.rings.push(m);
         }
+        this.streak = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+        this.streak.visible = false; this.streak.renderOrder = 1; this.scene.add(this.streak);       // the white speed streak behind the victim, along the way they are being knocked
         this.trail = []; this.tGeo = new THREE.TorusGeometry(1, 0.05, 10, 64); this.tPool = [];
         this.ready = true;
     }
@@ -57,7 +59,7 @@ export class ImpactRings {
     render(mainRenderer, camera, models) {
         let on = false, e = 0;
         if (S.replay) { on = S.kcImpT > 0; e = 1.2 - S.kcImpT; }
-        else if (S.gameState === 'playing' && S.kcPause > 0 && S.kcFull) { on = true; e = (S.kcDur || 1.2) - S.kcT; }
+        else if (S.gameState === 'playing' && S.kcVis > 0 && S.kcFull) { on = true; e = (S.kcDur || 1.2) - S.kcT; }
         const att = on ? fighters[S.kcAtt] : null, def = on ? fighters[S.kcDef] : null;
         const ma = att && models.find(m => m.f === att), md = def && models.find(m => m.f === def);
         on = on && !!ma && !!md && e >= 0 && e < 1.25;
@@ -68,13 +70,19 @@ export class ImpactRings {
         const size = mainRenderer.getSize(new THREE.Vector2()), pr = mainRenderer.getPixelRatio();
         if (this._w !== size.x || this._h !== size.y || this._pr !== pr) { this._w = size.x; this._h = size.y; this._pr = pr; this.renderer.setPixelRatio(pr); this.renderer.setSize(size.x, size.y, false); }
         for (const m of this.rings) m.visible = false;
-        const aliveT = this.#trail(models, performance.now(), S.kcPause > 0);
+        this.streak.visible = false;
+        const aliveT = this.#trail(models, performance.now(), S.kcVis > 0);
         if (!on) { if (!aliveT && !models.some(m => m.f && m.f.ffT > 0)) { this.on = false; this.canvas.style.display = 'none'; } else this.renderer.render(this.scene, camera); return; }
         // axis: attacker -> contact point (the victim)
         this.a.copy(ma.root.position); this.d.copy(md.root.position);
         this.dir.subVectors(this.d, this.a); if (this.dir.lengthSq() < 4) this.dir.set(att.facing || 1, 0.2, 0); this.dir.normalize();
         this.q.setFromUnitVectors(AX, this.dir);
-        const H = (def.height || 70), R = H * 1.25;                                // diameter = 2.5 x the player's height
+        const H = (def.height || 70), R = H * 1.25;
+        { const kx = S.kcVx || 0, ky = -(S.kcVy || 0), kl = Math.hypot(kx, ky) || 1, ux = kx / kl, uy = ky / kl;       // thickness = half the player's height, runs from the victim out the way they fly
+            const L = 5000, grow = Math.min(1, e / 0.12), th = H * 0.5 * (0.6 + 0.4 * grow), fade = e > 1 ? Math.max(0, 1 - (e - 1) / 0.2) : 1;
+            this.streak.visible = true; this.streak.material.opacity = fade;
+            this.streak.position.set(this.d.x + ux * (L / 2 - 90), this.d.y + uy * (L / 2 - 90), this.d.z - 40);
+            this.streak.rotation.set(0, 0, Math.atan2(uy, ux)); this.streak.scale.set(L, th, 1); }                                // diameter = 2.5 x the player's height
         const t = e / 1.2;
         for (let i = 0; i < 3; i++) {
             const m = this.rings[i];

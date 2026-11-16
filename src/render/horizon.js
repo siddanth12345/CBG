@@ -335,7 +335,7 @@ export function buildHorizon(scene, { D }) {
     const edgeLine = new THREE.LineBasicMaterial({ color: new THREE.Color('#ff9a3c').multiplyScalar(1.6), toneMapped: false });
     const jag = (seed, n, A) => { const r = rng(seed), o = [0]; for (let m = 1; m <= n; m++) o.push((m % 2 ? 1 : -1) * (0.35 + r() * 0.65) * A); return o; };
     function buildPiece(k, n, fr, cuts) {
-        const pw = (fr[k + 1] - fr[k]) * W, g = new THREE.Group(), N = 8, A = 16, rowH = bodyH / N;
+        const pw = (fr[k + 1] - fr[k]) * W, g = new THREE.Group(), N = 8, A = 8, rowH = bodyH / N;
         const UR = 7 + 8, jl = k > 0 ? jag(Math.round(cuts[k - 1] * 1000) + 3, N + UR, A) : null, jr = k < n - 1 ? jag(Math.round(cuts[k] * 1000) + 3, N + UR, A) : null;      // the cut continues down through the underside and the keel (same zigzag)
         const sh = new THREE.Shape(); sh.moveTo(-pw / 2, 0); sh.lineTo(pw / 2, 0);
         for (let m = 1; m <= N; m++) sh.lineTo(pw / 2 + (jr ? jr[m] : 0), -m * rowH);
@@ -347,13 +347,13 @@ export function buildHorizon(scene, { D }) {
             const bw = Math.max(40, pw - 2 * (A + 6)), fh = bodyH * 0.5;
             const band = new THREE.Mesh(new THREE.PlaneGeometry(bw, fh), new THREE.MeshStandardMaterial({ map: keyBand(bw, fh), roughness: 0.5, metalness: 0.15 }));
             band.position.set((jl ? 0 : 0), topY - 6 - bodyH * 0.5, zs * (D / 2 + 0.6)); if (zs < 0) band.rotation.y = Math.PI; g.add(band);
-            for (const dy of [fh / 2 + 3, -fh / 2 - 3]) { const tr = new THREE.Mesh(new THREE.BoxGeometry(bw + 10, 4, 3), mGold); tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); g.add(tr); }
+            for (const dy of [fh / 2 + 3, -fh / 2 - 3]) { const tr = new THREE.Mesh(new THREE.BoxGeometry(bw + 4, 4, 3), mGold); tr.position.set(0, topY - 6 - bodyH * 0.5 + dy, zs * (D / 2 + 1)); g.add(tr); }
         }
         const tt = topTex.clone(); tt.needsUpdate = true; tt.repeat.set(pw / W, 1); tt.offset.set(fr[k], 0);
         const topP = new THREE.Mesh(new THREE.PlaneGeometry(pw, D), new THREE.MeshStandardMaterial({ map: tt, roughness: 0.42, metalness: 0.2 }));
         topP.rotation.x = -Math.PI / 2; topP.position.y = topY + 0.05; topP.receiveShadow = true; g.add(topP);
         const cornP = (w, d, x, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 9, d), mMarble); m.position.set(x, topY - 3, z); m.castShadow = true; g.add(m); };
-        cornP(pw + (jl ? 0 : 10) + (jr ? 0 : 0), 12, 0, D / 2); cornP(pw, 12, 0, -D / 2);
+        { const inL = jl ? A + 2 : 0, inR = jr ? A + 2 : 0, cw = pw + (jl ? 0 : 10) - inL - inR, cxo = (inL - inR) / 2 + (jl ? 0 : -5) * 0; cornP(cw, 12, cxo, D / 2); cornP(cw, 12, cxo, -D / 2); }       // the marble edge strips stop short of the cut so none of them sticks out past the broken edge
         if (!jl) { cornP(12, D, -pw / 2 - 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(-pw / 2 - 6, topY - 8, 0); g.add(cap); }
         if (!jr) { cornP(12, D, pw / 2 + 2, 0); const cap = new THREE.Mesh(new THREE.BoxGeometry(14, 18, D * 0.7), mGold); cap.position.set(pw / 2 + 6, topY - 8, 0); g.add(cap); }
         // underside: the steps and the keel of the WHOLE stage, cut by the same crack lines, so the break runs through the rock instead of leaving a separate cone under every piece
@@ -386,6 +386,13 @@ export function buildHorizon(scene, { D }) {
                 y -= sc.h; gi += sc.rows;
             }
         }
+        {   // the stone keel under the stage is cut along the same lines: each piece carries its own slice of it, clipped by two planes that follow the piece as it drifts
+            const kc = keel.clone(); kc.material = keel.material.clone(); kc.material.side = THREE.DoubleSide; kc.material.clipShadows = true;
+            const mid2 = ((fr[k] + fr[k + 1]) / 2 - 0.5) * W;
+            kc.position.x = -mid2; kc.castShadow = true;
+            const cps = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)]; kc.material.clippingPlanes = cps;
+            g.userData.cps = cps; g.userData.xl = k > 0 ? (fr[k] - 0.5) * W : -1e6; g.userData.xr = k < n - 1 ? (fr[k + 1] - 0.5) * W : 1e6; g.add(kc);
+        }
         const rr = rng(Math.round(fr[k] * 1000) + 5);
         for (let i = 0, nc = Math.max(1, Math.round(pw / W * 5)); i < nc; i++) {
             const h = 90 + rr() * 150, r = 9 + rr() * 7, c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), mMarble);
@@ -409,8 +416,12 @@ export function buildHorizon(scene, { D }) {
             if (broken) {
                 const fr = [0, ...cuts, 1], key = cuts.join(',');
                 if (key !== pieceKey) { clearPieces(); pieceKey = key; for (let k = 0; k < fr.length - 1; k++) pieces.push(buildPiece(k, fr.length - 1, fr, cuts)); }
-                body.visible = false; keelSolo.visible = true; keelCracks.visible = true; if (key !== keelKey) { keelKey = key; buildKeelCracks(cuts); }
-                pieces.forEach((g, k) => { g.visible = true; const q = segs && segs[k]; g.position.set(cx + g.userData.mid * W + (q ? wx(q.off) - wx(0) : 0) + jx(k), jy(k), 0); });
+                body.visible = false; keelSolo.visible = false; keelCracks.visible = false;
+                pieces.forEach((g, k) => {
+                    g.visible = true; const q = segs && segs[k]; const dx = (q ? wx(q.off) - wx(0) : 0) + jx(k);
+                    g.position.set(cx + g.userData.mid * W + dx, jy(k), 0);
+                    const cps = g.userData.cps; if (cps) { cps[0].constant = -(cx + g.userData.xl + dx); cps[1].constant = cx + g.userData.xr + dx; }
+                });
             } else { body.visible = true; keelSolo.visible = false; keelCracks.visible = false; pieces.forEach(g => { g.visible = false; }); }
             // crack lines on the top just before it breaks
             const warn = cuts.length && clk >= 300 && clk < 330 ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;

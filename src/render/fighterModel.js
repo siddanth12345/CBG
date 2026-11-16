@@ -94,7 +94,7 @@ export class FighterModel {
     // ============================================================ build
     #mat(color, { metal = 0.3, rough = 0.5, emissive = null, ei = 0, tint = null } = {}) {
         const m = new THREE.MeshStandardMaterial({
-            color, metalness: metal, roughness: rough, transparent: true,
+            color, metalness: metal, roughness: rough, transparent: false,
             emissive: emissive ?? 0x000000, emissiveIntensity: ei,
         });
         this.mats.push(m);
@@ -218,7 +218,7 @@ export class FighterModel {
                 const crown = M(new THREE.CylinderGeometry(7.4, 8.2, 12, 20), armorDark); crown.position.set(0, 26, -0.8); crown.rotation.x = -0.08; head.add(crown);
                 const band = M(new THREE.CylinderGeometry(8.35, 8.35, 2.4, 20), glow); band.position.set(0, 21.4, -0.7); band.rotation.x = -0.08; head.add(band);
                 const top = M(new THREE.CylinderGeometry(7.4, 7.4, 0.5, 20), trim); top.position.set(0, 32.2, -1.1); top.rotation.x = -0.08; head.add(top);
-                this.hat = crown;
+                this.hatParts = [brim, crown, band, top];
             },
             rocks: () => {
                 for (let i = 0; i < 5; i++) {
@@ -724,7 +724,7 @@ export class FighterModel {
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
         const hv = f.char === 'bulwark', ez = smooth;
-        if (f.zv && !rip) return this.#zephMelee(f, u);
+        if (f.zv && !rip) { const r = this.#zephMelee(f, u); if (hv && f.zv === 'K') { r.bw = true; r.bk = true; r.fr = u * 26; r.spinYaw = 0; } return r; }       // Bulwark's backwards attack is a keyframed sword thrust (BW_KEYS.BACK)
         if (hv && !rip && f.atkN === BW_MELEE && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
 
         if (k === 'JAB') {                                   // around-the-world sword spin
@@ -862,32 +862,60 @@ export class FighterModel {
         }
     }
 
-    /** Umbra's melees throw playing cards that ride the hitbox (the up attacks hurl his top hat instead) */
+    /** Umbra's props: a rainbow whip for the side attacks, three big playing cards for the backwards and down ones, his top hat flying off for the up one,
+     *  and the projectile he has soaked up floating over his head. */
     #umbraCards(f) {
         const hb = f.zv && f.attackTimer > 0 ? f.activeHitbox : null;
-        if (!this.uCards) {
-            if (!hb) return;
-            this.uCards = [];
-            const cg = new THREE.BoxGeometry(7, 10.5, 0.5);
-            for (let i = 0; i < 4; i++) {
-                const m = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xfecaca : 0xf8fafc })); m.visible = false; m.renderOrder = 8; this.root.add(m); this.uCards.push(m);
+        if (!this.uP) {
+            const cg = new THREE.BoxGeometry(21, 31.5, 1.2), cards = [];                                  // three cards, 3x the size they used to be
+            for (let i = 0; i < 3; i++) {
+                const m = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: i === 1 ? 0xfecaca : 0xf8fafc })); m.visible = false; m.renderOrder = 8; this.root.add(m); cards.push(m);
             }
-            const hat = new THREE.Group();
-            const dk = new THREE.MeshBasicMaterial({ color: 0x111827 });
-            const br = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 1.4, 20), dk); const cr = new THREE.Mesh(new THREE.CylinderGeometry(6.6, 7.4, 11, 18), dk); cr.position.y = 6;
-            const bd = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 7.5, 2.2, 18), new THREE.MeshBasicMaterial({ color: 0xa78bfa })); bd.position.y = 1.8;
-            hat.add(br, cr, bd); hat.visible = false; hat.renderOrder = 8; this.root.add(hat); this.uHat = hat;
+            const hat = new THREE.Group(), dk = new THREE.MeshBasicMaterial({ color: 0x111827 });
+            const br = new THREE.Mesh(new THREE.CylinderGeometry(12.4, 12.4, 1.4, 20), dk), cr = new THREE.Mesh(new THREE.CylinderGeometry(7.4, 8.2, 12, 18), dk); cr.position.y = 6.5;
+            const bd = new THREE.Mesh(new THREE.CylinderGeometry(8.4, 8.4, 2.4, 18), new THREE.MeshBasicMaterial({ color: 0xa78bfa })); bd.position.y = 2.2;
+            hat.add(br, cr, bd); hat.visible = false; hat.renderOrder = 8; this.root.add(hat);
+            const whip = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), 24);
+            whip.frustumCulled = false; whip.visible = false; whip.renderOrder = 8; whip.setColorAt(0, new THREE.Color(1, 1, 1)); this.root.add(whip);
+            this.uP = { cards, hat, whip, dm: new THREE.Object3D(), col: new THREE.Color() };
         }
-        const hatMove = f.zv === 'UG' || f.zv === 'UA';
-        if (!hb) { for (const m of this.uCards) m.visible = false; this.uHat.visible = false; return; }
-        const cx = hb.x - f.x, cy = -(hb.y - f.y), r = Math.max(hb.w, hb.h) * 0.5;
-        this.uHat.visible = hatMove;
-        if (hatMove) { this.uHat.position.set(cx, cy - 6, 0); this.uHat.rotation.set(0.3, this.t * 18, this.t * 9); }
-        for (let i = 0; i < this.uCards.length; i++) {
-            const m = this.uCards[i], a = this.t * 22 + i * Math.PI / 2;
-            m.visible = !hatMove;
-            m.position.set(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.55, 2);
-            m.rotation.set(0, a, a * 1.3);
+        const P = this.uP, side = f.zv === 'H' || f.zv === 'T', hatMove = f.zv === 'UG', on = f.zv && f.attackTimer > 0;
+        const u = on ? clamp01(((f.atkN || 20) - 1 - f.attackTimer) / (f.atkN || 20)) : 0;
+        if (this.hatParts) for (const m of this.hatParts) m.visible = !(hatMove && on && u > 0.08 && u < 0.92);            // the real hat comes off for the throw
+        // ---- the rainbow whip: starts at the hand, cracks out along the swing, each bead a colour of the rainbow
+        if (side && on && u > 0.14 && u < 0.88) {
+            const ext = Math.min(1, (u - 0.14) / 0.14) * Math.min(1, (0.88 - u) / 0.12), R = (f.char === 'umbra' && f.zv === 'T' ? 120 : 150) * ext, d = f.facing || 1;
+            const th = 0.75 - 1.35 * Math.min(1, Math.max(0, (u - 0.14) / 0.6)), hx = d * 14, hy = 6, N = P.whip.count;
+            for (let i = 0; i < N; i++) {
+                const t = i / (N - 1), wave = Math.sin(t * 9 - this.t * 38) * 9 * t * (1 - 0.4 * t) * ext;
+                const x = hx + Math.cos(th) * R * t * d + -Math.sin(th) * wave * d, y = hy + Math.sin(th) * R * t + Math.cos(th) * wave;
+                P.dm.position.set(x, y, 3); const r = 3.2 + 2.2 * (1 - t); P.dm.scale.set(r, r, r); P.dm.updateMatrix(); P.whip.setMatrixAt(i, P.dm.matrix);
+                P.whip.setColorAt(i, P.col.setHSL(((t * 0.9 + this.t * 1.4) % 1), 1, 0.58));
+            }
+            P.whip.instanceMatrix.needsUpdate = true; if (P.whip.instanceColor) P.whip.instanceColor.needsUpdate = true; P.whip.visible = true;
+        } else P.whip.visible = false;
+        // ---- thrown hat (up) and cards (backwards / down)
+        const cx = hb ? hb.x - f.x : 0, cy = hb ? -(hb.y - f.y) : 0, r = hb ? Math.max(hb.w, hb.h) * 0.5 : 0;
+        P.hat.visible = !!hb && hatMove;
+        if (P.hat.visible) { P.hat.position.set(cx, cy - 6, 0); P.hat.rotation.set(0.3, this.t * 18, this.t * 9); P.hat.scale.setScalar(1.5); }
+        for (let i = 0; i < 3; i++) {
+            const m = P.cards[i], a = this.t * 20 + i * Math.PI * 2 / 3;
+            m.visible = !!hb && !side && !hatMove;
+            if (m.visible) { m.position.set(cx + Math.cos(a) * r * 0.55, cy + Math.sin(a) * r * 0.45, 2); m.rotation.set(0, a, a * 1.3); }
+        }
+    }
+
+    /** The projectile an Umbra has stored hovers over his head (a ball three times the size of his head, shimmering, in the colour of what it was) */
+    #umbraStore(f) {
+        if (!this.uBall) {
+            const g = new THREE.Mesh(new THREE.SphereGeometry(9.6 * 1.5, 18, 14), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));      // radius 1.5 x the head's = diameter 3 x the head
+            g.visible = false; g.renderOrder = 7; this.head.add(g); this.uBall = g; this.uBallC = '';
+        }
+        const on = f.storedC && f.storedC !== '';
+        this.uBall.visible = !!on;
+        if (on) {
+            if (this.uBallC !== f.storedC) { this.uBallC = f.storedC; this.uBall.material.color.set(f.storedC); }
+            this.uBall.position.set(0, 66 + Math.sin(this.t * 4) * 2.5, 0); const k = 1 + Math.sin(this.t * 9) * 0.05; this.uBall.scale.set(k, k, k);
         }
     }
 
@@ -1044,7 +1072,7 @@ export class FighterModel {
         this.armL.el.rotation.set(-pose.lE * D2R, 0, 0);
         if (this.bwSw) this.#bwAim(dt);
         if (f.char === 'zephyr') this.#zephRings(f);
-        else if (f.char === 'umbra') this.#umbraCards(f);
+        else if (f.char === 'umbra') { this.#umbraCards(f); this.#umbraStore(f); }
         this.legR.hip.rotation.set(-pose.rHx * D2R, 0, pose.rHz * D2R);
         this.legL.hip.rotation.set(-pose.lHx * D2R, 0, -pose.lHz * D2R);
         this.legR.kn.rotation.set(pose.rK * D2R, 0, 0);
@@ -1123,7 +1151,7 @@ export class FighterModel {
         // flicker while invincible (original: alpha 0.5 on alternate 4-frame blocks)
         const flick = f.invincibleTimer > 0 && Math.floor(f.invincibleTimer / 4) % 2 === 0;
         const opacity = flick ? 0.5 : 1;
-        for (const m of this.mats) m.opacity = opacity;
+        if (opacity !== this._lastOp) { this._lastOp = opacity; const tr = opacity < 0.999; for (const m of this.mats) { m.opacity = opacity; m.transparent = tr; } }       // opaque materials sort and fill far cheaper than transparent ones
 
         // greyed while stunned / grabbed / dizzy
         const grey = (f.hitstun > 0 || f.dizzyTimer > 0 || f.clashStunTimer > 0 || f.grabbedBy !== null) ? 1 : 0;
@@ -1231,7 +1259,7 @@ export class FighterModel {
         const CARRY = [125, 18, 95, -67];                                          // arm raised behind the shoulder, blade 23 degrees above horizontal, pointing back
         let tgt = CARRY.slice(), body = null, a = CARRY[3];
         if ((atk && atk.bw) || pound) {
-            const T = BW_KEYS[pound ? 'DOWN' : atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
+            const T = BW_KEYS[atk && atk.bk ? 'BACK' : pound ? 'DOWN' : atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
             const W = 20, pt = f.sx ? f.sx.t : 0, fr = pound ? Math.min(60, pt < W ? 38 * pt / W : 38 + (pt - W) * 1.7) : atk.fr;
             const v = bwEval(T, fr);
             tgt = [v[0], v[1], v[2], v[3]]; a = v[3]; body = v;

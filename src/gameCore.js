@@ -533,6 +533,7 @@ class Fighter {
         this.backT = 0; this._shadowT = 0; this.cloakT = 0; this.soakT = 0; this.slowT = 0; this._stunAfter = 0; this.buryT = 0; this._wantOut = false; this._wpT = 0; this._windCd = 0;   // soakT: drenched by Tide's melee (slower, takes more from his water)
            // cloakT: Umbra is invisible to everyone but himself
            // backT: lying on the back after Bulwark's stab (frames left)
+        this.storedC = ''; this.storedR = 0;       // Umbra: colour / size of the projectile he has soaked up (the full copy is kept on the host only)
         this.bleedT = 0; this.bleedTick = 0; // bleeding out after a riposte stab
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
@@ -1005,6 +1006,7 @@ class Fighter {
                     this.swing = null;
                     this.activeHitbox = null;
                     this.attackHeld = false; this.meleeCharge = 0;
+                    if (this._kFlip) { this.facing = this._kFlip; this._kFlip = 0; }
                 }
             }
         }
@@ -1455,28 +1457,11 @@ class Fighter {
                     fixed: { vx: this.vx, vy: this.vy, hitstun: 10 } };
                 // keep carried foes glued to us
                 for (const f of foesOf(this)) {
-                    if (f._rollCarry === this && f.hitstun > 0) {
-                        const cox = f.x, coy = f.y; f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false; pushOutOfStage(f, cox, coy);
-                    }
+                    if (f._rollCarry !== this) continue;
+                    if (f.hitstun > 0) { const cox = f.x, coy = f.y; f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false; pushOutOfStage(f, cox, coy); }
+                    else this.rollRelease(f, x);                                        // they got off the fireball early: the knockback and the burn start now
                 }
-                // RED: last 5 ticks × 2 damage (direct, reliable)
-                if (redLate) {
-                    if (!x.redTickHit) x.redTickHit = new Set(); // per tick beat, not per foe forever
-                    const beat = Math.floor(x.tickN / every);
-                    if (x.redBeat !== beat) { x.redBeat = beat; x.redTickHit = new Set(); }
-                    for (const f of foesOf(this)) {
-                        if (!isAlive(f) || f.invincibleTimer > 0 || x.redTickHit.has(f)) continue;
-                        const hw = sz / 2 + f.width / 2, hh = sz / 2 + f.height / 2;
-                        if (Math.abs(f.x - this.x) > hw || Math.abs(f.y - this.y) > hh) continue;
-                        if (f._rollCarry !== this && !(Math.abs(f.x - this.x) <= hw && Math.abs(f.y - this.y) <= hh)) continue;
-                        x.redTickHit.add(f);
-                        if (!S.sdNoDmg) f.damage += 2;
-                        f.lastHitBy = this; f.lastHitT = 0;
-                        createParticles(f.x, f.y, '#fb923c', 4);
-                        fx('hit', f.x, f.y, 4, -0.5);
-                        audio.playHit(false);
-                    }
-                }
+                // the fireball itself deals no damage while it carries someone: all of it (red 10, white 8, blue 12) comes as burn ticks once they are OFF the fireball
                 const trail = full ? '#38bdf8' : (mid ? '#e2e8f0' : '#ef4444');
                 if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
                 if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
@@ -1726,39 +1711,37 @@ class Fighter {
         S.screenShake = Math.max(S.screenShake, 6);
         try { audio.playF(this.char, 's'); } catch (e) {}
     }
+    /** a foe leaves the fireball (it ended, or they got off): the whole damage of the phase turns into burn ticks (red 10, white 8, blue 12), and white / blue also throw them
+     *  the way a side melee would in the direction it rolled. Red only stuns. */
+    rollRelease(f, x) {
+        const sp = spec(this.char, 'S'), c = x.c || 0, full = c >= 0.9, mid = c >= 0.4 && !full;
+        f._rollCarry = null;
+        const total = full ? 12 : (mid ? 8 : 10);
+        f.burnDmg = 2; f.burnT = Math.max(f.burnT > 0 ? f.burnT : 0, (total / 2) * 12); f.burnBy = this; f.lastHitBy = this; f.lastHitT = 0;
+        if (full || mid) {
+            let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+            if (full) { rb *= 0.7; rk *= 0.7; }                                       // blue end knockback 0.7x
+            const rd = x.d || this.facing || 1, ang = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
+            const before = f.damage; f.grounded = false;
+            launch(this, f, { damage: full ? 12 : 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
+            f.damage = before;                                                        // the hit counts for the knockback only: the damage comes as burn ticks
+        } else {
+            f.clashStunTimer = Math.max(f.clashStunTimer, 30);                        // red: grey stun 0.5 s, no knockback
+            f.vx *= 0.2; f.vy *= 0.2; fx('hit', f.x, f.y, 6, -0.5);
+        }
+    }
     endRoll() {
         const x = this.sx;
         if (x && x.k === 'roll' && x.ph === 'roll') {
             const sp = spec(this.char, 'S'), c = x.c || 0;
-            let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
-            const full = c >= 0.9, mid = c >= 0.4 && !full;
-            if (full) { rb *= 0.7; rk *= 0.7; }   // blue end knockback 0.7×
-            // white end 8; blue end 12 (1.5× white) — both drag then launch
-            const endDmg = full ? 12 : (mid ? 8 : 0);
-            // white/blue end knockback goes the way of a side melee in the direction the fireball was rolling (always reliable, no aiming needed)
-            const rd = x.d || this.facing || 1, aimAng = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
-            for (const f of foesOf(this)) {
-                if (f._rollCarry !== this) continue;
-                f._rollCarry = null;
-                if (endDmg) {
-                    f.grounded = false;
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
-                } else {
-                    // red: grey stun 0.5 s, no knockback
-                    f.clashStunTimer = Math.max(f.clashStunTimer, 30);
-                    f.vx *= 0.2; f.vy *= 0.2;
-                    fx('hit', f.x, f.y, 6, -0.5);
-                }
-            }
-            // white/blue: also hit anyone still overlapping even if not flagged carried
-            if (endDmg) {
+            for (const f of foesOf(this)) if (f._rollCarry === this) this.rollRelease(f, x);
+            if (c >= 0.4) {                                                            // white / blue: anyone still overlapping when it ends gets thrown too
                 const sz2 = lerpR(sp.w, c);
                 for (const f of foesOf(this)) {
                     if (!isAlive(f) || f.invincibleTimer > 0) continue;
                     if (Math.abs(f.x - this.x) > sz2 / 2 + f.width / 2 + 10 || Math.abs(f.y - this.y) > sz2 / 2 + f.height / 2 + 10) continue;
                     if (f.lastHitBy === this && f.lastHitT < 3) continue;
-                    f.grounded = false;
-                    launch(this, f, { damage: endDmg, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: aimAng, x: this.x, y: this.y });
+                    this.rollRelease(f, x);
                 }
             }
         }
@@ -2415,7 +2398,8 @@ class Fighter {
         if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this._swordRemain = this.spiralT; this.swordGroundCd = true; this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
-        if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();      // Terra's neutral melee throws a rock
+        if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();
+        if (this.char === 'umbra' && this._stored && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.fireStored();      // neutral melee lets the soaked-up projectile go      // Terra's neutral melee throws a rock
 
         if (this.char === 'ember') {                       // cluster bomb: Neutral melee throws 3 bubbles (2 throws per prime); Side / Up / Down melee detonates every live bubble
             const neutral = !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection);
@@ -2456,6 +2440,7 @@ class Fighter {
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
         this.airDown = aimDirection === 'DOWN' && !this.grounded;
         this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zLeap = null; this._stg = -1;
+        this._kFlip = (zv === 'K' && this === p1 && mouse.touchMode) ? zdir : 0;           // touch controls have no mouse to turn towards: after a backwards attack you end up facing the way you aimed
         if (mv) {
             this.swing = SWING['M_' + this.char + '_' + zv + '_' + zdir];
             this.attackTimer = this.atkN = mv.n;
@@ -2520,6 +2505,17 @@ class Fighter {
         this.bombShots--; this.bombPrimed = this.bombShots > 0;
         { const V0 = 31, N = 10; this.recoilT = N; this.recoilX = -Math.cos(a0) * V0; this.recoilY = -Math.sin(a0) * V0; if (this.recoilY > 0 && this.grounded) this.recoilY = 0; }   // recoil: a quick backwards dash that decays (about 210 px in all)
         this.actionLock = Math.max(this.actionLock, 20); this.throwFxT = 14; audio.playThrow(); fx('explosion', this.x + Math.cos(a0) * 30, this.y + Math.sin(a0) * 30, 36, 0.2, STYLE_OF[this.char]);
+        return true;
+    }
+    /** Umbra's neutral melee with a projectile stored: the same projectile flies out again, aimed exactly like Terra's thrown rock */
+    fireStored() {
+        const st = this._stored; if (!st) return false;
+        const aim = aimOf(this); let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+        if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
+        const sp = Math.max(14, Math.min(24, st.spd || 19));
+        orbs.push({ ...st.o, x: this.x + dx * 40, y: this.y + dy * 40 - 4, vx: dx * sp, vy: dy * sp, owner: this, id: ++orbSerial, age: 0, life: Math.max(150, st.o.life || 0), stuck: false, ctrl: null, homing: null, cap: null, spd: sp });
+        this._stored = null; this.storedC = ''; this.storedR = 0;
+        this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14; audio.playThrow();
         return true;
     }
     /** Terra's neutral melee: a rock thrown as fast as the ball (and pulled down by gravity the same way), ball-sized, 5 damage and half the ball's knockback */
@@ -3828,9 +3824,9 @@ export function willKO(def) {
     for (let i = 0; i < H; i++) {
         const py = y, px = x;
         if (i < hs) { vx *= 0.98; vy = Math.min(vy + WORLD.gravity * 0.75, WORLD.terminalVelocity); }                                   // tumbling
-        else { vx = 0; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity); }                                                    // stunned: no sideways movement at all
+        else { vx = 0; if (i === hs) vy *= 0.1; vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity); }       // the launch speed is gone the moment the hitstun ends                                                    // stunned: no sideways movement at all
         x += vx; y += vy;
-        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y < BLAST_ZONES.top || y > BLAST_ZONES.bottom) return true;                // gone before they can do anything
+        if (x - hw < BLAST_ZONES.left || x + hw > BLAST_ZONES.right || y - hh < BLAST_ZONES.top || y + hh > BLAST_ZONES.bottom) return true;                // the body touching the barrier is enough (same as the real check)
         const feet = y + hh, pfeet = py + hh;
         if (x > sx0 - hw && x < sx1 + hw && feet > top && pfeet < bot + 40) {                                                           // ran into the stage block (feet / body, not the centre)
             if (pfeet <= top + 3) { if (i >= hs) return false; y = top - hh; vy = -Math.abs(vy) * 0.35; vx *= 0.9; }                    // lands on top (bounces while still ragdolled)
@@ -3838,18 +3834,31 @@ export function willKO(def) {
             else { y = py; vy = Math.abs(vy) * 0.3; }                                                                                  // bonks the underside
         }
     }
-    // control is back. Free flight: they keep their speed (air friction) while they turn round, so anyone still fast and already past the edge is gone;
-    // otherwise only a victim beyond what their jumps and recovery move can reach counts.
-    const ch = charOf(def.char), jumps = Math.max(1, ch.jumps || 3), walk = ch.walk || 1;
-    const out = (X, Y) => ({ dx: Math.max(0, sx0 - X, X - sx1), dy: Math.max(0, Y - top) });
-    const e0 = out(x, y);
-    if (e0.dy > 450 + jumps * 70 || e0.dx > 400 + jumps * 80 * walk) return true;                                                   // simply too far to climb back
-    let fx_ = x, fy_ = y, fvx = vx, fvy = vy;
-    for (let i = 0; i < 40; i++) { fvx *= WORLD.airFriction; fvy = Math.min(fvy + WORLD.gravity, WORLD.terminalVelocity); fx_ += fvx; fy_ += fvy; if (fx_ < BLAST_ZONES.left || fx_ > BLAST_ZONES.right || fy_ > BLAST_ZONES.bottom || fy_ < BLAST_ZONES.top) { const e1 = out(x, y); return e1.dx > 230 || e1.dy > 200 || Math.hypot(vx, vy) > 22; } }       // would still sail into the barrier within 0.7 s of getting control
+    // control is back: simulate a perfect recovery (air drift towards the stage, every air jump used as late as it helps, plus one recovery move). Only if even that cannot reach the stage is it a final blow.
+    const ch = charOf(def.char), walk = ch.walk || 1, maxAir = 8.5 * walk * 1.3, acc = 1.05 * 1.4 * Math.min(1.2, walk);
+    let jl = def.jumpsLeft != null ? def.jumpsLeft : Math.max(1, ch.jumps || 3), cd = 0, spT = 0, spUsed = false;        // the recovery move (a 0.75 s burst of about 540 px sideways and 340 up) is used after the jumps
+    const cxs = (sx0 + sx1) / 2;
+    for (let i = 0; i < 420; i++) {
+        const tx = x < sx0 + 30 ? sx0 + 60 : x > sx1 - 30 ? sx1 - 60 : x, dxv = tx - x;
+        if (Math.abs(dxv) > 8) vx = Math.max(-maxAir, Math.min(maxAir, vx + Math.sign(dxv) * acc)); vx *= WORLD.airFriction;
+        if (cd > 0) cd--;
+        const feet = y + hh;
+        if (!spUsed && jl === 0 && vy > 0 && feet > top + 60) { spUsed = true; spT = 45; }
+        if (spT > 0) { spT--; vx = (x < cxs ? 1 : -1) * 12; vy = -7.5; }
+        if (vy > 0 && feet > top + 20 && jl > 0 && cd === 0) { vy = -13.5; jl--; cd = 8; }              // jump as late as possible while it still reaches the stage
+        vy = Math.min(vy + WORLD.gravity, WORLD.terminalVelocity); const pfeet = feet; x += vx; y += vy;
+        if (x < BLAST_ZONES.left || x > BLAST_ZONES.right || y > BLAST_ZONES.bottom || y < BLAST_ZONES.top - 400) return true;
+        const nf = y + hh;
+        if (x > sx0 - hw * 0.4 && x < sx1 + hw * 0.4 && nf <= top + 24 && pfeet <= top + 80 && vy >= -1) return false;                       // back on the stage (or on the ledge)
+        if (x > sx0 - hw && x < sx1 + hw && nf > top && pfeet <= top + 3) return false;
+        if (x > sx0 - hw && x < sx1 + hw && nf > top + 40 && y - hh < bot) {                                                               // under the stage: pushed out sideways, cannot pass through
+            if (x < cxs) x = Math.min(x, sx0 - hw); else x = Math.max(x, sx1 + hw);
+        }
+    }
     return false;
 }
 function applyKillCam(ai, di) {
-    S.kcT = KC_DUR; S.kcDur = KC_DUR; S.kcDef = di; S.kcAtt = ai;
+    S.kcT = KC_DUR; S.kcDur = KC_DUR; S.kcDef = di; S.kcAtt = ai; S.kcVis = Math.round(KC_DUR * 60); S.screenShake = 0;       // kcVis: frames of the final-blow look on the two involved screens (on every client, guests included)
     { const d = fighters[di], h = S.kcHold && S.kcHold.f === d ? S.kcHold : d; S.kcVx = h ? h.vx || 0 : 0; S.kcVy = h ? h.vy || 0 : 0; }       // the way the victim is about to fly (the impact rings point along it)
     const me = S.demo ? -1 : (S.match ? S.mySlot : 0);
     S.kcFull = !S.demo && (me === ai || me === di);
@@ -3860,7 +3869,7 @@ function startKillCam(att, def) {
     def._kcInv = 400;
     const ai = idxOf(att), di = idxOf(def);
     S.kcHold = { f: def, x: def.x, y: def.y, vx: def.vx, vy: def.vy, hitstun: def.hitstun };                // exactly this is released after the freeze
-    S.kcPause = Math.round(KC_DUR * 60);
+    S.kcPause = Math.round(KC_DUR * 60);                                            // only the attacker and the victim are held; everyone else keeps playing
     applyKillCam(ai, di);
     fx('killcam', def.x, def.y, ai, di, 1);
 }
@@ -4007,11 +4016,12 @@ function launch(attacker, defender, hb) {
     defender.hitstun = hb.hs || 60; defender._stunAfter = hb.stunAfter || 0;
     defender.grounded = false;
 
-    S.screenShake = Math.min(25, Math.floor(kbForce));
+    const shk = Math.min(25, Math.floor(kbForce));
     audio.playHit(kbForce > 18);
     createParticles(defender.x, defender.y, '#f59e0b', Math.floor(kbForce));
     fx('hit', defender.x, defender.y, kbForce, hb.angle);
     startKillCam(attacker, defender);
+    if (!(S.kcVis > 0)) S.screenShake = shk;
 }
 
 function explodeOrb(o) {
@@ -4323,7 +4333,7 @@ function applySplit(carry = true) {
     STAGE.x = STAGE.segs[0].l; STAGE.width = STAGE.segs[n - 1].r - STAGE.segs[0].l;
 }
 function updateHazards() {
-    if (!S.hazards || S.gameState !== 'playing' || S.kcPause > 0) return;
+    if (!S.hazards || S.gameState !== 'playing') return;
     const horizon = S.theme === 'horizon';
     if (S.online === 'guest') { if (horizon && SPL.cuts.length) { SPL.t++; applySplit(false); } return; }
     HAZ.t++;
@@ -4516,6 +4526,14 @@ function updateOrbs() {
             const bw = fighters.find(e => e.riposteT > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
                 Math.abs(e.x - o.x) < e.width / 2 + o.r + 70 && Math.abs(e.y - o.y) < e.height / 2 + o.r + 50);
             if (bw) { reflectOrb(o, bw); continue; }
+        }
+        if (o.owner && !o.stuck && !o.cap && !o.trap && !o.ctrl && o.kind !== 'bomb') {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
+            const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
+                Math.abs(e.activeHitbox.x - o.x) < e.activeHitbox.w / 2 + o.r && Math.abs(e.activeHitbox.y - o.y) < e.activeHitbox.h / 2 + o.r);
+            if (um) {
+                um._stored = { o: { ...o, owner: null, ctrl: null, homing: null, cap: null }, spd: Math.hypot(o.vx, o.vy) }; um.storedC = o.color || '#c4b5fd'; um.storedR = Math.round(o.r);
+                dropOrb(o); fx('block', o.x, o.y); createParticles(o.x, o.y, o.color || '#c4b5fd', 10); audio.playParry(); continue;
+            }
         }
         // a pop / explosion earlier in this pass removed orbs (this used to throw every frame and freeze the match)
         const ok = slowAt(o.x, o.y);
@@ -4924,7 +4942,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5534,11 +5552,10 @@ export function matchStatsData() {
 }
 export function step() {
     if (S.replay) { tickReplay(); return; }
-    if (S.kcPause > 0) {                                     // final blow
-        if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') recordFrame();                  // the freeze is part of the replay too: everything is frozen, then the hit's velocity is released unchanged
-        if (--S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y, ffT: 100 }); S.kcHold = null; }
-        return;
-    }
+    if (S.kcVis > 0) { S.kcVis--; S.screenShake = 0; }                                  // the final blow itself never shakes the screen
+    if (S.kcPause > 0 && --S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y, ffT: 100 }); S.kcHold = null; }
+    const held = S.kcPause > 0 ? [fighters[S.kcAtt], fighters[S.kcDef]] : null;          // frozen for the freeze: just these two
+    const frz = (f) => !!held && (f === held[0] || f === held[1]);
     if (S.sudden && S.online !== 'guest' && (S.gameState === 'playing' || S.gameState === 'countdown')) { S.sdT = (S.sdT || 0) + 1; applySuddenBlast(S.sdT); }
     if (S.gameState === 'playing' && !S.demo && S.gameMode !== 'training') { recordFrame(); if (S.stats) { S.stats.frames++; if (viewerFighter()) S.stats.maxDmg = Math.max(S.stats.maxDmg, viewerFighter().damage || 0); } }
     const bubble = S.online !== 'guest' && items.length > 0;       // the clock bubble slows every projectile, item and ENEMY fighter inside it (not its owner or their team)
@@ -5560,7 +5577,7 @@ export function step() {
         const live = fighters.filter(isAlive);
         flushBuffered();
         for (const f of live) {
-            if (!f._upd) continue;
+            if (!f._upd || frz(f)) continue;
             if (f.isAI) { const fs = foesOf(f), vis = fs.filter(x => !(x.cloakT > 0)), foe = nearestOf(f, vis.length ? vis : fs); const seen = foe ? aiSeen(f, foe) : null; f.updateAI(seen || null); aiWalk(f); f.update(); continue; }
             drive(f, f === p1 ? { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') } : (remote.helds[f.slot] || NOHELD));
             f.update();
@@ -5570,27 +5587,26 @@ export function step() {
         updateItems();
         const live2 = fighters.filter(isAlive);
         for (const a of live2) for (const b of live2) {
-            if (a !== b && !(S.match.teams && a.team && a.team === b.team)) checkCombatCollisions(a, b);
+            if (a !== b && !frz(a) && !frz(b) && !(S.match.teams && a.team && a.team === b.team)) checkCombatCollisions(a, b);
         }
         itemInteractions();
         if (!S.sudden && S.match.mode === 'timer' && S.online !== 'guest' && S.gameState === 'playing' && --S.timeLeft <= 0) finishTimer();
     } else if (S.gameState === 'playing') {
         flushBuffered();
         drive(p1, { left: isDown('left'), right: isDown('right'), shield: isDown('shield'), drop: isDown('drop') });
-        if (p1._upd) p1.update();
+        if (p1._upd && !frz(p1)) p1.update();
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
             const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
             if (!staticBot) { const seen = aiSeen(p2, p1); p2.updateAI(seen || null); aiWalk(p2); }
         }
-        if (p2._upd) p2.update();
+        if (p2._upd && !frz(p2)) p2.update();
 
         updateWhirlpools(); updateTornadoes(); updateWinds(); updateHazards();
         updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
         updateItems();
 
-        checkCombatCollisions(p1, p2);
-        checkCombatCollisions(p2, p1);
+        if (!frz(p1) && !frz(p2)) { checkCombatCollisions(p1, p2); checkCombatCollisions(p2, p1); }
         itemInteractions();
     }
     if (S.online === 'host' && NETHOOK.send && (++netTick % ((NETHOOK.fast && NETHOOK.fast()) ? 1 : 2)) === 0) NETHOOK.send(snapshot());     // 60 snapshots/s on a direct link, 30 through the relay
