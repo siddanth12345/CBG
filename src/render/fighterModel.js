@@ -1109,7 +1109,9 @@ export class FighterModel {
             this.sway.forEach((g, i) => { const big = g.userData.kind === 'cape' ? 0.5 : 1; g.rotation.x = (0.18 + run * big + air * 0.5 + Math.sin(this.t * 4 + i * 1.7) * 0.08 * big); g.rotation.z = Math.sin(this.t * 3 + i) * 0.06; });
         }
         if (this.staffOrb) this.staffOrb.scale.setScalar(1 + Math.sin(this.t * 5) * 0.12);
-        tickDecor(this, dt);
+        // Backstab cloak: no walking particles / aura for anyone (keeps invis clean)
+        if (!(f.cloakT > 0)) tickDecor(this, dt);
+        else if (this.decor && this.decor.parts) { for (const p of this.decor.parts) if (p.life > 0) { p.life = 0; p.mesh.visible = false; } }
 
         // little life in the always-on parts
         this.halo.rotation.z = this.t * 0.8;
@@ -1119,7 +1121,10 @@ export class FighterModel {
         // ---- state decoration
         this.#decorate(dt);
         this.root.updateMatrixWorld(true);
-        this.#emitTrails(atk, pose, dt);
+        // Cloaked: no body/blade trails that leak position. Melee slash ribbon only for the cloaked player on allowed melees (hat/cards/whip).
+        if (!(f.cloakT > 0)) this.#emitTrails(atk, pose, dt);
+        else if (this.mineCloak && atk && ['H', 'T', 'K', 'UG', 'SL', 'UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT', 'JAB'].includes(atk.kind || f.attackKind)) this.#emitTrails(atk, pose, dt);
+        else { for (const k in this.trails) this.trails[k].clear(); }
         for (const k in this.trails) this.trails[k].update(dt);
         this.#contactBlob(pos);
     }

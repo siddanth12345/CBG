@@ -121,7 +121,7 @@ export const BRIEF = {
     umbra: {
         N: ['Void Orb', 'Hold F for a slow orb that bends a little toward your opponent.'],
         S: ['Shadow Step', 'Tap side F. After a short purple startup you appear behind the nearest person and stab. Side F is tired for 1 s afterwards.'],
-        U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s as an invisible shadow: harmless, straight through walls, and you can still be hit out of it.'],
+        U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s: harmless, straight through walls. Does not cloak you (cloak is from backstabs).'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
         M: ['Shadow Edge', 'Passive. Melee hits on a foe who faces the same way he does (stunned foes: the way they faced before the stun) are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 4 s; only he sees himself, glowing yellow. Backstabbing again while invisible resets that to 4 s, and each consecutive backstab hits 1.25x harder and farther than the last (stacking) until the cloak runs out. Bots cannot see him either: hard bots gamble on where he is.'],

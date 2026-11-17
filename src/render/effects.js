@@ -1076,9 +1076,23 @@ export class Effects {
         fighters.forEach((f, i) => {
             const g = this.chargePool[i]; if (!g) return;
             const rolling = !!(f.sx && f.sx.k === 'roll');
-            if (!f.active || f.out || !(f.charging || rolling) || S.gameState !== 'playing') { g.visible = false; return; }
+            // Low-mode Umbra up-F: void ball indicator on the player (visual only). Never while backstab-cloaked.
+            const flightMark = !!(f._umbraFlightMark && lowGfx() && !(f.cloakT > 0) && f.sx && f.sx.k === 'rocket');
+            if (!f.active || f.out || f.cloakT > 0 || !(f.charging || rolling || flightMark) || S.gameState !== 'playing') { g.visible = false; return; }
             const u = g.userData; u.core.visible = u.mid.visible = u.halo.visible = true; u.rock.visible = u.voidG.visible = u.chips.visible = u.fw.visible = false;
+            if (u.magma) u.magma.visible = false;
             g.visible = true;
+            if (flightMark) {
+                // Umbra Void Orb look, fixed size on the body — no tracking, no damage
+                u.core.visible = u.mid.visible = u.halo.visible = false;
+                if (u.rock) u.rock.visible = false; if (u.bub) u.bub.visible = false; if (u.rk) u.rk.visible = false; if (u.th) u.th.visible = false;
+                u.voidG.visible = true;
+                const r = (f.height || 68) * 0.42;
+                g.position.set(wx(f.x), wy(f.y), 8);
+                g.scale.setScalar(r * (1 + Math.sin(this.chargeT * 14) * 0.06));
+                if (u.vr) u.vr.rotation.z += dt * 6; if (u.vr2) u.vr2.rotation.z -= dt * 8;
+                return;
+            }
             if (rolling) {
                 // Full-body magma fireball: diameter ≈ fighter height (covers the model)
                 const c = f.sx.c || 0;

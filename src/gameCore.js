@@ -633,6 +633,7 @@ class Fighter {
     /** being hit / countered cancels whatever the fighter was doing */
     interrupt() {
         this.releaseGrabHold();
+        this._umbraFlightMark = false;
         this.fActive = false; this.chargeFrames = 0; this.aiChargeGoal = 0;
         this.swing = null; this.attackTimer = 0; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
         this.releaseSuplexVictim();
@@ -1253,7 +1254,7 @@ class Fighter {
                 return;
             }
             this.activeMove = { type: 'SPIRAL', t: 3 };
-            if (sp.ghost) { this.cloakT = Math.max(this.cloakT, 3); }                  // Shadow Flight: invisible and passes through the stage, but he can be hit out of it        // Umbra's Shadow Flight: an invisible shadow, untouchable, harmless, passes through walls
+            // Shadow Flight: no longer grants cloak (cloak is backstab-only). Still phases through stage.
             const aim = aimOf(this);
             let da = Math.atan2(aim.y - this.y, aim.x - this.x) - x.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
             x.ang += Math.max(-sp.turn, Math.min(sp.turn, da));
@@ -1300,11 +1301,15 @@ class Fighter {
                 }
             }
             if (!sp.ghost) fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
-            else {                                                         // Shadow Flight leaves a purple trail and dust clouds
-                if (lowGfx()) {
-                    // Low: almost no stars / dust — a rare thin trail only
-                    if (x.t % 10 === 0) createParticles(this.x, this.y, '#a855f7', 1);
+            else {                                                         // Shadow Flight VFX
+                // Backstab cloak: never reveal position (no particles / trails / low indicator)
+                if (this.cloakT > 0) {
+                    this._umbraFlightMark = false;
+                } else if (lowGfx()) {
+                    // Low: void core ball indicator only (visual; no damage / tracking) — see effects chargePool
+                    this._umbraFlightMark = true;
                 } else {
+                    this._umbraFlightMark = false;
                     fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
                     createParticles(this.x, this.y, '#a855f7', 3); createParticles(this.x, this.y + 6, '#7e22ce', 2);
                     if (x.t % 3 === 0) { createParticles(this.x + (Math.random() - 0.5) * 30, this.y + (Math.random() - 0.5) * 30, '#9ca3af', 3); fx('explosion', this.x, this.y, 30 + Math.random() * 26, 0.1, 'dark'); }
@@ -1314,7 +1319,7 @@ class Fighter {
                 if (sp.ghost) {                                     // ended inside the stage: surface on top of it
                     const hw = this.width / 2, hh = this.height / 2;
                     if (this.x + hw > STAGE.x && this.x - hw < STAGE.x + STAGE.width && this.y + hh > STAGE.y && this.y - hh < STAGE.y + STAGE.height) { this.y = STAGE.y - hh; this.px = this.x; this.py = this.y; this.grounded = false; }
-                    this.cloakT = 6;
+                    this._umbraFlightMark = false;                   // clear low-mode flight indicator
                 }
                 const caught = x.caught ? [...x.caught].filter(f => isAlive(f) && !onSword(f) && Math.hypot(f.x - this.x, f.y - this.y) < 200) : [];
                 if (caught.length === 1 && sp.drill) {                      // one foe caught: grab them by the leg and fling them away (an explosion at the end of the throw)
@@ -1831,7 +1836,8 @@ class Fighter {
         this.facing = Math.cos(ang) >= 0 ? 1 : -1;
         this.specialKind = 'SPIRAL'; this.specialDur = sp.frames + ((sp.ghost || sp.jet) ? 0 : 36);
         this.setMove('SPIRAL', sp.frames + ((sp.ghost || sp.jet) ? 0 : 36));
-        fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
+        // Umbra backstab cloak: up F must not flash a rocket tell
+        if (!(sp.ghost && this.cloakT > 0)) fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]);
     }
 
     /** Volt's Lightning Rod: vanish and strike upward instantly, zapping and stunning everything along the bolt */
