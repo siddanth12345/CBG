@@ -351,7 +351,7 @@ const ZS = {};
 for (const dr of [1, -1]) {
     const sfx = dr === 1 ? '_R' : '_L';
     ZS['ZH' + sfx] = { type: 'J', chargeable: true, a: 7, b: 13, w: 42, h: 37, damage: 11, bkb: 12.5, kbg: 1.25, path: (k, f) => { const a = rad(78 - 68 * k); return { x: f * Math.cos(a) * 80, y: -Math.sin(a) * 74 - 4 }; }, angle: () => dr === 1 ? -PI / 4 : PI + PI / 4 };           // 45 degree overhead haymaker: from overhead to in front of him, never down
-    ZS['ZT' + sfx] = { type: 'J', chargeable: true, a: 4, b: 10, w: 50, h: 27, damage: 10.5, bkb: 13, kbg: 1.2, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust punch
+    ZS['ZT' + sfx] = { type: 'J', chargeable: true, a: 18, b: 24, w: 50, h: 27, damage: 10.5, bkb: 13 * 1.3, kbg: 1.2 * 1.3, path: (k, f) => ({ x: f * (36 + 46 * k), y: -8 }), angle: () => dr === 1 ? -0.22 : PI + 0.22 };                                   // running thrust: slow wind-up, fast finish, 1.3x KB
     ZS['ZK' + sfx] = { type: 'J', chargeable: true, a: 5, b: 15, w: 50, h: 36, damage: 11, bkb: 12.5, kbg: 1.2, path: (k) => ({ x: dr * (20 + 62 * k), y: 8 }), angle: () => dr === 1 ? -PI / 5 : PI + PI / 5 };                                    // backwards flying drop kick, thrusts out of the middle of his body
 }
 ZS.ZUG = { type: 'J', chargeable: true, a: 4, b: 11, w: 32, h: 46, damage: 9.5, bkb: 12.5, kbg: 1.3, path: (k, f) => ({ x: f * 28, y: -8 - 96 * k }), angle: (f) => -PI / 2 + 0.25 * f };                                                       // uppercut: from the fist and up
@@ -2497,7 +2497,7 @@ class Fighter {
             const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
             this.swing = SWING[key];
             this.attackTimer = this.atkN = zv === 'T' ? 34 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
-            if (zv === 'T') { this.zLeap = { vx: zdir * 16.5, vy: -8, g: true }; this.zLock = 22; this.zLockN = 18; }                    // running: a flying kick forward that carries 1.5x as far as the backwards one, then a 0.3 s stagger
+            if (zv === 'T') { this.zLeap = { vx: zdir * 16.5 * 1.5, vy: -8, g: true }; this.zLock = 25; this.zLockN = 6; }                    // running thrust: 1.5x leap, 0.1s stagger; punch hits late (heavy startup)
             if (zv === 'K') {                                                                                                          // flying backwards drop kick
                 if (this.grounded) { this.zLeap = { vx: zdir * 11, vy: -8, g: true }; this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
                 else this.zLeap = { vx: zdir * 9, vy: -2, g: false };                                                    // (the leap itself only starts once a charge is released)
@@ -4085,7 +4085,7 @@ function launch(attacker, defender, hb) {
 
     const effectiveDamage = defender.damage / 2;
     const percentFactor = (effectiveDamage / 10) + (effectiveDamage * hb.damage / 20);
-    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1);      // slow characters take less, fast ones more; Instant Final Blow practice: 7x
+    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
