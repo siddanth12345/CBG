@@ -163,7 +163,7 @@ export class View {
     applyQuality() {
         const g = getGfx(), dpr = window.devicePixelRatio || 1;
         const q = g === 'high' ? 0 : g === 'medium' ? 1 : g === 'low' ? 2 : this.q;       // auto uses the frame-time ladder
-        const cap = g === 'high' ? Math.min(dpr, 2) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+        const cap = g === 'high' ? Math.min(dpr, 2) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.5) : g === 'auto' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
         const pr = q >= 4 ? 0.75 : q >= 3 ? 1 : Math.min(cap, q >= 2 ? Math.min(cap, 1.25) : cap);
         if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
         const m = this.inMatch !== false;

@@ -538,6 +538,7 @@ class Fighter {
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
         this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
+        this.vulnT = 0;                     // Umbra after a missed up-melee: takes 2x damage and knockback while this runs
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
         this.trapId = 0;                     // id of the bubble this fighter is trapped in (Tide's Bubble Trap)
         this.sx = null;                      // running character special: { k: 'burst'|'breath'|'pound'|'dash', t, ... }
@@ -579,7 +580,7 @@ class Fighter {
         }
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
         this.dropHeld();
-        this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.burnDmg = 3; this.burnBy = null;
+        this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.vulnT = 0; this.burnDmg = 3; this.burnBy = null;
         this.jumpsLeft = this.maxJumps;
         this.isHanging = false;
         this.canGrab = true;
@@ -691,6 +692,7 @@ class Fighter {
             if (this.glideT <= 0) this.glide = false;          // boost window over → normal drift / friction
         }
         if (this.glide && (this.grounded || this.hitstun > 0 || this.isHanging || this.sx || this.activeMove || this.attackTimer > 0 || this.spiralT > 0 || this.diving || this.isShielding || this.isRolling || this.grabHolding || this.grabbedBy || this.freezeTimer > 0 || this.dizzyTimer > 0 || Math.abs(this.vx) < 2)) { this.glide = false; this.glideT = 0; }
+        if (this.vulnT > 0) this.vulnT--;
         if (this.burnT > 0) {                                  // burning: 1 tick every 0.2 s (12 frames)
             this.burnT--;
             if (this.burnT % 12 === 0 && this.stocks > 0) {
@@ -1007,6 +1009,7 @@ class Fighter {
                 const slowSwing = this.heldItem && this.heldItem.type === 'FIRESTICK' && this.swing && this.swing.type !== 'BLINK';
                 if (!(slowSwing && (this._slowTick = (this._slowTick || 0) + 1) % 3 === 0)) this.attackTimer--;   // firestick: swings take 1.5x as long
                 if (this.attackTimer === 0 && this.swing) {
+                    if (this.char === 'umbra' && this.zv === 'UG' && !this._ugHit) this.vulnT = 60;      // the hat throw whiffed: for 1 s he takes double damage and knockback
                     this.swing = null;
                     this.activeHitbox = null;
                     this.attackHeld = false; this.meleeCharge = 0;
@@ -1727,7 +1730,7 @@ class Fighter {
         if (full || mid) {
             let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
             rb *= 1.7; rk *= 1.5;                                                       // the throw has to beat the speed they were carried at, or it reads as 'no knockback'
-            if (full) { rb *= 0.7; rk *= 0.7; }                                       // blue end knockback 0.7x
+            if (full) { rb *= 1.25; rk *= 1.25; }                                     // blue is carried faster, so its throw must be stronger than white's to still read as knockback
             const rd = x.d || this.facing || 1, ang = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
             const before = f.damage; f.grounded = false;
             launch(this, f, { damage: full ? 12 : 8, bkb: rb * (1 + 0.7 * c), kbg: rk * (1 + 0.7 * c), angle: ang, x: this.x, y: this.y });
@@ -2463,7 +2466,7 @@ class Fighter {
                 else this.zLeap = { vx: zdir * 9, vy: -2, g: false };                                                    // (the leap itself only starts once a charge is released)
             }
         }
-        this.swingHit = false;
+        this.swingHit = false; this._ugHit = false;
         if (kind === 'JAB' && this.char === 'zephyr') { spawnWind(this); this.swingHit = true; }   // Zephyr's neutral only sends out the wind tube: no hitbox
         this.swingHitSet = this.swing.multi ? new Set() : null;
         this.attackHeld = !!(hold && this.swing.chargeable);
@@ -3884,6 +3887,8 @@ function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (S.sdNoDmg) hb = { ...hb, damage: 0 };                       // timer sudden death: hits do not add percent
+    if (attacker && attacker !== defender && attacker.char === 'umbra' && attacker.zv === 'UG') attacker._ugHit = true;
+    if (defender && defender.vulnT > 0 && attacker !== defender) hb = { ...hb, damage: (hb.damage || 0) * 2, bkb: (hb.bkb || 0) * 2, kbg: (hb.kbg || 0) * 2 };      // Umbra's open guard after a missed up-melee
     if (attacker && attacker !== defender && hb.damage !== undefined) {                          // perks
         const m = (1 + perkOf(attacker, 'dmg') + (attacker.stocks === 1 ? perkOf(attacker, 'last') : 0)) * (1 + perkOf(defender, 'taken'));
         const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
@@ -4534,11 +4539,14 @@ function updateOrbs() {
                 Math.abs(e.x - o.x) < e.width / 2 + o.r + 70 && Math.abs(e.y - o.y) < e.height / 2 + o.r + 50);
             if (bw) { reflectOrb(o, bw); continue; }
         }
-        if (o.owner && !o.stuck && !o.cap && !o.trap && !o.ctrl && o.kind !== 'bomb') {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
+        if (o.owner && !o.stuck) {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
             const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
                 Math.abs(e.activeHitbox.x - o.x) < e.activeHitbox.w / 2 + o.r && Math.abs(e.activeHitbox.y - o.y) < e.activeHitbox.h / 2 + o.r);
             if (um) {
-                um._stored = { o: { ...o, owner: null, ctrl: null, homing: null, cap: null }, spd: Math.hypot(o.vx, o.vy) }; um.storedC = o.color || '#c4b5fd'; um.storedR = Math.round(o.r);
+                um._ugHit = true;
+                if (o.ctrl && o.ctrl.sx && o.ctrl.sx.k === 'thunder') { o.ctrl.sx = null; o.ctrl.actionLock = Math.max(o.ctrl.actionLock, 10); }
+                if (o.cap) { const v = o.cap; v.trapId = 0; v.invincibleTimer = Math.max(v.invincibleTimer, 30); }
+                um._stored = { o: { ...o, owner: null, ctrl: null, homing: null, cap: null, trap: false, capT: 0 }, spd: Math.hypot(o.vx, o.vy) }; um.storedC = o.color || '#c4b5fd'; um.storedR = Math.round(o.r);
                 dropOrb(o); fx('block', o.x, o.y); createParticles(o.x, o.y, o.color || '#c4b5fd', 10); audio.playParry(); continue;
             }
         }
