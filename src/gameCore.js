@@ -2513,7 +2513,7 @@ class Fighter {
             const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
             this.swing = SWING[key];
             this.attackTimer = this.atkN = zv === 'T' ? 34 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
-            if (zv === 'T') { this.zLeap = { vx: zdir * 16.5 * 1.5 * 0.5, vy: -8, g: true }; this.zLock = 25; this.zLockN = 6; }                    // running thrust: half prior leap, 0.1s stagger; punch hits late (heavy startup)
+            if (zv === 'T') { this.zLeap = { vx: zdir * 16.5 * 1.5, vy: -8, g: true }; this.zLock = 25; this.zLockN = 6; }                    // running thrust: 1.5x leap, 0.1s stagger; punch hits late (heavy startup)
             if (zv === 'K') {                                                                                                          // flying backwards drop kick
                 if (this.grounded) { this.zLeap = { vx: zdir * 11, vy: -8, g: true }; this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
                 else this.zLeap = { vx: zdir * 9, vy: -2, g: false };                                                    // (the leap itself only starts once a charge is released)
