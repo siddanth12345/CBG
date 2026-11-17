@@ -4085,7 +4085,7 @@ function launch(attacker, defender, hb) {
 
     const effectiveDamage = defender.damage / 2;
     const percentFactor = (effectiveDamage / 10) + (effectiveDamage * hb.damage / 20);
-    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1);      // slow characters take less, fast ones more; Instant Final Blow practice: 7x
+    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
