@@ -11,7 +11,7 @@ import { S, viewerFighter, BW_MELEE } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { buildDecor, tickDecor, disposeDecor } from './charDecor.js';
 import { Trail } from './trail.js';
-import { lowGfx } from '../gfx.js';
+import { lowGfx, getHitboxes } from '../gfx.js';
 import { buildSword } from './swordModel.js';
 
 const BLADE_LEN = 40;
@@ -1193,7 +1193,8 @@ export class FighterModel {
             this.shield.material.uniforms.uPow.value = 0.8 + Math.sin(T * 14) * 0.08;
         } else this.shield.visible = false;
 
-        this.grabBox.visible = f.grabbedBy !== null;
+        // Grab / suplex hold highlight: only when the hitbox setting is on
+        this.grabBox.visible = getHitboxes() && f.grabbedBy !== null;
         if (this.grabBox.visible) this.grabBox.material.opacity = 0.2 + Math.sin(T * 12) * 0.05;
 
         this.lblHang.visible = f.isHanging;

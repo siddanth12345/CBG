@@ -217,14 +217,18 @@ export class Effects {
         }
 
         this.showHB = getHitboxes(); window.addEventListener('cbg-hb', () => { this.showHB = getHitboxes(); });
-        // ---- hitbox boxes (the original drew these as translucent red rectangles)
+        // ---- hitbox boxes (red = attack; yellow = Umbra projectile-catch, 2x attack size)
         this.hbPool = [];
+        this.catchPool = [];
         const hbGeo = new THREE.BoxGeometry(1, 1, 1);
         const hbEdges = new THREE.EdgesGeometry(hbGeo);
         for (let i = 0; i < 8; i++) {
             const m = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.16, depthWrite: false, blending: ADD, toneMapped: false }));
             m.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75, toneMapped: false })));
             m.visible = false; m.renderOrder = 5; scene.add(m); this.hbPool.push(m);
+            const c = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.12, depthWrite: false, blending: ADD, toneMapped: false }));
+            c.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.7, toneMapped: false })));
+            c.visible = false; c.renderOrder = 4; scene.add(c); this.catchPool.push(c);
         }
 
         // ---- CBG Core orbs (projectiles) and the charge orbs held by fighters
@@ -1014,12 +1018,26 @@ export class Effects {
             g.userData.outer.material.opacity = b.alpha * 0.55; g.userData.inner.material.opacity = b.alpha * 0.9;
         }
 
-        // ---- hitboxes
+        // ---- hitboxes (red = damage; yellow Umbra catch = 2x, visual only when hitboxes on)
         fighters.forEach((f, i) => {
             const m = this.hbPool[i], hb = f.activeHitbox; if (!m) return;
-            if (!hb || !this.showHB) { m.visible = false; return; }
+            const c = this.catchPool[i];
+            if (!this.showHB || !hb) {
+                m.visible = false;
+                if (c) c.visible = false;
+                return;
+            }
+            // Attack / damage / knockback box (unchanged size)
             m.visible = true;
             m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
+            // Umbra projectile catch = 2× attack size (yellow)
+            if (c) {
+                if (f.char === 'umbra' && f.attackTimer > 0) {
+                    c.visible = true;
+                    c.position.set(wx(hb.x), wy(hb.y), 0);
+                    c.scale.set(hb.w * 2, hb.h * 2, 48);
+                } else c.visible = false;
+            }
         });
 
         // ---- core orbs in flight
