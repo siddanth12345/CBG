@@ -16,6 +16,7 @@ import { SoundEngine } from './audio.js';
 import { isDown, neutralForced } from './controls.js';
 import { ITEM_TYPES } from './items.js';
 import { SP, spec, SLOT_OF, lerpR, STYLE_OF } from './specials.js';
+import { getGfx, lowGfx } from './gfx.js';
 
 export const S = { fxClear: 0, screenShake: 0, gameMode: 'hard', gameState: 'start', online: null, train: null };   // online: null | 'host' | 'guest'; train: training menu prefs
 export const audio = new SoundEngine();
@@ -959,9 +960,14 @@ class Fighter {
             return;
         }
 
-        for (let i = this.ghosts.length - 1; i >= 0; i--) {
-            this.ghosts[i].alpha -= 0.05;
-            if (this.ghosts[i].alpha <= 0) this.ghosts.splice(i, 1);
+        // Low: drop ghosts. Medium: almost instant fade. High / Auto: normal fade.
+        {
+            const gq = getGfx();
+            const fade = gq === 'low' ? 1 : gq === 'medium' ? 0.4 : 0.05;
+            for (let i = this.ghosts.length - 1; i >= 0; i--) {
+                this.ghosts[i].alpha -= fade;
+                if (this.ghosts[i].alpha <= 0) this.ghosts.splice(i, 1);
+            }
         }
 
         if (this.isShielding) {

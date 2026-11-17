@@ -1,4 +1,5 @@
 import { lowGfx } from '../gfx.js';
+import { S } from '../gameCore.js';
 // Per-character art pass: every fighter gets its own silhouette (wings, fins, great sword, crystals, daggers ...) and its own particle trail.
 // Built once per model from the model's materials (so team colours still apply); animated every frame by tickDecor().
 import * as THREE from 'three';
@@ -175,7 +176,8 @@ export function tickDecor(m, dt) {
     if (lowGfx()) { for (const p of D.parts) if (p.life > 0) { p.life = 0; p.mesh.visible = false; } return; }   // no walking particle trails on Low
     const spd = Math.hypot(f.vx || 0, f.vy || 0), face = f.facing || 1, base = m.root.position;
     if (m.root.visible && dt < 0.2) {
-        D.acc += (e.rate + e.move * spd) * dt;
+        const lod = (typeof S !== 'undefined' && S.fxLod != null) ? S.fxLod : 1;
+        D.acc += (e.rate + e.move * spd) * dt * lod;
         let guard = 4;
         while (D.acc >= 1 && guard--) {
             D.acc -= 1; D.clock++;

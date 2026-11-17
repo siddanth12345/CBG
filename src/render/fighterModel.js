@@ -1384,29 +1384,29 @@ export class FighterModel {
         const f = this.f;
         const T = this.trails;
         const get = (o) => o.getWorldPosition(new THREE.Vector3());
-        if (lowGfx()) return;   // Low: no blade, foot, or body particle ribbons
-
-        // blade (slashes, uppercut, lunge)
-        if (this.bwOn && this.bwTipM && this.bwFr >= 38 && this.bwFr <= 56) {                       // the great sword leaves a long ribbon on its fast part
-            T.blade.setColor(this.baseColor, 3);
-            T.blade.push(get(this.bwBaseM), get(this.bwTipM));
+        const low = lowGfx();
+        // Low: no blade ribbon. Foot / body ribbons at half rate. Med / High: full.
+        if (!low) {
+            if (this.bwOn && this.bwTipM && this.bwFr >= 38 && this.bwFr <= 56) {
+                T.blade.setColor(this.baseColor, 3);
+                T.blade.push(get(this.bwBaseM), get(this.bwTipM));
+            }
+            if (this.bladeG.visible && pose.blade > 0.35) {
+                T.blade.setColor(this.baseColor, 2.4);
+                T.blade.push(get(this.bladeBaseM), get(this.bladeTipM));
+            }
         }
-        if (this.bladeG.visible && pose.blade > 0.35) {
-            T.blade.setColor(this.baseColor, 2.4);
-            T.blade.push(get(this.bladeBaseM), get(this.bladeTipM));
-        }
-        // fists on jabs
-        // feet on the stomp / dive
-        if (atk && atk.kind === 'DOWN' && atk.st > 0.2) {
+        this._trailTick = (this._trailTick || 0) + 1;
+        const footBodyOk = !low || (this._trailTick % 2 === 0);   // Low: 50% of samples
+        if (footBodyOk && atk && atk.kind === 'DOWN' && atk.st > 0.2) {
             T.footR.push(get(this.legR.ank), get(this.legR.kn));
             T.footL.push(get(this.legL.ank), get(this.legL.kn));
         }
-        // body streak while dashing / lunging / grab-dashing
         const fast = f.isGrabDashing || (atk && atk.kind === 'LUNGE');
-        if (fast) {
+        if (footBodyOk && fast) {
             const c = this.root.position;
             const sp = Math.hypot(f.vx, f.vy) || 1;
-            const nx = -(-f.vy) / sp, ny = f.vx / sp; // perpendicular to velocity in the screen plane (render y is flipped)
+            const nx = -(-f.vy) / sp, ny = f.vx / sp;
             const w = 11;
             T.body.setColor(f.isGrabDashing ? '#ef4444' : this.baseColor, 1.7);
             T.body.push(new THREE.Vector3(c.x + nx * w, c.y + ny * w, 0), new THREE.Vector3(c.x - nx * w, c.y - ny * w, 0));

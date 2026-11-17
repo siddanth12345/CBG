@@ -13,7 +13,7 @@ import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
 import { ImpactRings } from './impactRings.js';
 import { ItemsView } from './items.js';
-import { getReduceFlash, getGfx, getZoom } from '../gfx.js';
+import { getReduceFlash, getGfx, getZoom, particleScale } from '../gfx.js';
 import { Showcase } from './showcase.js';
 
 const FOV = 38;
@@ -173,7 +173,8 @@ export class View {
         const sh = m && q < 2;
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
-        S.fxLod = q >= 3 ? 0.2 : q >= 2 ? 0.3 : q >= 1 ? 0.6 : 1;         // particle / effect budget follows the quality level
+        const ps = particleScale();
+        S.fxLod = ps != null ? ps : (q >= 3 ? 0.2 : q >= 2 ? 0.3 : q >= 1 ? 0.6 : 1);   // Low~12%, Med 26%, High 50%; Auto keeps the frame-time ladder
     }
 
     resize() {
