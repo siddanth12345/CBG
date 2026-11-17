@@ -255,6 +255,13 @@ export class Effects {
             chip.position.set(0.55, 0.45, 0.35); rock.add(chip);
             const vein = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(1.5), transparent: true, opacity: 0.5, blending: ADD, depthWrite: false, toneMapped: false }));
             vein.position.set(-0.25, -0.2, 0.5); rock.add(vein);
+            const sw = new THREE.Group();                                           // the same projectile as a sword model (Umbra's stored falling sword)
+            const steel = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.8, emissive: 0x64748b, emissiveIntensity: 0.6 });
+            const blade = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.34, 0.14), steel); blade.position.x = 0.55; sw.add(blade);
+            const tip = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.5, 4), steel); tip.rotation.z = -Math.PI / 2; tip.position.x = 2.1; sw.add(tip);
+            const guard = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.1, 0.2), new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4, metalness: 0.6 })); guard.position.x = -0.75; sw.add(guard);
+            const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x57534e })); hilt.rotation.z = Math.PI / 2; hilt.position.x = -1.25; sw.add(hilt);
+            sw.visible = false; rock.add(sw); rock.userData.sw = sw;
             const voidG = new THREE.Group();
             voidG.add(new THREE.Mesh(orbCore, new THREE.MeshBasicMaterial({ color: 0x07030f, toneMapped: false })));
             const vr = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.09, 8, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color('#a855f7').multiplyScalar(2.2), transparent: true, opacity: 0.9, blending: ADD, depthWrite: false, toneMapped: false }));
@@ -1091,8 +1098,11 @@ export class Effects {
                 if (Math.random() < 0.9) this.sparks(g.position.clone(), Math.random() < 0.5 ? '#fde047' : '#ffffff', 2, 220, 0.25);
                 if (Math.random() < 0.25) this.ring(g.position.clone(), o.r, o.r + 50, 0.15, '#fde047', 'screen');
             } else if (kind === 'boulder') {
-                g.scale.setScalar(o.r); u.rock.rotation.x += dt * 4; u.rock.rotation.y += dt * 3;
-                if (Math.random() < 0.9) this.sparks(g.position.clone(), '#a8a29e', 1, 90, 0.4, 'down');
+                g.scale.setScalar(o.r);
+                { const swd = u.rock.userData.sw; if (swd) { if (swd.visible !== !!o.sword) { swd.visible = !!o.sword; u.rock.children.forEach(c => { if (c !== swd) c.visible = !o.sword; }); } } }
+                if (o.sword) { u.rock.rotation.set(0, 0, Math.atan2(-o.vy, o.vx)); g.scale.setScalar(o.r * 0.9); }
+                else { u.rock.rotation.x += dt * 4; u.rock.rotation.y += dt * 3; }
+                if (Math.random() < 0.9) this.sparks(g.position.clone(), o.sword ? '#e2e8f0' : '#a8a29e', 1, 90, 0.4, 'down');
                 if (Math.random() < 0.3) this.sparks(g.position.clone(), '#fb923c', 1, 80, 0.25);
             } else if (kind === 'void') {
                 g.scale.setScalar(o.r * pulse); u.vr.rotation.z += dt * 5; u.vr2.rotation.z -= dt * 7;

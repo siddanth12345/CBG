@@ -654,7 +654,7 @@ class Fighter {
     }
 
     update() {
-        if (S.instantBlow && S.online !== 'guest') this.damage = 400;        // instant final blow: shown as infinity, held at 400, every hit is a final blow
+        if (S.instantBlow && S.online !== 'guest') this.damage = 200;        // instant final blow: shown as infinity, really held at 200% (and every hit has 7x knockback)
         if (this.frozenBot) {                                                // Frozen Bot: pinned where it first stood, no velocity, no stun
             if (this.grounded && !this._fz) this._fz = { x: this.x, y: this.y };
             if (this._fz) { this.x = this._fz.x; this.y = this._fz.y; this.grounded = true; }
@@ -4085,7 +4085,7 @@ function launch(attacker, defender, hb) {
 
     const effectiveDamage = defender.damage / 2;
     const percentFactor = (effectiveDamage / 10) + (effectiveDamage * hb.damage / 20);
-    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb;      // slow characters take less, fast ones more
+    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1);      // slow characters take less, fast ones more; Instant Final Blow practice: 7x
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
@@ -4210,7 +4210,7 @@ function updateDrops() {
             if (um) {
                 const col = d.kind === 'rock' ? '#a8a29e' : '#e2e8f0', rr = d.kind === 'rock' ? 26 : 22;
                 um._ugHit = true;
-                um._stored = { o: { x: d.x, y: d.y, vx: 0, vy: 0, r: rr, charge: 0.3, owner: null, life: 200, color: col, d: d.dmg || 6, R: 45, bkb: d.bkb || 6, kbg: d.kbg || 0.6, grav: d.kind === 'rock' ? WORLD.gravity * 0.55 * 0.85 : 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' }, spd: 19 };
+                um._stored = { o: { x: d.x, y: d.y, vx: 0, vy: 0, r: rr, charge: 0.3, owner: null, life: 200, color: col, d: d.dmg || 6, R: 45, bkb: d.bkb || 6, kbg: d.kbg || 0.6, grav: d.kind === 'rock' ? WORLD.gravity * 0.55 * 0.85 : 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder', sword: d.kind !== 'rock' }, spd: 19 };
                 um.storedC = col; um.storedR = rr;
                 drops.splice(i, 1); fx('block', d.x, d.y); createParticles(d.x, d.y, col, 10); audio.playParry(); continue;
             }
@@ -4392,6 +4392,7 @@ const SPL_CYCLE = 900;
 const ease = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
 function splitAmt(t) { const c = t % SPL_CYCLE; return c < 360 ? 0 : c < 480 ? ease((c - 360) / 120) : c < 600 ? 1 : 1 - ease((c - 600) / 300); }
 export const splitClock = () => SPL.t;
+export const splitJump = (t) => { SPL.t = t; };      // test hook
 export const splitCuts = () => SPL.cuts;
 export function splitShake(t) { const c = t % SPL_CYCLE; return c >= 300 && c < 360 ? 0.4 + 0.6 * (c - 300) / 60 : c >= 360 && c < 480 ? 0.4 : c >= 600 && c < 900 ? 0.18 : 0; }
 function applySplit(carry = true) {
@@ -5370,7 +5371,7 @@ export function snapshot() {
     return {
         f: fs, m: S.match ? 1 : 0, gs: S.gameState, win: S.winnerRole || null,
         ws: S.winnerSlots || null, wl: S.winnerLabel || null, sh: Math.round(S.screenShake * 10) / 10,
-        o: orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0 })),
+        o: orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0, sw: o.sword ? 1 : 0 })),
         it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
         sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0, sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
@@ -5468,7 +5469,7 @@ export function applySnapshot(s) {
         let g = guestOrbs.get(o.id);
         if (!g) { g = { id: o.id }; guestOrbs.set(o.id, g); orbs.push(g); }
         const had = g.x !== undefined, gx = g.x, gy = g.y;
-        Object.assign(g, { x: o.x, y: o.y, vx: o.vx, vy: o.vy, r: o.r, charge: o.c, owner: own, color, life: 200, kind: o.k || 0, cap: !!o.cap });
+        Object.assign(g, { x: o.x, y: o.y, vx: o.vx, vy: o.vy, r: o.r, charge: o.c, owner: own, color, life: 200, kind: o.k || 0, cap: !!o.cap, sword: !!o.sw });
         if (had && Math.hypot(gx - o.x, gy - o.y) < 90) { g.x = gx + (o.x - gx) * 0.5; g.y = gy + (o.y - gy) * 0.5; }
     }
     for (const [id, g] of guestOrbs) if (!seen.has(id)) { guestOrbs.delete(id); const i = orbs.indexOf(g); if (i >= 0) orbs.splice(i, 1); }

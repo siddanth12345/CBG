@@ -200,7 +200,7 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>
                     <button class="lm-btn lm-mini ${t.hazards ? 'lm-btn-ghost' : ''}" data-hz="0">Off</button>
                 </span></div>
-                <div class="lm-setrow"><span>Instant final blow <small>(shows ∞, held at 400%, nobody dies)</small></span><span>
+                <div class="lm-setrow"><span>Instant final blow <small>(shows ∞, really 200%, 7x knockback, nobody dies)</small></span><span>
                     <button class="lm-btn lm-mini ${t.instantBlow ? '' : 'lm-btn-ghost'}" data-ib="1">On</button>
                     <button class="lm-btn lm-mini ${t.instantBlow ? 'lm-btn-ghost' : ''}" data-ib="0">Off</button>
                 </span></div>

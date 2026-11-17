@@ -906,18 +906,13 @@ export class FighterModel {
         }
     }
 
-    /** The projectile an Umbra has stored hovers over his head (a ball three times the size of his head, shimmering, in the colour of what it was) */
+    /** Umbra's stored projectile: a plain purple ball above his name plate (fixed there, it never follows his animation) */
     #umbraStore(f) {
         if (!this.uBall) {
-            const g = new THREE.Mesh(new THREE.SphereGeometry(9.6 * 1.5, 18, 14), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 }));      // radius 1.5 x the head's = diameter 3 x the head
-            g.visible = false; g.renderOrder = 7; this.head.add(g); this.uBall = g; this.uBallC = '';
+            const g = new THREE.Mesh(new THREE.SphereGeometry(11, 16, 12), new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.95, depthTest: false, toneMapped: false }));
+            g.visible = false; g.renderOrder = 22; g.position.set(0, 112, 0); this.root.add(g); this.uBall = g;
         }
-        const on = f.storedC && f.storedC !== '';
-        this.uBall.visible = !!on;
-        if (on) {
-            if (this.uBallC !== f.storedC) { this.uBallC = f.storedC; this.uBall.material.color.set(f.storedC); }
-            this.uBall.position.set(0, 66 + Math.sin(this.t * 4) * 2.5, 0); const k = 1 + Math.sin(this.t * 9) * 0.05; this.uBall.scale.set(k, k, k);
-        }
+        this.uBall.visible = !!(f.storedC && f.storedC !== '') && this.root.visible;
     }
 
     /** gives each character's melee its own body language on top of the shared pose (returns a yaw spin, or 0) */
