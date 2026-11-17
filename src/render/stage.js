@@ -211,11 +211,13 @@ export function buildStage(scene) {
     sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
     sg.setAttribute('color', new THREE.BufferAttribute(sc, 3));
     const stars = new THREE.Points(sg, new THREE.PointsMaterial({ size: 14, sizeAttenuation: true, vertexColors: true, fog: false, transparent: true, opacity: 0.95 }));
+    stars.userData.fullCount = starCount;
     decor.add(stars);
     anim.push((t) => { stars.position.x = Math.sin(t * 0.02) * 40; });
 
     // floating rocks
     const rocks = [];
+    const details = [];   // small background props; Low hides half (stars use drawRange in applyMapDetail)
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x1f2a44, metalness: 0.4, roughness: 0.6, flatShading: true });
     const rockGlow = glowMat('#38bdf8', 1.8);
     for (let i = 0; i < 7; i++) {
@@ -232,7 +234,7 @@ export function buildStage(scene) {
         const side = i % 2 ? 1 : -1;
         g.position.set(side * (900 + Math.random() * 2400), -700 + Math.random() * 1800, -350 - Math.random() * 1500);
         g.userData = { base: g.position.y, ph: Math.random() * 6.28, sp: 0.15 + Math.random() * 0.25, rs: (Math.random() - 0.5) * 0.3 };
-        decor.add(g); rocks.push(g);
+        decor.add(g); rocks.push(g); details.push(g); g.userData.detail = true;
     }
     anim.push((t) => {
         for (const g of rocks) {
@@ -279,7 +281,7 @@ export function buildStage(scene) {
     root.add(frame);
 
     return {
-        root, stage, topY, W, D, decor, stars, rocks,
+        root, stage, topY, W, D, decor, stars, rocks, details,
         update(t, dt) { for (const f of anim) f(t, dt); },
         /** world-space (render) y of the ledge for the lights / effects */
         ledgeY: topY,

@@ -13,7 +13,7 @@ import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
 import { ImpactRings } from './impactRings.js';
 import { ItemsView } from './items.js';
-import { getReduceFlash, getGfx, getZoom, particleScale } from '../gfx.js';
+import { getReduceFlash, getGfx, getZoom, particleScale, lowGfx } from '../gfx.js';
 import { Showcase } from './showcase.js';
 
 const FOV = 38;
@@ -175,6 +175,27 @@ export class View {
         this.stage.stars.visible = q < 3;
         const ps = particleScale();
         S.fxLod = ps != null ? ps : (q >= 3 ? 0.2 : q >= 2 ? 0.3 : q >= 1 ? 0.6 : 1);   // Low~12%, Med 26%, High 50%; Auto keeps the frame-time ladder
+        this.applyMapDetail();
+    }
+
+    /** Low: keep half of small background details (stars, extra clouds, small islands). Big Horizon features stay. */
+    applyMapDetail() {
+        const low = lowGfx();
+        const st = this.stage; if (!st) return;
+        if (st.stars && st.stars.geometry && st.stars.geometry.attributes.position) {
+            const n = st.stars.userData.fullCount || st.stars.geometry.attributes.position.count;
+            st.stars.geometry.setDrawRange(0, low ? Math.max(1, Math.floor(n * 0.5)) : n);
+        }
+        const list = st.details || [];
+        const inMatch = this.inMatch !== false;
+        for (let i = 0; i < list.length; i++) {
+            const o = list[i];
+            if (o === st.stars) continue;                         // stars use drawRange
+            // menu already hides rocks; only budget small details
+            if (o.userData && o.userData.detail) {
+                o.visible = inMatch && (!low || (i % 2 === 0));
+            }
+        }
     }
 
     resize() {

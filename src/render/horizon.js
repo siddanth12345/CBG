@@ -187,9 +187,10 @@ export function buildHorizon(scene, { D }) {
         }
     });
     const clouds = [];
+    const details = [];   // small background props; Low keeps half, key features stay
     const cloud = (x, y, z, s, op, sp) => {
         const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: op, depthWrite: false, color: 0xfffdf8 }));
-        m.position.set(x, y, z); m.scale.set(s, s * 0.5, 1); m.userData = { sp, x0: x, ph: R() * 6.28 }; decor.add(m); clouds.push(m);
+        m.position.set(x, y, z); m.scale.set(s, s * 0.5, 1); m.userData = { sp, x0: x, ph: R() * 6.28, detail: true }; decor.add(m); clouds.push(m); details.push(m);
     };
     for (let i = 0; i < 26; i++) cloud(-7000 + R() * 14000, -1900 + R() * 600, -2600 - R() * 3800, 1700 + R() * 1900, 0.9, 6 + R() * 8);         // the sea of clouds under the valley
     for (let i = 0; i < 9; i++) cloud(-6500 + R() * 13000, 900 + R() * 1700, -3800 - R() * 3600, 1400 + R() * 1500, 0.55, 4 + R() * 6);            // high cirrus
@@ -228,15 +229,18 @@ export function buildHorizon(scene, { D }) {
         if (opts.ruin) { for (let i = 0; i < 3; i++) { const c = column(60 + r() * 60, 9, g); c.position.set((i - 1) * 55, thick * 0.11, -10 + r() * 20); if (i === 1) c.rotation.z = 0.25; } }
         return g;
     };
-    const place = (g, x, y, z, bob, ph) => { g.position.set(x, y, z); g.userData = { base: y, ph, sp: 0.18 + R() * 0.18, rs: 0, amp: bob }; decor.add(g); rocks.push(g); return g; };
-    place(island(420, 380, 11, { ruin: true }), -1750, 560, -2300, 22, 0.4);
-    place(island(300, 260, 12), 1650, 1050, -2700, 18, 1.7);
-    place(island(520, 520, 13, { ruin: true }), 2700, 140, -3100, 26, 2.9);
-    place(island(240, 220, 14), -3300, 1500, -3300, 16, 4.1);
-    place(island(360, 340, 15), -900, 1600, -4200, 20, 5.2);
-    place(island(620, 600, 16), 4300, 1250, -4600, 24, 0.9);
-    place(island(200, 200, 17), 400, 980, -3500, 14, 3.3);
-    place(island(300, 300, 18), -4700, 250, -4300, 18, 2.2);
+    const place = (g, x, y, z, bob, ph, detail = false) => {
+        g.position.set(x, y, z); g.userData = { base: y, ph, sp: 0.18 + R() * 0.18, rs: 0, amp: bob, detail };
+        decor.add(g); rocks.push(g); if (detail) details.push(g); return g;
+    };
+    place(island(420, 380, 11, { ruin: true }), -1750, 560, -2300, 22, 0.4, true);
+    place(island(300, 260, 12), 1650, 1050, -2700, 18, 1.7, true);
+    place(island(520, 520, 13, { ruin: true }), 2700, 140, -3100, 26, 2.9, true);
+    place(island(240, 220, 14), -3300, 1500, -3300, 16, 4.1, true);
+    place(island(360, 340, 15), -900, 1600, -4200, 20, 5.2, true);
+    place(island(620, 600, 16), 4300, 1250, -4600, 24, 0.9, true);
+    place(island(200, 200, 17), 400, 980, -3500, 14, 3.3, true);
+    place(island(300, 300, 18), -4700, 250, -4300, 18, 2.2, true);
 
     // ------------------------------------------------------------ the giant waterfall (far left): a huge mass pouring into the clouds
     const fallTex = ctex(256, 1024, (g, w, h) => {
@@ -405,7 +409,7 @@ export function buildHorizon(scene, { D }) {
     // `stars` is only a handle the view toggles for quality / menu; Horizon has none
     const stars = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ transparent: true, opacity: 0 }));
     return {
-        root, stage, topY, W, D, decor, stars, rocks, theme: 'horizon', sc, sky: scene.userData.horizonSky,
+        root, stage, topY, W, D, decor, stars, rocks, details, theme: 'horizon', sc, sky: scene.userData.horizonSky,
         update(t, dt) {
             for (const f of anim) f(t, dt);
             // ---- the split hazard: the stage is drawn as up to three clipped copies that drift apart (with a shake)
