@@ -205,7 +205,7 @@ export const trainJumps = (f) => {
 export const DEFAULT_TRAIN = {
     stage: 'normal', // 'normal' | 'lobby' (big Frontier)
     stun: 30, lock: 36, jumps: null, airF: 2, walk: 1,
-    char: null, botType: 'static', botChar: null, hazards: false,
+    char: null, botType: 'static', botChar: null, hazards: false, instantBlow: false,
 };
 export function ensureTrain() {
     if (!S.train) S.train = { ...DEFAULT_TRAIN, char: null, botChar: null };
@@ -644,6 +644,12 @@ class Fighter {
     }
 
     update() {
+        if (S.instantBlow && S.online !== 'guest') this.damage = 400;        // instant final blow: shown as infinity, held at 400, every hit is a final blow
+        if (this.frozenBot) {                                                // Frozen Bot: pinned where it first stood, no velocity, no stun
+            if (this.grounded && !this._fz) this._fz = { x: this.x, y: this.y };
+            if (this._fz) { this.x = this._fz.x; this.y = this._fz.y; this.grounded = true; }
+            this.vx = 0; this.vy = 0; this.hitstun = 0; this.clashStunTimer = 0; this.dizzyTimer = 0; this.freezeTimer = 0; this.grabbedBy = null;
+        } else if (this._fz) this._fz = null;
         if (this._rollCarry) {                                  // safety net: the roller's fireball is gone (cancelled, hit, clashed...) but this foe was never released: throw / stun / burn them now
             const c = this._rollCarry, sxc = c.sx;
             if (!(sxc && sxc.k === 'roll' && sxc.ph === 'roll')) { this._rollCarry = null; if (c._rollLast && isAlive(c)) c.rollRelease(this, c._rollLast); }
@@ -1009,7 +1015,7 @@ class Fighter {
                 const slowSwing = this.heldItem && this.heldItem.type === 'FIRESTICK' && this.swing && this.swing.type !== 'BLINK';
                 if (!(slowSwing && (this._slowTick = (this._slowTick || 0) + 1) % 3 === 0)) this.attackTimer--;   // firestick: swings take 1.5x as long
                 if (this.attackTimer === 0 && this.swing) {
-                    if (this.char === 'umbra' && this.zv === 'UG' && !this._ugHit) this.vulnT = 60;      // the hat throw whiffed: for 1 s he takes double damage and knockback
+                    if (this.char === 'umbra' && this.zv === 'UG' && !this._ugHit) this.vulnT = 60;      // the hat throw whiffed: for 1 s he takes 1.25x damage and 1.1x knockback
                     this.swing = null;
                     this.activeHitbox = null;
                     this.attackHeld = false; this.meleeCharge = 0;
@@ -2296,7 +2302,7 @@ class Fighter {
     /** Roll: ONLY while shielding (hold E + scroll wheel), 2 s cooldown, never over the void. */
     executeRoll(force = false, dirOverride = 0) {
         // static training bot never acts — including rolls
-        if (this.isAI && (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static')))) return false;
+        if (this.isAI && (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || (S.train.botType === 'static' || S.train.botType === 'frozen'))))) return false;
         if (!this.grounded || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.isRolling ||
             this.freezeTimer > 0 || this.suplexT > 0 || this.diving || this.spiralT > 0 || this.sx || this.grabbedBy || this.grabHolding) return false;
         if (this.rollCooldown > 0) return false;
@@ -2549,6 +2555,11 @@ class Fighter {
     }
 
     takeKO() {
+        if (S.instantBlow) {                                  // instant final blow practice: nobody loses a stock, they just come back
+            audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
+            this.lastHitBy = null; this.lastHitT = 9999; this.reset(false);
+            return;
+        }
         if (S.gameMode === 'training') {                      // training: infinite stocks for everyone, nobody wins or loses
             audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
             this.stocks = 3; this.lastHitBy = null; this.lastHitT = 9999;
@@ -2645,10 +2656,14 @@ class AIBot extends Fighter {
 
     get skill() { return SKILL[this.diff] || 1; }
 
+    /** the Frozen Bot: takes damage but no knockback and never moves (training bot type / custom-match CPU) */
+    get frozenBot() { return this.isAI && (this.diff === 'frozen' || (S.gameMode === 'training' && !S.match && this === p2 && !!S.train && S.train.botType === 'frozen')); }
+
     get level() {
+        if (this.diff === 'frozen') return 'static';
         if (this.diff) return SKILL[this.diff] ? 'hard' : this.diff;           // Expert / Master / Apex play the hard-bot brain, faster and tougher
         // training static dummy must never be treated as hard (that enabled counter-rolls)
-        if (S.gameMode === 'training') return (S.train && S.train.botType && S.train.botType !== 'static') ? S.train.botType : 'static';
+        if (S.gameMode === 'training') return (S.train && S.train.botType && S.train.botType !== 'static' && S.train.botType !== 'frozen') ? S.train.botType : 'static';
         return S.gameMode === 'easy' ? 'easy' : S.gameMode === 'medium' ? 'medium' : 'hard';
     }
 
@@ -2825,7 +2840,7 @@ class AIBot extends Fighter {
 
     updateAI(target) {
         // static / training dummy: zero input, no rolls, no attacks
-        if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static'))) {
+        if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || (S.train.botType === 'static' || S.train.botType === 'frozen')))) {
             this.isShielding = false;
             this.shieldHold = 0;
             return;
@@ -3874,7 +3889,7 @@ function applyKillCam(ai, di) {
     S.kcFull = !S.demo && (me === ai || me === di);
 }
 function startKillCam(att, def) {
-    if (S.kcT > 0 || S.replay || S.demo || S.gameMode === 'training' || S.online === 'guest' || !att || att === def) return;
+    if (S.kcT > 0 || S.replay || S.demo || (S.gameMode === 'training' && !S.instantBlow) || S.online === 'guest' || !att || att === def || def.frozenBot) return;
     if (def.stocks <= 0 || def.out || !willKO(def)) return;
     def._kcInv = 400;
     const ai = idxOf(att), di = idxOf(def);
@@ -3888,7 +3903,7 @@ function launch(attacker, defender, hb) {
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (S.sdNoDmg) hb = { ...hb, damage: 0 };                       // timer sudden death: hits do not add percent
     if (attacker && attacker !== defender && attacker.char === 'umbra' && attacker.zv === 'UG') attacker._ugHit = true;
-    if (defender && defender.vulnT > 0 && attacker !== defender) hb = { ...hb, damage: (hb.damage || 0) * 2, bkb: (hb.bkb || 0) * 2, kbg: (hb.kbg || 0) * 2 };      // Umbra's open guard after a missed up-melee
+    if (defender && defender.vulnT > 0 && attacker !== defender) hb = { ...hb, damage: (hb.damage || 0) * 1.25, bkb: (hb.bkb || 0) * 1.1, kbg: (hb.kbg || 0) * 1.1 };      // Umbra's open guard after a missed up-melee: 1.25x damage, 1.1x knockback
     if (attacker && attacker !== defender && hb.damage !== undefined) {                          // perks
         const m = (1 + perkOf(attacker, 'dmg') + (attacker.stocks === 1 ? perkOf(attacker, 'last') : 0)) * (1 + perkOf(defender, 'taken'));
         const k = (1 + perkOf(attacker, 'kb')) * (1 + perkOf(defender, 'kbTaken'));
@@ -4855,7 +4870,7 @@ function renderRoster() {
     const rows = fighters.filter(f => f.active).map(f => {
         const pips = timer && !S.sudden ? ('D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
         const nm = String(f.name).replace(/[<>&"]/g, '');
-        return `<div style="display:flex;gap:8px;align-items:center;background:rgba(8,12,24,.72);border-left:4px solid ${f.color};padding:4px 8px;border-radius:8px;min-width:190px;opacity:${f.out ? .45 : 1}${f.slot === (S.mySlot || 0) ? ';outline:1px solid #fff6' : ''}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</span><span style="color:${f.damage > 120 ? '#fb7185' : f.damage > 60 ? '#fbbf24' : '#fff'}">${Math.floor(f.damage)}%</span><span style="color:${f.color};letter-spacing:1px">${pips}</span></div>`;
+        return `<div style="display:flex;gap:8px;align-items:center;background:rgba(8,12,24,.72);border-left:4px solid ${f.color};padding:4px 8px;border-radius:8px;min-width:190px;opacity:${f.out ? .45 : 1}${f.slot === (S.mySlot || 0) ? ';outline:1px solid #fff6' : ''}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</span><span style="color:${f.damage > 120 ? '#fb7185' : f.damage > 60 ? '#fbbf24' : '#fff'}">${S.instantBlow ? '∞' : Math.floor(f.damage)}%</span><span style="color:${f.color};letter-spacing:1px">${pips}</span></div>`;
     }).join('');
     if (rows !== rosterKey) { rosterKey = rows; el.innerHTML = rows; }
 }
@@ -4876,7 +4891,7 @@ function hudPips(id, n, cls) {
 function renderHUD() {
     const me = S.match ? (fighters[S.mySlot || 0] || p1) : p1;
     renderRoster();
-    hudText('p1Damage', String(Math.floor(me.damage)));
+    hudText('p1Damage', S.instantBlow ? '∞' : String(Math.floor(me.damage)));
     hudClass('p1Damage', dmgClass(me.damage));
     hudPips('p1Stocks', Math.max(0, me.stocks), 'w-3.5 h-3.5 rounded-full bg-cyan-400 border border-cyan-200 shadow-md shadow-cyan-500/50');
 
@@ -4904,7 +4919,7 @@ function renderHUD() {
         document.getElementById('p1JumpDots').innerHTML = Array.from({ length: me.maxJumps }, (_, i) => `<div class="w-2.5 h-2.5 rounded-full ${i < me.jumpsLeft ? 'bg-cyan-400' : 'bg-slate-700'}"></div>`).join('');
     }
 
-    hudText('p2Damage', String(Math.floor(p2.damage)));
+    hudText('p2Damage', S.instantBlow ? '∞' : String(Math.floor(p2.damage)));
     tickExtras(S, fighters, me);
     hudClass('p2Damage', dmgClass(p2.damage));
     hudPips('p2Stocks', Math.max(0, S.gameMode === 'training' ? 3 : p2.stocks), 'w-3.5 h-3.5 rounded-full bg-rose-500 border border-rose-300 shadow-md shadow-rose-500/50');
@@ -4926,8 +4941,8 @@ export function assignTagNames() {
         if (!f.active) { f.tagName = ''; continue; }
         if (f.isAI) {
             // Training static dummy is not a Hard Bot
-            if (S.gameMode === 'training' && (!f.diff || (S.train && S.train.botType === 'static'))) {
-                f.tagName = 'Static Bot';
+            if (S.gameMode === 'training' && (!f.diff || (S.train && (S.train.botType === 'static' || S.train.botType === 'frozen')))) {
+                f.tagName = f.frozenBot ? 'Frozen Bot' : 'Static Bot';
                 continue;
             }
             const lv = f.diff || (typeof f.level === 'string' ? f.level : null)
@@ -4983,11 +4998,13 @@ function startMatchSequence(mode, cfg) {
         S.timeLeft = Math.round(lim * 3600);
         S.itemTimer = Math.round(S.match.items.interval * 30);
         S.mySlot = cfg.mySlot || 0;
+        S.instantBlow = !!cfg.instantBlow;
         S.matchCfg = cfg;
         S.hazards = !!cfg.hazards;
         cfg.map = setArenaByMap(cfg.map);                     // a random pick is resolved here (the host's choice is sent to guests already resolved)
     } else {
         S.match = null; S.mySlot = 0; S.matchCfg = null; S.hazards = S.gameMode === 'training' && !!ensureTrain().hazards;
+        S.instantBlow = S.gameMode === 'training' && !!ensureTrain().instantBlow;
         if (S.gameMode === 'easy' || S.gameMode === 'medium' || S.gameMode === 'hard') setArenaByMap('rand');     // bot modes: a random map every game
         else if (S.arena !== 'normal' || S.theme !== 'frontier') setArena('normal');
         for (let i = 2; i < fighters.length; i++) fighters[i].active = false;
@@ -5130,8 +5147,10 @@ export function applyTrainPrefs() {
     else p1.char = getMyChar();
     p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps;
     const bt = t.botType || 'static';
+    S.instantBlow = !!t.instantBlow;
     p2.isAI = true;
-    if (bt === 'static') { p2.diff = null; p2.name = 'Static Bot'; }
+    if (bt === 'frozen') { p2.diff = null; p2.name = 'Frozen Bot'; }
+    else if (bt === 'static') { p2.diff = null; p2.name = 'Static Bot'; }
     else { p2.diff = bt; p2.name = BOT_NAMES[bt] || 'Hard Bot'; }
     p2.char = charOf(t.botChar || t.char || getMyChar()).id;
     p2.maxJumps = charOf(p2.char).jumps; p2.jumpsLeft = p2.maxJumps;
@@ -5624,7 +5643,7 @@ export function step() {
         if (p1._upd && !frz(p1)) p1.update();
         if (S.online === 'host') drive(p2, remote.helds[1] || NOHELD);   // the guest's fighter, steered by their inputs
         else {
-            const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || S.train.botType === 'static');
+            const staticBot = S.gameMode === 'training' && (!S.train || !S.train.botType || (S.train.botType === 'static' || S.train.botType === 'frozen'));
             if (!staticBot) { const seen = aiSeen(p2, p1); p2.updateAI(seen || null); aiWalk(p2); }
         }
         if (p2._upd && !frz(p2)) p2.update();

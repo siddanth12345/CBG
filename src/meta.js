@@ -76,7 +76,7 @@ export const TIERS = [
     { name: 'Diamond',  min: 3100, color: '#a78bfa', bot: 'master', mods: ['rusher', 'zoner', 'turtle', 'trickster'] },
     { name: 'Champion', min: RANK.start + RANK.topGames * (RANK.win + RANK.flawless), color: '#f43f5e', bot: 'apex', mods: ['rusher', 'zoner', 'turtle', 'trickster'] },
 ];
-export const BOT_NAMES = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot', expert: 'Expert Bot', master: 'Master Bot', apex: 'Apex Bot' };
+export const BOT_NAMES = { static: 'Static Bot', frozen: 'Frozen Bot', easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot', expert: 'Expert Bot', master: 'Master Bot', apex: 'Apex Bot' };
 export const MOD_NAMES = { rusher: 'Rusher', zoner: 'Zoner', turtle: 'Turtle', trickster: 'Trickster' };
 export const tierOf = (r) => { let t = TIERS[0]; for (const x of TIERS) if (r >= x.min) t = x; return t; };
 /** the opponent for a rating: bot level and a random mod from that tier's list */

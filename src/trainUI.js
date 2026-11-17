@@ -11,6 +11,7 @@ const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 const BOTS = [
     { id: 'static', label: 'Static Bot' },
+    { id: 'frozen', label: 'Frozen Bot' },
     { id: 'easy', label: 'Easy Bot' },
     { id: 'medium', label: 'Medium Bot' },
     { id: 'hard', label: 'Hard Bot' },
@@ -24,6 +25,7 @@ function snap() {
     return {
         stage: t.stage || 'normal',
         hazards: !!t.hazards,
+        instantBlow: !!t.instantBlow,
         stun: t.stun ?? 30,
         lock: t.lock ?? 36,
         jumps: t.jumps,
@@ -40,6 +42,7 @@ function applySnap(s, live = true) {
     Object.assign(t, {
         stage: s.stage || 'normal',
         hazards: !!s.hazards,
+        instantBlow: !!s.instantBlow,
         stun: +s.stun || 30,
         lock: +s.lock || 36,
         jumps: s.jumps == null || s.jumps === '' ? null : +s.jumps,
@@ -197,6 +200,10 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>
                     <button class="lm-btn lm-mini ${t.hazards ? 'lm-btn-ghost' : ''}" data-hz="0">Off</button>
                 </span></div>
+                <div class="lm-setrow"><span>Instant final blow <small>(shows ∞, held at 400%, nobody dies)</small></span><span>
+                    <button class="lm-btn lm-mini ${t.instantBlow ? '' : 'lm-btn-ghost'}" data-ib="1">On</button>
+                    <button class="lm-btn lm-mini ${t.instantBlow ? 'lm-btn-ghost' : ''}" data-ib="0">Off</button>
+                </span></div>
                 <div class="lm-setrow"><span>Stun (frames)</span><input data-k="stun" type="number" min="0" max="120" value="${t.stun}"></div>
                 <div class="lm-setrow"><span>Move cooldown (frames)</span><input data-k="lock" type="number" min="0" max="120" value="${t.lock}"></div>
                 <div class="lm-setrow"><span>Jumps (blank = character default)</span><input data-k="jumps" type="number" min="1" max="10" placeholder="default" value="${t.jumps == null ? '' : t.jumps}"></div>
@@ -236,6 +243,9 @@ export class TrainUI {
         if (this.msg) html += `<p class="lm-status">${esc(this.msg)}</p>`;
         this.body.innerHTML = html;
 
+        this.body.querySelectorAll('[data-ib]').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); ensureTrain().instantBlow = btn.dataset.ib === '1'; applySnap(snap(), true); this.render(); });
+        });
         this.body.querySelectorAll('[data-hz]').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); ensureTrain().hazards = btn.dataset.hz === '1'; applySnap(snap(), true); this.render(); });
         });
