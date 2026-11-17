@@ -84,8 +84,6 @@ export class FighterModel {
         this.trails = {
             blade: mk(base, 2.2), fistR: mk('#e0f2fe', 1.5), fistL: mk('#e0f2fe', 1.5),
             footR: mk(base, 1.8), footL: mk(base, 1.8), body: mk(base, 1.5),
-            // Umbra hat up-melee: yellow catch ribbon (wider than red damage, inside 2× soak range)
-            hatCatch: new Trail(scene, { color: '#fde047', boost: 2.4, max: 36, life: 0.4 }),
         };
         this.trails.body.max = 28;
         if (this.f && this.f.char === 'bulwark') {                       // heavy swings leave a long, bright ribbon
@@ -1398,17 +1396,6 @@ export class FighterModel {
                 T.blade.setColor(this.baseColor, 2.4);
                 T.blade.push(get(this.bladeBaseM), get(this.bladeTipM));
             }
-        }
-        // Umbra hat throw (UG): yellow catch arc — wider than red damage, still inside 2× soak
-        if (f.char === 'umbra' && f.zv === 'UG' && f.attackTimer > 0 && f.activeHitbox && this.uP && this.uP.hat && this.uP.hat.visible) {
-            const hb = f.activeHitbox;
-            const half = Math.max(hb.w, hb.h) * 0.5 * 1.45; // between red size and 2× catch
-            this.uP.hat.updateWorldMatrix(true, false);
-            const c = new THREE.Vector3(); this.uP.hat.getWorldPosition(c);
-            T.hatCatch.setColor('#fde047', 2.6);
-            T.hatCatch.push(new THREE.Vector3(c.x - half, c.y, c.z), new THREE.Vector3(c.x + half, c.y, c.z));
-        } else if (T.hatCatch) {
-            T.hatCatch.cut();
         }
         this._trailTick = (this._trailTick || 0) + 1;
         const footBodyOk = !low || (this._trailTick % 2 === 0);   // Low: 50% of samples
