@@ -37,7 +37,7 @@ let orbSerial = 0, poolSerial = 0;
 const zapTrails = [];               // Volt's Thunder Dash: lingering zigzag lightning that stuns and scrambles the controls of anyone who touches it (host only)
 const pillars = [];                  // Ember's twin fire pillars (host only)
 const SWORD_SCALE = 1.5, SWORD_OFF = 105;     // Bulwark's falling swords are 1.5x as big
-const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
+export const drops = [];                    // falling swords / rocks from Bulwark's and Terra's side specials (host only; guests see them through fx events)
 const ROLL_CHARGE = 72;              // Ember's rolling charge: 1.2 s to full
 const ROLL_AUTO = 30;                // hold full charge 0.5 s → auto release
 const recBuf = { fx: [], p: [], snd: [] };
@@ -666,7 +666,7 @@ class Fighter {
         if (this._wpT > 0) this._wpT--;
         if (this.slowT > 0) this.slowT--;
         if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
-        if (this.cloakT > 0) { if (--this.cloakT === 0) this._edgeBoost = false; } else this._edgeBoost = false;
+        if (this.cloakT > 0) { if (--this.cloakT === 0) { this._edgeBoost = false; this._bsN = 0; } } else { this._edgeBoost = false; this._bsN = 0; }
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.ffT > 0) this.ffT = (this.out || this.stocks <= 0) ? Math.min(this.ffT, 1) - 1 : this.ffT - 1;
@@ -4140,6 +4140,17 @@ function updateDrops() {
                 counterStun(d.owner, bw); continue;
             }
         }
+        if (d.owner) {                                                          // Umbra's melee soaks up a falling sword / rock too (he can throw it back out later)
+            const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== d.owner && foesOf(e).includes(d.owner) &&
+                Math.abs(e.activeHitbox.x - d.x) < e.activeHitbox.w / 2 + d.w / 2 && Math.abs(e.activeHitbox.y - d.y) < e.activeHitbox.h / 2 + d.h / 2);
+            if (um) {
+                const col = d.kind === 'rock' ? '#a8a29e' : '#e2e8f0', rr = d.kind === 'rock' ? 26 : 22;
+                um._ugHit = true;
+                um._stored = { o: { x: d.x, y: d.y, vx: 0, vy: 0, r: rr, charge: 0.3, owner: null, life: 200, color: col, d: d.dmg || 6, R: 45, bkb: d.bkb || 6, kbg: d.kbg || 0.6, grav: d.kind === 'rock' ? WORLD.gravity * 0.55 * 0.85 : 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' }, spd: 19 };
+                um.storedC = col; um.storedR = rr;
+                drops.splice(i, 1); fx('block', d.x, d.y); createParticles(d.x, d.y, col, 10); audio.playParry(); continue;
+            }
+        }
         let up = false;
         const sl = slowAt(d.x, d.y);                                        // clock bubbles slow falling swords and rocks too; they leave 2x faster
         if (sl < 1) d._wasSlow = true; else if (d._wasSlow) { d._wasSlow = false; d._boost = true; fx('block', d.x, d.y); }
@@ -4539,7 +4550,7 @@ function updateOrbs() {
                 Math.abs(e.x - o.x) < e.width / 2 + o.r + 70 && Math.abs(e.y - o.y) < e.height / 2 + o.r + 50);
             if (bw) { reflectOrb(o, bw); continue; }
         }
-        if (o.owner && !o.stuck) {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
+        if (o.owner) {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
             const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
                 Math.abs(e.activeHitbox.x - o.x) < e.activeHitbox.w / 2 + o.r && Math.abs(e.activeHitbox.y - o.y) < e.activeHitbox.h / 2 + o.r);
             if (um) {
@@ -4805,11 +4816,12 @@ function umbraEdge(att, def, hb) {
     const behind = defFace === (att.facing || 1);
     if (!behind) return hb;
     bump(att, 'backstabs');
-    if (att.cloakT > 0) { att._boostWait = true; att._shadowT = 360; att.cloakT = 360; }   // backstab while already invisible: reset the cloak to 6 s, next hit deals 1.5x
-    else { att._shadowT = 300; att.cloakT = 300; }             // first backstab: 1.7x speed and invisible for 5 s
+    if (att.cloakT > 0) { att._bsN = (att._bsN || 0) + 1; att._shadowT = 240; att.cloakT = 240; }   // backstab while still invisible: the cloak resets to 4 s and the chain grows
+    else { att._bsN = 0; att._shadowT = 240; att.cloakT = 240; }             // first backstab: 1.7x speed and invisible for 4 s
+    const chain = Math.pow(1.25, att._bsN || 0);                             // each consecutive backstab (cloak never ran out) hits 1.25x harder and farther than the one before
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
-    return { ...hb, damage: (hb.damage || 0) * 1.4, bkb: (hb.bkb || 0) * 1.2 };
+    return { ...hb, damage: (hb.damage || 0) * 1.4 * chain, bkb: (hb.bkb || 0) * 1.2 * chain, kbg: (hb.kbg || 0) * chain };
 }
 
 let fBadge = null;
