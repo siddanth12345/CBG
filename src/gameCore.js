@@ -589,6 +589,8 @@ class Fighter {
             this.grounded = false;
         }
         this.damage = S.match ? S.match.startDamage : 0;    // custom match: you start AND respawn with the chosen starting damage
+        // Instant Final Blow stays on across stocks/respawns until toggled off (∞% + 7× KB in launch)
+        if (S.instantBlow) this.damage = 200;
         this.dropHeld();
         this.balloon = false; this.maxJumps = trainJumps(this); this.gravT = 0; this.stuckTo = 0; this.sx = null; this.armorT = 0; this.trapId = 0; this.burnT = 0; this.vulnT = 0; this.burnDmg = 3; this.burnBy = null;
         this.jumpsLeft = this.maxJumps;
@@ -655,7 +657,8 @@ class Fighter {
     }
 
     update() {
-        if (S.instantBlow && S.online !== 'guest') this.damage = 200;        // instant final blow: shown as infinity, really held at 200% (and every hit has 7x knockback)
+        // Instant Final Blow: lock at 200% every frame while the setting is on (survives stock loss / respawn)
+        if (S.instantBlow && S.online !== 'guest') this.damage = 200;
         if (this.frozenBot) {                                                // Frozen Bot: pinned where it first stood, no velocity, no stun
             if (this.grounded && !this._fz) this._fz = { x: this.x, y: this.y };
             if (this._fz) { this.x = this._fz.x; this.y = this._fz.y; this.grounded = true; }
@@ -2602,12 +2605,14 @@ class Fighter {
         if (S.instantBlow && S.gameMode === 'training' && !S.match) {      // instant final blow in training: nobody loses a stock, they just come back (in custom matches KOs count normally)
             audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
             this.lastHitBy = null; this.lastHitT = 9999; this.reset(false);
+            if (S.instantBlow) this.damage = 200;
             return;
         }
         if (S.gameMode === 'training') {                      // training: infinite stocks for everyone, nobody wins or loses
             audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
             this.stocks = 3; this.lastHitBy = null; this.lastHitT = 9999;
             this.reset(false);
+            if (S.instantBlow) this.damage = 200;
             return;
         }
 
