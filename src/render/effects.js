@@ -217,9 +217,10 @@ export class Effects {
         }
 
         this.showHB = getHitboxes(); window.addEventListener('cbg-hb', () => { this.showHB = getHitboxes(); });
-        // ---- hitbox boxes (red = attack; white trail = Umbra 2× projectile-catch beyond the hat/melee box)
+        // ---- red = attack; yellow = Umbra 2× catch range (hitboxes on); white trail = same catch (always while attacking)
         this.hbPool = [];
-        this.catchTrail = [];   // fading white catch samples {x,y,w,h,a}
+        this.catchPool = [];
+        this.catchTrail = [];
         this.catchTrailPool = [];
         const hbGeo = new THREE.BoxGeometry(1, 1, 1);
         const hbEdges = new THREE.EdgesGeometry(hbGeo);
@@ -227,10 +228,13 @@ export class Effects {
             const m = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.16, depthWrite: false, blending: ADD, toneMapped: false }));
             m.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75, toneMapped: false })));
             m.visible = false; m.renderOrder = 5; scene.add(m); this.hbPool.push(m);
+            const y = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.18, depthWrite: false, blending: ADD, toneMapped: false }));
+            y.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.85, toneMapped: false })));
+            y.visible = false; y.renderOrder = 4; scene.add(y); this.catchPool.push(y);
         }
-        for (let i = 0; i < 28; i++) {
-            const c = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false, blending: ADD, toneMapped: false }));
-            c.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, toneMapped: false })));
+        for (let i = 0; i < 32; i++) {
+            const c = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false, blending: ADD, toneMapped: false }));
+            c.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, toneMapped: false })));
             c.visible = false; c.renderOrder = 4; scene.add(c); this.catchTrailPool.push(c);
         }
 
@@ -1022,42 +1026,47 @@ export class Effects {
             g.userData.outer.material.opacity = b.alpha * 0.55; g.userData.inner.material.opacity = b.alpha * 0.9;
         }
 
-        // ---- hitboxes (red = damage; white trail = Umbra 2× catch, the zone the hat/melee box doesn't cover alone)
+        // ---- red = damage (hitboxes on); yellow = 2× catch range (hitboxes on); white trail always while Umbra attacks
         fighters.forEach((f, i) => {
             const m = this.hbPool[i], hb = f.activeHitbox; if (!m) return;
+            const yb = this.catchPool[i];
             if (!this.showHB || !hb) {
                 m.visible = false;
-                return;
+            } else {
+                m.visible = true;
+                m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
             }
-            // Attack / damage / knockback box (unchanged size) — hat/melee itself
-            m.visible = true;
-            m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
-            // Umbra: leave a white trail of the 2× catch zone (what the hat hitbox alone doesn't cover)
-            if (f.char === 'umbra' && f.attackTimer > 0) {
-                const last = this.catchTrail[this.catchTrail.length - 1];
+            if (yb) {
+                if (this.showHB && hb && f.char === 'umbra' && f.attackTimer > 0) {
+                    yb.visible = true;
+                    yb.position.set(wx(hb.x), wy(hb.y), 0);
+                    yb.scale.set(hb.w * 2, hb.h * 2, 48);
+                } else yb.visible = false;
+            }
+            // White trail of 2× catch — always while Umbra melee is active (any gfx, hitboxes on or off)
+            if (hb && f.char === 'umbra' && f.attackTimer > 0) {
                 const cx = hb.x, cy = hb.y, cw = hb.w * 2, ch = hb.h * 2;
-                if (!last || Math.hypot(last.x - cx, last.y - cy) > 6) {
-                    this.catchTrail.push({ x: cx, y: cy, w: cw, h: ch, a: 0.55 });
-                    if (this.catchTrail.length > 24) this.catchTrail.shift();
+                const last = this.catchTrail[this.catchTrail.length - 1];
+                if (!last || Math.hypot(last.x - cx, last.y - cy) > 3) {
+                    this.catchTrail.push({ x: cx, y: cy, w: cw, h: ch, a: 0.85 });
+                    if (this.catchTrail.length > 32) this.catchTrail.shift();
                 } else {
-                    last.x = cx; last.y = cy; last.w = cw; last.h = ch; last.a = Math.max(last.a, 0.5);
+                    last.x = cx; last.y = cy; last.w = cw; last.h = ch; last.a = Math.max(last.a, 0.75);
                 }
             }
         });
-        // age + draw white catch trail
         for (let i = this.catchTrail.length - 1; i >= 0; i--) {
-            this.catchTrail[i].a -= 0.045;
+            this.catchTrail[i].a -= 0.03;
             if (this.catchTrail[i].a <= 0) this.catchTrail.splice(i, 1);
         }
-        if (!this.showHB) this.catchTrail.length = 0;
         for (let i = 0; i < this.catchTrailPool.length; i++) {
             const mesh = this.catchTrailPool[i], s = this.catchTrail[i];
             if (!s) { mesh.visible = false; continue; }
             mesh.visible = true;
             mesh.position.set(wx(s.x), wy(s.y), 0);
             mesh.scale.set(s.w, s.h, 40);
-            mesh.material.opacity = 0.08 + s.a * 0.2;
-            if (mesh.children[0] && mesh.children[0].material) mesh.children[0].material.opacity = 0.25 + s.a * 0.5;
+            mesh.material.opacity = 0.2 + s.a * 0.35;
+            if (mesh.children[0] && mesh.children[0].material) mesh.children[0].material.opacity = 0.45 + s.a * 0.5;
         }
 
         // ---- core orbs in flight
