@@ -1301,9 +1301,14 @@ class Fighter {
             }
             if (!sp.ghost) fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
             else {                                                         // Shadow Flight leaves a purple trail and dust clouds
-                fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
-                createParticles(this.x, this.y, '#a855f7', 3); createParticles(this.x, this.y + 6, '#7e22ce', 2);
-                if (x.t % 3 === 0) { createParticles(this.x + (Math.random() - 0.5) * 30, this.y + (Math.random() - 0.5) * 30, '#9ca3af', 3); fx('explosion', this.x, this.y, 30 + Math.random() * 26, 0.1, 'dark'); }
+                if (lowGfx()) {
+                    // Low: almost no stars / dust — a rare thin trail only
+                    if (x.t % 10 === 0) createParticles(this.x, this.y, '#a855f7', 1);
+                } else {
+                    fx('trail', this.x, this.y, Math.round(x.ang * 100) / 100, 0, STYLE_OF[this.char]);
+                    createParticles(this.x, this.y, '#a855f7', 3); createParticles(this.x, this.y + 6, '#7e22ce', 2);
+                    if (x.t % 3 === 0) { createParticles(this.x + (Math.random() - 0.5) * 30, this.y + (Math.random() - 0.5) * 30, '#9ca3af', 3); fx('explosion', this.x, this.y, 30 + Math.random() * 26, 0.1, 'dark'); }
+                }
             }
             if (x.t >= sp.frames) {
                 if (sp.ghost) {                                     // ended inside the stage: surface on top of it

@@ -452,7 +452,8 @@ export class Effects {
                     const force = e.a || 10, ang = -e.b; // sim y is flipped
                     this.star(pos, 30 + force * 1.8, '#fde68a', 0.2);
                     this.ring(pos, 6, 38 + force * 1.6, 0.3, '#fbbf24', 'screen');
-                    if (!lowGfx()) { this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8); this.sparks(pos, '#ffffff', 6, 200, 0.2); }
+                    if (lowGfx()) this.sparks(pos, '#ffffff', 5, 180, 0.18);   // Low: only ~5 hit sparks
+                    else { this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8); this.sparks(pos, '#ffffff', 6, 200, 0.2); }
                     break;
                 }
                 case 'block':
