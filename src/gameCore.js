@@ -507,6 +507,7 @@ class Fighter {
         this.zLeap = null;           // Zephyr's leap, applied when the wind-up ends (after any charge)
         this.zLock = 0;              // frame of the swing at which he staggers / lies down (0 = never)
         this.zLockN = 0;             // ... for this many frames
+        this.zSlide = 0;             // post T/K follow-through: actions locked, velocity kept (smooth coast)
         this.ffT = 0;                // frames left of the final-blow flight: it leaves a trail of wide air rings
         this.atkN = 18;              // length of the current melee in frames (Bulwark's Up / Down / Side melees are 60: a very slow wind-up, then the fast swing)
         this.throwFxT = 0;
@@ -566,7 +567,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.hangTimer = 0;
         this.ledgeBan = 0;
-        this.haltT = 0; this.haltElapsed = 0;   // Ember post-roll slowdown (0.7 s)
+        this.haltT = 0; this.haltElapsed = 0; this.zSlide = 0;   // Ember post-roll slowdown (0.7 s)
         this.specialKind = null;             // presentation: 'CORE' | 'SPIRAL' | 'SUPLEX' | 'HEADBUTT'
         this.specialT = 0;
         this.specialDur = 0;
@@ -630,11 +631,11 @@ class Fighter {
         return this.actionLock > 0 || this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 ||
             this.freezeTimer > 0 || this.isRolling || this.isHanging || !!this.grabbedBy || !!this.grabHolding ||
             this.isShielding || this.fActive || this.spiralT > 0 || this.suplexT > 0 || this.diving || !!this.sx ||
-            this.haltT > 0;   // Ember post-roll halt: no attacks/specials/shield
+            this.haltT > 0 || this.zSlide > 0;   // Ember post-roll / melee follow-through: no attacks
     }
     canShield() {
         return this.actionLock <= 0 && !this.attackHeld && !this.fActive && this.spiralT === 0 && this.suplexT === 0 && !this.diving && !this.sx &&
-            !this.isRolling && this.freezeTimer === 0 && this.haltT <= 0;
+            !this.isRolling && this.freezeTimer === 0 && this.haltT <= 0 && this.zSlide <= 0;
     }
     setMove(type, frames) { this.activeMove = { type, t: frames }; }
 
@@ -725,6 +726,13 @@ class Fighter {
             this.vx = this.haltV / (this.grounded ? WORLD.friction : WORLD.airFriction);   // friction is applied later: compensate so the slide distance is exact
             if (this.haltT === 0) this.haltV = 0;
             if (!lowGfx() && this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust (off on Low)
+        }
+        // Melee T/K follow-through: keep current velocity (forward or back), light coast, no freeze
+        if (this.zSlide > 0) {
+            this.zSlide--;
+            // slightly less friction so the leap continues smoothly in the direction it was going
+            if (this.grounded) this.vx *= 1.02; // compensate a bit of ground friction applied later
+            else this.vx *= 1.01;
         }
         if (this.trapId) {
             if (orbs.some(o => o.id === this.trapId)) {
@@ -1072,7 +1080,12 @@ class Fighter {
             st = i >= 0 ? sw.stages[i] : null;
         }
         if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable)) { const l = this.zLeap; this.zLeap = null; if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy); this.vx = l.vx; }
-        if (this.zLock && e >= this.zLock) { this.freezeTimer = Math.max(this.freezeTimer, this.zLockN); this.zLock = 0; this.vx *= 0.3; }      // Zephyr's stagger / stumble
+        // T / K (all chars): follow-through keeps leap velocity — no freeze, mild action lock only
+        if (this.zLock && e >= this.zLock) {
+            this.zSlide = Math.max(this.zSlide || 0, this.zLockN);
+            this.actionLock = Math.max(this.actionLock, this.zLockN);
+            this.zLock = 0;
+        }
         if (this.swingHit || e < sw.a || e > sw.b || (sw.stages && !st)) {
             this.activeHitbox = null;
             return;
@@ -2486,7 +2499,7 @@ class Fighter {
         this.attackTimer = this.atkN = bw ? BW_MELEE : ATTACK_FRAMES;
         this.swing = bw ? SWING['BW_' + kind] : (kind === 'JAB' && (this.char === 'luminent' || this.char === 'umbra' || this.char === 'volt')) ? SWING.JABR : SWING[kind];
         this.airDown = aimDirection === 'DOWN' && !this.grounded;
-        this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zLeap = null; this._stg = -1;
+        this.zv = zv; this.zLock = 0; this.zLockN = 0; this.zSlide = 0; this.zLeap = null; this._stg = -1;
         this._kFlip = (zv === 'K' && this === p1 && mouse.touchMode) ? zdir : 0;           // touch controls have no mouse to turn towards: after a backwards attack you end up facing the way you aimed
         if (mv) {
             this.swing = SWING['M_' + this.char + '_' + zv + '_' + zdir];
