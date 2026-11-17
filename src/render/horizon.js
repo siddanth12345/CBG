@@ -117,8 +117,12 @@ export function buildHorizon(scene, { D }) {
         b.position.y = yy - th / 2; b.castShadow = true; body.add(b);
         yy -= th; ww *= 0.72;
     }
-    const keelGeo = new THREE.CylinderGeometry(0.5, 0.06, 1, 6, 1); keelGeo.rotateY(Math.PI / 6);
-    const keel = new THREE.Mesh(keelGeo, mDark); keel.scale.set(ww * 1.15, Math.max(200, H * 3.4), D * 0.7); keel.position.y = yy - keel.scale.y / 2; keel.castShadow = true; body.add(keel);
+    // Keel (inverted triangle) matches Frontier size: full-stage width × fixed height (small→small, big→big via W)
+    const keelGeo = new THREE.CylinderGeometry(0.5, 0.07, 1, 4, 1); keelGeo.rotateY(Math.PI / 4);
+    const keel = new THREE.Mesh(keelGeo, mDark);
+    keel.scale.set(W * 0.96, 320, D * 0.9);
+    keel.position.y = topY - H - 160;
+    keel.castShadow = true; body.add(keel);
     const colMat = mMarble;
     for (let i = 0; i < 5; i++) {
         const h = 90 + R() * 150, r = 9 + R() * 7;
@@ -392,17 +396,25 @@ export function buildHorizon(scene, { D }) {
                 y -= sc.h; gi += sc.rows;
             }
         }
-        {   // the stone keel under the stage is cut along the same lines: each piece carries its own slice of it, clipped by two planes that follow the piece as it drifts
+        {   // Keel slice: same Frontier-sized triangle, clipped to this piece so the cut face is clean (no shape shift)
             const kc = keel.clone(); kc.material = keel.material.clone(); kc.material.side = THREE.DoubleSide; kc.material.clipShadows = true;
             const mid2 = ((fr[k] + fr[k + 1]) / 2 - 0.5) * W;
             kc.position.x = -mid2; kc.castShadow = true;
             const cps = [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0), new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)]; kc.material.clippingPlanes = cps;
             g.userData.cps = cps; g.userData.xl = k > 0 ? (fr[k] - 0.5) * W : -1e6; g.userData.xr = k < n - 1 ? (fr[k + 1] - 0.5) * W : 1e6; g.add(kc);
         }
+        // Hanging columns under the slab: stay fully inside the piece so nothing sticks past a cut edge
         const rr = rng(Math.round(fr[k] * 1000) + 5);
         for (let i = 0, nc = Math.max(1, Math.round(pw / W * 5)); i < nc; i++) {
-            const h = 90 + rr() * 150, r = 9 + rr() * 7, c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), mMarble);
-            c.position.set((i + 0.5 - nc / 2) * (pw * 0.8 / nc) + (rr() - 0.5) * 24, topY - H - 12 - h / 2, (rr() - 0.5) * 100); c.rotation.z = (rr() - 0.5) * 0.12; c.castShadow = true; g.add(c);
+            const h = 90 + rr() * 150, r = 9 + rr() * 7;
+            let cxp = (i + 0.5 - nc / 2) * (pw * 0.8 / nc) + (rr() - 0.5) * 24;
+            const margin = r + 6;
+            const maxX = Math.max(0, pw / 2 - margin);
+            if (maxX < 4) continue;                         // piece too narrow for a column
+            cxp = Math.max(-maxX, Math.min(maxX, cxp));
+            const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, h, 12), mMarble);
+            c.position.set(cxp, topY - H - 12 - h / 2, (rr() - 0.5) * 100);
+            c.rotation.z = (rr() - 0.5) * 0.12; c.castShadow = true; g.add(c);
         }
         g.userData.mid = (fr[k] + fr[k + 1]) / 2 - 0.5; root.add(g); return g;
     }
