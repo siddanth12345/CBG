@@ -3,6 +3,9 @@ const KEY = 'cbg.gfx';
 export const getGfx = () => { try { const v = localStorage.getItem(KEY); return ['auto', 'low', 'medium', 'high'].includes(v) ? v : 'auto'; } catch (e) { return 'auto'; } };
 export function setGfx(v) { try { localStorage.setItem(KEY, v); } catch (e) { /* blocked */ } window.dispatchEvent(new CustomEvent('cbg-gfx')); }
 
+/** Low quality setting only (not Auto, even when Auto drops resolution). */
+export const lowGfx = () => getGfx() === 'low';
+
 // Show the red attack hitboxes (off by default), remembered on this device.
 const HKEY = 'cbg.hitboxes';
 export const getHitboxes = () => { try { return localStorage.getItem(HKEY) === '1'; } catch (e) { return false; } };

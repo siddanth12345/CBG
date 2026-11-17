@@ -11,6 +11,7 @@ import { S, viewerFighter, BW_MELEE } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, seg, D2R } from './space.js';
 import { buildDecor, tickDecor, disposeDecor } from './charDecor.js';
 import { Trail } from './trail.js';
+import { lowGfx } from '../gfx.js';
 import { buildSword } from './swordModel.js';
 
 const BLADE_LEN = 40;
@@ -1310,7 +1311,7 @@ export class FighterModel {
 
     /** Effects of the Bulwark melees: a bright crescent on the fast part, sparks while the point drags the floor, a shock ring on the slam. */
     #bwAttackFx(a, dt) {
-        const fx = this.fx; if (!fx) return;
+        const fx = this.fx; if (!fx || lowGfx()) return;   // Low: the sword pose is enough; skip drag sparks and slam dust
         const f = this.f, fr = a.fr, col = this.baseColor, fired = this.firedAtk;
         const once = (key, c) => { if (!fired[key] && c) { fired[key] = true; return true; } return false; };
         if (this.bwDrag && a.kind !== 'UP' && fr < 52) {                                         // grinding along the ground
@@ -1327,7 +1328,7 @@ export class FighterModel {
 
     // ============================================================ effects tied to the animation
     #attackFx(a, dt) {
-        const fx = this.fx; if (!fx) return;
+        const fx = this.fx; if (!fx || lowGfx()) return;   // Low: skip the extra slash sparks (the swing itself still shows)
         const f = this.f;
         const u = a.u;
         const fired = this.firedAtk;
@@ -1383,6 +1384,7 @@ export class FighterModel {
         const f = this.f;
         const T = this.trails;
         const get = (o) => o.getWorldPosition(new THREE.Vector3());
+        if (lowGfx()) return;   // Low: no blade, foot, or body particle ribbons
 
         // blade (slashes, uppercut, lunge)
         if (this.bwOn && this.bwTipM && this.bwFr >= 38 && this.bwFr <= 56) {                       // the great sword leaves a long ribbon on its fast part

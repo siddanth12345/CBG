@@ -2,7 +2,7 @@
 // drawn here in 3D, the `fxEvents` it emits become sparks, flashes and rings, and
 // animation-driven effects (slash crescents, punch rings, dash ghosts) are spawned by
 // the fighter models through the small API at the bottom of this class.
-import { getReduceFlash } from '../gfx.js';
+import { getReduceFlash, lowGfx } from '../gfx.js';
 import * as THREE from 'three';
 import { S, p1, fighters, particles, shockwaves, koBeams, fxEvents, mouse, orbs, CHARGE_MAX, BLAST_ZONES } from '../gameCore.js';
 import { wx, wy, clamp01, lerp, smooth, D2R } from './space.js';
@@ -452,30 +452,27 @@ export class Effects {
                     const force = e.a || 10, ang = -e.b; // sim y is flipped
                     this.star(pos, 30 + force * 1.8, '#fde68a', 0.2);
                     this.ring(pos, 6, 38 + force * 1.6, 0.3, '#fbbf24', 'screen');
-                    this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8);
-                    this.sparks(pos, '#ffffff', 6, 200, 0.2);
+                    if (!lowGfx()) { this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8); this.sparks(pos, '#ffffff', 6, 200, 0.2); }
                     break;
                 }
                 case 'block':
                     this.ring(pos, 10, 62, 0.28, '#22d3ee', 'screen');
-                    this.star(pos, 34, '#a5f3fc', 0.14, 4);
-                    this.sparks(pos, '#67e8f9', 8, 200, 0.25);
+                    if (!lowGfx()) { this.star(pos, 34, '#a5f3fc', 0.14, 4); this.sparks(pos, '#67e8f9', 8, 200, 0.25); }
                     break;
                 case 'grab':
                     this.ring(pos, 6, 54, 0.3, '#ef4444', 'screen');
-                    this.star(pos, 40, '#fecaca', 0.16);
-                    this.sparks(pos, '#f87171', 12, 240, 0.3);
+                    if (!lowGfx()) { this.star(pos, 40, '#fecaca', 0.16); this.sparks(pos, '#f87171', 12, 240, 0.3); }
                     break;
                 case 'clash':
                     this.star(pos, 190, '#ffffff', 0.34);
-                    this.star(pos, 120, '#7dd3fc', 0.46, 4);
                     this.ring(pos, 10, 260, 0.5, '#38bdf8', 'screen');
-                    this.sparks(pos, '#e0f2fe', 36, 520, 0.6);
+                    if (!lowGfx()) { this.star(pos, 120, '#7dd3fc', 0.46, 4); this.sparks(pos, '#e0f2fe', 36, 520, 0.6); }
                     break;
                 case 'stomp': {          // a = width of the shockwave, b = facing (0 = both ways)
                     const w = e.a || 250, gy0 = String(e.c || '').includes('@') ? pos.y : this.stageTop, g = new THREE.Vector3(pos.x, gy0 + 1, 0), P = pal(e.c);
                     this.ring(g, 6, w * 0.55, 0.38, P[0], 'ground');
                     this.ring(g.clone().setY(gy0 + 2), 4, w * 0.3, 0.3, '#ffffff', 'ground');
+                    if (!lowGfx()) {
                     const dirs = e.b ? [e.b] : [-1, 1];
                     for (const d of dirs) {
                         for (let i = 0; i < 8; i++) {
@@ -484,10 +481,12 @@ export class Effects {
                         }
                     }
                     this.star(g.clone().setY(gy0 + 20), 70, '#ffffff', 0.16);
+                    }
                     break;
                 }
                 case 'blink': {          // a, b = destination
                     const to = new THREE.Vector3(wx(e.a), wy(e.b), 0);
+                    if (lowGfx()) { this.ring(pos, 4, 60, 0.3, '#a78bfa', 'screen'); this.ring(to, 4, 74, 0.32, '#c4b5fd', 'screen'); break; }
                     this.star(pos, 70, '#c4b5fd', 0.2, 4);
                     this.ring(pos, 4, 60, 0.3, '#a78bfa', 'screen');
                     this.sparks(pos, '#ddd6fe', 14, 260, 0.3);
@@ -508,12 +507,12 @@ export class Effects {
                     }
                     g.renderOrder = 6; this.scene.add(g);
                     this.timed.push({ obj: g, t: 0, dur: 0.4, step: (u) => { const fl = 0.65 + 0.35 * Math.random(); for (const m of mats) m.opacity = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * fl; }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } });
-                    for (let i = 0; i <= n; i++) this.sparks(pts[i], '#93c5fd', 3, 160, 0.4);
+                    if (!lowGfx()) for (let i = 0; i <= n; i++) this.sparks(pts[i], '#93c5fd', 3, 160, 0.4);
                     break;
                 }
                 case 'spiral':
                     this.ring(pos, 10, 90, 0.26, '#8b5cf6', 'screen');
-                    this.sparks(pos, '#c4b5fd', 8, 240, 0.3);
+                    if (!lowGfx()) this.sparks(pos, '#c4b5fd', 8, 240, 0.3);
                     break;
                 case 'core':             // cast flash. a = charge
                     this.star(pos, 50 + 60 * e.a, '#e9d5ff', 0.18);
@@ -522,10 +521,8 @@ export class Effects {
                 case 'explosion': {      // a = radius, b = charge
                     const R = e.a || 100, P = pal(e.c);
                     this.star(pos, R * 1.5, '#ffffff', 0.3);
-                    this.star(pos, R * 1.1, P[0], 0.42, 4);
                     this.ring(pos, 10, R * 1.15, 0.45, P[0], 'screen');
-                    this.ring(pos, 6, R * 0.7, 0.3, '#ffffff', 'screen');
-                    this.sparks(pos, P[1], 18 + Math.floor(26 * e.b), 300 + R * 3, 0.55);
+                    if (!lowGfx()) { this.star(pos, R * 1.1, P[0], 0.42, 4); this.ring(pos, 6, R * 0.7, 0.3, '#ffffff', 'screen'); this.sparks(pos, P[1], 18 + Math.floor(26 * e.b), 300 + R * 3, 0.55); }
                     break;
                 }
                 case 'pillar': {         // a = width, b = height, c = style (a trailing ! = the eruption itself; without it only the warning swell)
@@ -563,13 +560,13 @@ export class Effects {
                         const line = new THREE.Line(geo, mat); line.renderOrder = 5; this.scene.add(line);
                         this.timed.push({ obj: line, t: 0, dur: 0.9, step: (u) => { mat.opacity = 1 - u * u; }, free: () => { geo.dispose(); mat.dispose(); } });
                     }
-                    for (let i = 0; i < 14; i++) this.sparks(new THREE.Vector3(pos.x + (Math.random() - 0.5) * w * 1.2, y + 4, (Math.random() - 0.5) * 80), '#a8a29e', 2, 140, 0.8, 'up');
+                    if (!lowGfx()) for (let i = 0; i < 14; i++) this.sparks(new THREE.Vector3(pos.x + (Math.random() - 0.5) * w * 1.2, y + 4, (Math.random() - 0.5) * 80), '#a8a29e', 2, 140, 0.8, 'up');
                     break;
                 }
                 case 'gust': {           // wind ring; b = 1 means it pulls inward
                     const P = pal(e.c), R = e.a || 120;
                     if (e.b) { this.ring(pos, R * 1.1, 10, 0.4, P[0], 'screen'); this.ring(pos, R * 0.7, 6, 0.32, P[1], 'screen'); }
-                    else { this.ring(pos, 10, R, 0.4, P[0], 'screen'); this.ring(pos, 6, R * 0.6, 0.3, P[1], 'screen'); this.sparks(pos, P[1], 14, R * 2, 0.45); }
+                    else { this.ring(pos, 10, R, 0.4, P[0], 'screen'); if (!lowGfx()) { this.ring(pos, 6, R * 0.6, 0.3, P[1], 'screen'); this.sparks(pos, P[1], 14, R * 2, 0.45); } }
                     break;
                 }
                 case 'whirlpool': {       // lasting water spiral on the ground; a = radius, b = life frames
@@ -712,6 +709,7 @@ export class Effects {
                 }
                 case 'helixend': { const en = this._byId && this._byId.get('hx' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.3); break; }
                 case 'trail': {          // a = travel angle (sim), b = 1 for a dash streak
+                    if (lowGfx()) break;
                     const P = pal(e.c), wa = -(e.a || 0);
                     this.spray(pos, wa + Math.PI, P[Math.random() < 0.5 ? 0 : 1], e.b ? 3 : 4, 160, 0.5, 0.3);
                     this.star(pos, e.b ? 40 : 52, P[1], 0.12, 4);
@@ -778,34 +776,33 @@ export class Effects {
                 }
                 case 'rocket': {
                     const P = pal(e.c);
-                    this.ring(pos, 6, 90, 0.35, P[0], 'screen'); this.star(pos, 110, P[1], 0.22); this.sparks(pos, P[1], 20, 380, 0.5);
+                    this.ring(pos, 6, 90, 0.35, P[0], 'screen'); this.star(pos, 110, P[1], 0.22); if (!lowGfx()) this.sparks(pos, P[1], 20, 380, 0.5);
                     break;
                 }
                 case 'counter':
                     this.ring(pos, 8, 80, 0.3, '#f472b6', 'screen');
-                    this.star(pos, 70, '#ffffff', 0.15, 4);
-                    this.sparks(pos, '#f9a8d4', 12, 260, 0.3);
+                    if (!lowGfx()) { this.star(pos, 70, '#ffffff', 0.15, 4); this.sparks(pos, '#f9a8d4', 12, 260, 0.3); }
                     break;
                 case 'kick':             // knocked off a ledge. a = side
                     this.ring(pos, 6, 60, 0.3, '#f59e0b', 'screen');
-                    this.sparks(pos, '#fbbf24', 14, 260, 0.35);
+                    if (!lowGfx()) this.sparks(pos, '#fbbf24', 14, 260, 0.35);
                     break;
                 case 'heal':
                     this.ring(pos, 10, 90, 0.5, '#4ade80', 'screen');
-                    this.sparks(pos, '#86efac', 14, 200, 0.7, 'up');
+                    if (!lowGfx()) this.sparks(pos, '#86efac', 14, 200, 0.7, 'up');
                     break;
                 case 'pickup':
                     this.ring(pos, 6, 54, 0.35, '#fde68a', 'screen');
-                    this.sparks(pos, '#ffffff', 8, 180, 0.35);
+                    if (!lowGfx()) this.sparks(pos, '#ffffff', 8, 180, 0.35);
                     break;
                 case 'burn':
                     if (e.c === 'blood') {
-                        this.balls(pos, '#7f1d1d', 8, 70, 0.85);
-                        this.balls(pos, '#450a0a', 5, 40, 1.05);
+                        this.balls(pos, '#7f1d1d', lowGfx() ? 3 : 8, 70, 0.85);
+                        if (!lowGfx()) this.balls(pos, '#450a0a', 5, 40, 1.05);
                         break;
                     }
                     this.star(pos, 60, '#fb923c', 0.2, 4);
-                    this.sparks(pos, '#f97316', 12, 260, 0.5, 'up');
+                    if (!lowGfx()) this.sparks(pos, '#f97316', 12, 260, 0.5, 'up');
                     break;
                 case 'bubble':             // a = radius
                     this.ring(pos, 20, e.a || 760, 0.8, '#38bdf8', 'screen');
@@ -814,8 +811,7 @@ export class Effects {
                 case 'ko':
                     this.star(pos, 260, '#ffffff', 0.45);
                     this.ring(pos, 10, 380, 0.7, '#f87171', 'screen');
-                    this.sparks(pos, '#fbbf24', 40, 600, 0.8);
-                    this.sparks(pos, '#ffffff', 24, 800, 0.6);
+                    if (!lowGfx()) { this.sparks(pos, '#fbbf24', 40, 600, 0.8); this.sparks(pos, '#ffffff', 24, 800, 0.6); }
                     break;
             }
         }
@@ -969,9 +965,9 @@ export class Effects {
         this.sMesh.instanceMatrix.needsUpdate = true;
         if (this.sMesh.instanceColor) this.sMesh.instanceColor.needsUpdate = true;
 
-        // ---- ghosts
+        // ---- ghosts (afterimages). Low drops them.
         n = 0;
-        for (const f of fighters) {
+        if (!lowGfx()) for (const f of fighters) {
             for (const g of f.ghosts) {
                 if (n >= this.MAXG) break;
                 V.set(wx(g.x), wy(g.y), -2); Sc.set(1, 1, 0.55);
