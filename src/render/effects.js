@@ -380,7 +380,7 @@ export class Effects {
         count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
+            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
             let a = Math.random() * Math.PI * 2;
             if (dir === 'up') a = Math.PI / 2 + (Math.random() - 0.5) * 2.4;
             if (dir === 'down') a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
@@ -396,7 +396,7 @@ export class Effects {
         count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
+            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
             const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.15;
             const s = speed * (0.35 + Math.random() * 0.7);
             this.sparks_.push({
@@ -412,7 +412,7 @@ export class Effects {
         count = Math.ceil(count * (S.fxLod || 1));
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.MAXS) this.sparks_.shift();
+            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
             const a = angle + (Math.random() - 0.5) * spread;
             const s = speed * (0.4 + Math.random() * 0.9);
             this.sparks_.push({
@@ -444,8 +444,12 @@ export class Effects {
     clearEvents() { fxEvents.length = 0; }
 
     #consumeEvents() {
-        while (fxEvents.length) {
-            const e = fxEvents.shift();
+        // No Array.shift() — O(n²) drains caused late-match lag when events piled up
+        const queue = fxEvents;
+        if (queue.length > 100) queue.splice(0, queue.length - 100);
+        const nEv = queue.length;
+        for (let ei = 0; ei < nEv; ei++) {
+            const e = queue[ei];
             const pos = new THREE.Vector3(wx(e.x), wy(e.y), 0);
             switch (e.type) {
                 case 'hit': {
@@ -817,6 +821,7 @@ export class Effects {
                     break;
             }
         }
+        queue.length = 0;
     }
 
     #paintOrb(g, r, color, strength) {
@@ -872,12 +877,12 @@ export class Effects {
         mesh.count = n;
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-        if (Math.random() < 0.85) {
+        if (Math.random() < (lowGfx() ? 0.12 : 0.35)) {
             const i = Math.floor(Math.random() * n);
             const e = new THREE.Matrix4();
             mesh.getMatrixAt(i, e);
             const p = new THREE.Vector3().setFromMatrixPosition(e);
-            this.sparks(p, Math.random() < 0.6 ? '#fb923c' : '#fde047', 2, 80, 0.4);
+            this.sparks(p, Math.random() < 0.6 ? '#fb923c' : '#fde047', lowGfx() ? 1 : 2, 80, 0.35);
         }
     }
 

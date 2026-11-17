@@ -46,7 +46,15 @@ for (const n of ['playF', 'playJump', 'playDash', 'playHit', 'playGrab', 'playTh
     const orig = audio[n] && audio[n].bind(audio); if (!orig) continue;
     audio[n] = (...args) => { if (S.gameState === 'playing' && !S.replay && recBuf.snd.length < 40) recBuf.snd.push([n, ...args]); return orig(...args); };     // remembered for the replay
 }
-function fx(type, x, y, a = 0, b = 0, c = 0) { fxEvents.push({ type, x, y, a, b, c }); if (S.gameState === 'playing' && !S.replay && recBuf.fx.length < 80) recBuf.fx.push([type, x, y, a, b, c]); if (S.online === 'host') outbox.push({ k: 'f', e: [type, x, y, a, b, c] }); }
+function fx(type, x, y, a = 0, b = 0, c = 0) {
+    if (fxEvents.length > 200) fxEvents.splice(0, fxEvents.length - 100);
+    fxEvents.push({ type, x, y, a, b, c });
+    if (S.gameState === 'playing' && !S.replay && recBuf.fx.length < 80) recBuf.fx.push([type, x, y, a, b, c]);
+    if (S.online === 'host') {
+        if (outbox.length > 400) outbox.splice(0, outbox.length - 200);
+        outbox.push({ k: 'f', e: [type, x, y, a, b, c] });
+    }
+}
 
 const WORLD = {
     width: 3800,
@@ -961,14 +969,17 @@ class Fighter {
             return;
         }
 
-        // Low: drop ghosts. Medium: almost instant fade. High / Auto: normal fade.
+        // Low: drop ghosts. Medium: almost instant fade. High / Auto: normal fade. Cap list length.
         {
+            if (this.ghosts.length > 10) this.ghosts.splice(0, this.ghosts.length - 10);
             const gq = getGfx();
             const fade = gq === 'low' ? 1 : gq === 'medium' ? 0.4 : 0.05;
-            for (let i = this.ghosts.length - 1; i >= 0; i--) {
+            let w = 0;
+            for (let i = 0; i < this.ghosts.length; i++) {
                 this.ghosts[i].alpha -= fade;
-                if (this.ghosts[i].alpha <= 0) this.ghosts.splice(i, 1);
+                if (this.ghosts[i].alpha > 0) this.ghosts[w++] = this.ghosts[i];
             }
+            this.ghosts.length = w;
         }
 
         if (this.isShielding) {
@@ -3302,9 +3313,12 @@ function dripBlood(x, y) {
 }
 function createParticles(x, y, color, count = 10) {
     if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 60) recBuf.p.push([x, y, color, count]);
-    if (S.online === 'host') outbox.push({ k: 'p', e: [x, y, color, count] });
+    if (S.online === 'host') {
+        if (outbox.length > 400) outbox.splice(0, outbox.length - 200);
+        outbox.push({ k: 'p', e: [x, y, color, count] });
+    }
     // hard cap so ledge thrash / KO spam can't melt the frame rate
-    const room = Math.max(0, Math.round(220 * (S.fxLod || 1)) - particles.length);
+    const room = Math.max(0, Math.round(160 * (S.fxLod || 1)) - particles.length);
     count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
         particles.push({
@@ -5706,16 +5720,17 @@ export function step() {
         }
     }
 
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        if (p.drip) { p.vy += 0.42; p.vx *= 0.98; }
-        p.x += p.vx;
-        p.y += p.vy;
-        p.z += p.vz;
-        p.alpha -= p.drip ? 0.028 : 0.04;
-        if (p.alpha <= 0) {
-            particles.splice(i, 1);
+    // Compact dead particles in one pass (no per-item splice → avoids O(n²) late-match lag)
+    {
+        let w = 0;
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            if (p.drip) { p.vy += 0.42; p.vx *= 0.98; }
+            p.x += p.vx; p.y += p.vy; p.z += p.vz;
+            p.alpha -= p.drip ? 0.028 : 0.04;
+            if (p.alpha > 0) particles[w++] = p;
         }
+        particles.length = w;
     }
 
     for (let i = koBeams.length - 1; i >= 0; i--) {
