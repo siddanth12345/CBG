@@ -767,6 +767,7 @@ export class Effects {
                     break;
                 }
                 case 'ember': {          // a = side the fire trails to (sign), b = charge: a short-lived flame left on the ground
+                    if (lowGfx()) break;
                     const cc = e.b || 0, size = 22 + 16 * cc;
                     const m = new THREE.Mesh(new THREE.ConeGeometry(size * 0.55, size * 2, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fb923c').multiplyScalar(1.8), transparent: true, opacity: 0.9, blending: ADD, depthWrite: false, toneMapped: false }));
                     m.position.set(pos.x, pos.y + size * 0.8, 1); m.renderOrder = 5; this.scene.add(m);
@@ -1136,8 +1137,6 @@ export class Effects {
                     g.rotation.x += dt * 8 * dir;
                     g.scale.set(r * 1.08, r * 0.9, r);
                 }
-                // fire: rises when still, is swept into a trail when the ball moves, white then smooth blue
-                this.flames.feed(i, g.position, r * 0.8, c, (f.vx || 0) * 60, -(f.vy || 0) * 60, dt, f.sx.ph === 'charge');
                 // the magma shell burns away as the white fire takes over, and the blue phase is one smooth fireball
                 const burn = Math.max(0, Math.min(1, (c - 0.3) / 0.45));
                 u.magmaRock.scale.setScalar(1 - 0.5 * burn * burn);
@@ -1149,12 +1148,15 @@ export class Effects {
                 u.magmaHalo.material.color.set('#2f8cff').multiplyScalar(1.1);
                 u.magmaHalo.material.opacity = bT * 0.7;
                 u.magmaHalo.scale.setScalar((1.2 + 0.25 * bT) * (1 + Math.sin(this.chargeT * 9) * 0.025));
-                // sparks match phase
-                const sparkCol = bT > 0.4 ? '#7dd3fc' : (wT > 0.4 ? '#f8fafc' : '#fb923c');
-                if (Math.random() < 0.3) this.sparks(g.position.clone(), sparkCol, 1, 120 + 80 * c, 0.28);
-                if (f.sx.ph === 'charge' && Math.random() < 0.4 + c * 0.4) {
-                    const a = Math.random() * 6.28;
-                    this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2, 0)), a + Math.PI, sparkCol, 1, 360, 0.1, 0.16);
+                // sparks / fire trail — heavy cost; off on Low (ball mesh is enough)
+                if (!lowGfx()) {
+                    this.flames.feed(i, g.position, r * 0.8, c, (f.vx || 0) * 60, -(f.vy || 0) * 60, dt, f.sx.ph === 'charge');
+                    const sparkCol = bT > 0.4 ? '#7dd3fc' : (wT > 0.4 ? '#f8fafc' : '#fb923c');
+                    if (Math.random() < 0.3) this.sparks(g.position.clone(), sparkCol, 1, 120 + 80 * c, 0.28);
+                    if (f.sx.ph === 'charge' && Math.random() < 0.4 + c * 0.4) {
+                        const a = Math.random() * 6.28;
+                        this.spray(g.position.clone().add(new THREE.Vector3(Math.cos(a) * r * 1.2, Math.sin(a) * r * 1.2, 0)), a + Math.PI, sparkCol, 1, 360, 0.1, 0.16);
+                    }
                 }
                 return;
             }

@@ -673,7 +673,7 @@ class Fighter {
         if (this._kcInv > 0) this._kcInv--;
         if (this._wpT > 0) this._wpT--;
         if (this.slowT > 0) this.slowT--;
-        if (this.soakT > 0) { this.soakT--; if (this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
+        if (this.soakT > 0) { this.soakT--; if (!lowGfx() && this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
         if (this.cloakT > 0) { if (--this.cloakT === 0) { this._edgeBoost = false; this._bsN = 0; } } else { this._edgeBoost = false; this._bsN = 0; }
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
@@ -716,7 +716,7 @@ class Fighter {
             this.haltV = (this.haltV || 0) * (this.haltK || 0.88);
             this.vx = this.haltV / (this.grounded ? WORLD.friction : WORLD.airFriction);   // friction is applied later: compensate so the slide distance is exact
             if (this.haltT === 0) this.haltV = 0;
-            if (this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust
+            if (!lowGfx() && this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust (off on Low)
         }
         if (this.trapId) {
             if (orbs.some(o => o.id === this.trapId)) {
@@ -1135,7 +1135,7 @@ class Fighter {
                     }
                 }
                 for (const t of this._carry) if (isAlive(t)) { t.x += (this.x - t.x) * 0.5; t.y = this.y - this.height / 2 - 64; t.vx = t.vy = 0; t.grounded = false; t.hitstun = Math.max(t.hitstun, 3); t.px = t.x; t.py = t.y; }
-                if (this.spiralT % 4 === 0) createParticles(this.x, this.y + this.height / 2, '#e2e8f0', 2);
+                if (!lowGfx() && this.spiralT % 4 === 0) createParticles(this.x, this.y + this.height / 2, '#e2e8f0', 2);
             }
             if (this.spiralT === 0) this.endSpiral();
         }
@@ -1249,7 +1249,7 @@ class Fighter {
                 const aim0 = aimOf(this); x.ang = Math.atan2(aim0.y - this.y, aim0.x - this.x); if (Math.sin(x.ang) > 0.3) x.ang = -x.ang;
                 this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
                 const u = 1 - x.charge / 36;
-                if (x.charge % 6 === 0) { fx('explosion', this.x, this.y, 26 + 44 * u, 0.15, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 3); }
+                if (!lowGfx() && x.charge % 6 === 0) { fx('explosion', this.x, this.y, 26 + 44 * u, 0.15, STYLE_OF[this.char]); createParticles(this.x, this.y, '#fb923c', 3); }
                 if (x.charge === 0) { fx('rocket', this.x, this.y, 0, 0, STYLE_OF[this.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); }
                 return;
             }
@@ -1271,8 +1271,8 @@ class Fighter {
             this.vx = this.vy = 0;
             this.facing = Math.cos(x.ang) >= 0 ? 1 : -1;
             if (sp.jet) {                                                  // Zephyr's Jet Stream: no hitbox; the air he flies through becomes a current that carries foes along
-                if (x.t % 2 === 0 && x.px !== undefined) { zapTrails.push({ x1: x.px, y1: x.py, x2: this.x, y2: this.y, life: 36, owner: this, hit: new Set(), push: 15, wind: true }); fx('gust', this.x, this.y, 46, 0, 'wind'); }
-                x.px = this.x; x.py = this.y; createParticles(this.x, this.y, '#e0f2fe', 2);
+                if (x.t % 2 === 0 && x.px !== undefined) { zapTrails.push({ x1: x.px, y1: x.py, x2: this.x, y2: this.y, life: 36, owner: this, hit: new Set(), push: 15, wind: true }); if (!lowGfx()) fx('gust', this.x, this.y, 46, 0, 'wind'); }
+                x.px = this.x; x.py = this.y; if (!lowGfx()) createParticles(this.x, this.y, '#e0f2fe', 2);
             } else if (sp.ghost) { /* no hitbox */ } else if (sp.drill) {                                                // Phoenix Dash: a continuous drill of hits that carries foes along with the flame; only the end knocks
                 const hx = this.x + Math.cos(x.ang) * 40, hy = this.y + Math.sin(x.ang) * 40;
                 if (x.t % 6 === 1) this.swingHitSet = new Set();
@@ -1494,14 +1494,17 @@ class Fighter {
                 }
                 // the fireball itself deals no damage while it carries someone: all of it (red 10, white 8, blue 12) comes as burn ticks once they are OFF the fireball
                 const trail = full ? '#38bdf8' : (mid ? '#e2e8f0' : '#ef4444');
-                if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
-                if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
+                // Low: no ground dust / ember trail spam (ball mesh is enough)
+                if (!lowGfx()) {
+                    if (x.t % 2 === 0) fx('ember', this.x, this.y + this.height / 2, -Math.sign(x.v || x.d), c, st);
+                    if (x.t % 3 === 0) createParticles(this.x - x.d * 20, this.y + 10, trail, 2);
+                }
                 if (x.t >= life) this.endRoll();
             }
         } else if (x.k === 'thunder') {                            // arms stretched out, hanging in the air, until the ball is gone
             this.vx = this.vy = 0; this.activeMove = null; this.grounded = false;
             if (!orbs.some(o => o.id === x.oid) && x.t > 2) { this.sx = null; this.actionLock = Math.max(this.actionLock, 10); }
-            else if (x.t % 5 === 0) createParticles(this.x, this.y, '#fde047', 2);
+            else if (!lowGfx() && x.t % 5 === 0) createParticles(this.x, this.y, '#fde047', 2);
         } else if (x.k === 'wind') {                              // Umbra's Shadow Step startup: a purple blast gathers (an indicator only), then he vanishes
             this.vx = 0; this.activeMove = null;
             const sp = spec(this.char, 'S');
@@ -3399,15 +3402,30 @@ const MOVE_NAMES = { J: 'melee', CORE: 'Neutral F', BLINK: 'Side F', SPIRAL: 'Up
 /** what a bot sees of a foe: a cloaked Umbra is completely invisible to bots. The only hints are what a person could also see:
  *  the flash and particles of a move (a fixed spot for 2/3 s) and, rarely, a fast dash's trail (a rough spot nearby for 0.4 s). No hint = null: the bot has nothing to chase. */
 function aiSeen(bot, foe) {
-    if (!foe || !(foe.cloakT > 0)) { if (bot) bot._lost = null; return foe; }
-    const g = bot._lost && bot._lost.foe === foe ? bot._lost : (bot._lost = { foe, x: 0, y: 0, t: 0 });
+    if (!foe) return null;
+    // Visible: remember last known spot for when they cloak
+    if (!(foe.cloakT > 0)) {
+        if (bot) { bot._lastVis = { x: foe.x, y: foe.y, vx: foe.vx || 0, vy: foe.vy || 0 }; bot._lost = null; }
+        return foe;
+    }
+    // Cloaked: hunt around where they were last seen (not their real position)
+    const lv = (bot && bot._lastVis) || { x: foe.x, y: foe.y };
+    if (!bot._lost || bot._lost.foe !== foe) bot._lost = { foe, x: lv.x, y: lv.y, t: 240 };   // ~4 s of guessing
+    const g = bot._lost;
     const d = Math.hypot(foe.x - bot.x, foe.y - bot.y);
-    const acting = (foe.attackTimer > 0 || !!foe.swing || !!foe.activeMove) && d < 900;
-    if (acting) { g.x = foe.x; g.y = foe.y; g.t = 40; }
-    else if (g.t <= 0 && d < 450 && Math.hypot(foe.vx || 0, foe.vy || 0) > 12) { g.x = foe.x + (Math.random() - 0.5) * 220; g.y = foe.y + (Math.random() - 0.5) * 120; g.t = 24; }
+    // Only refresh the guess if they do something that would be visible (melee / side special tell)
+    const acting = (foe.attackTimer > 0 || (foe.sx && foe.sx.k === 'wind') || foe.specialKind === 'BLINK') && d < 900;
+    if (acting) { g.x = foe.x; g.y = foe.y; g.t = Math.max(g.t, 100); }
     if (g.t <= 0) return null;
     g.t--;
-    const px = Object.create(foe); px.x = g.x; px.y = g.y; px.vx = 0; px.vy = 0; px.cloakT = 0;
+    // Widen the search circle the longer they stay invisible
+    const age = 240 - g.t;
+    const rad = 36 + age * 0.85;
+    const ang = ((bot.actionTimer || 0) * 0.11 + (bot.slot || 0) * 1.7);
+    const px = Object.create(foe);
+    px.x = g.x + Math.cos(ang) * rad * 0.45;
+    px.y = g.y + Math.sin(ang * 1.25) * rad * 0.3;
+    px.vx = 0; px.vy = 0; px.cloakT = 0; px._guess = true;
     return px;
 }
 export function spawnTrainItem(type) { if (type === 'CLEAR') { for (const it of items) { if (it.holder) { it.holder.heldItem = null; it.holder.heldId = 0; } it.st = 'dead'; } return; } if (ITEM_R[type]) { spawnItem(type); const it = items[items.length - 1]; it.x = p1.x + p1.facing * 160; it.y = p1.y - 120; it.py = it.y; } }
