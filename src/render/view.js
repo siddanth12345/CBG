@@ -26,7 +26,7 @@ export class View {
         r.localClippingEnabled = true;            // the Horizon stage splits into clipped pieces
         this.pr = Math.min(window.devicePixelRatio || 1, 2);
         r.setPixelRatio(this.pr);
-        this.q = 0; this.ft = 0; this.inMatch = undefined;
+        this.q = (window.matchMedia && matchMedia('(pointer:coarse)').matches) ? 1 : 0; this.ft = 0; this.inMatch = undefined;
         r.outputColorSpace = THREE.SRGBColorSpace;
         r.toneMapping = THREE.ACESFilmicToneMapping;
         r.toneMappingExposure = 1.05;
@@ -321,9 +321,9 @@ export class View {
         this.ft = this.ft ? this.ft * 0.92 + dt * 0.08 : dt;
         this.qT = (this.qT || 0) + dt;
         if (this.qT > 1.2) {
-            if (getGfx() === 'auto' && this.ft > 1 / 30 && this.q < 4) { this.q++; this.qT = 0; this.applyQuality(); }
-            else if (getGfx() === 'auto' && this.ft < 1 / 58 && this.q > 0 && this.qT > 8) { this.q--; this.qT = 0; this.applyQuality(); }
-            else if (this.ft < 1 / 30) this.qT = Math.min(this.qT, 1.2);
+            if (getGfx() === 'auto' && this.ft > 1 / 44 && this.q < 4) { this.q++; this.qT = 0; this.applyQuality(); }
+            else if (getGfx() === 'auto' && this.ft < 1 / 75 && this.q > 0 && this.qT > 20) { this.q--; this.qT = 0; this.applyQuality(); }
+            else if (this.ft < 1 / 44) this.qT = Math.min(this.qT, 1.2);
         }
 
         // outside a match (menu / lobby) keep the scene light: no rocks, fewer stars, no fighters or shadows

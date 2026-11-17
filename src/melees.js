@@ -53,7 +53,7 @@ export const MELEE = {
         SL: m(28, [s(8, 11, 90, 50, 40, 26, 9, 10, 1.1, -1.2), s(13, 19, 120, 30, 110, 30, 4, 8, 1, -0.6)]),                                  // two-fist hammer, a ground wave runs out
     },
     bulwark: {                                                                                                                                  // no running lunge: running side attacks use his normal great-sword sweep
-        K: m(26, [s(8, 16, 120, 36, 95, -6, 8, 11, 1.2, -0.25)], { leap: { vx: 5, vy: 0, g: false } }),                                       // thrusts the great-sword straight out behind him
+        K: m(26, [s(8, 16, 120, 36, 95, -6, 8, 11, 1.2, -0.25)], { leap: { vx: 10, vy: 0, g: false } }),                                      // thrusts the great-sword straight out behind him
     },
 };
 

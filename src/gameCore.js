@@ -1458,7 +1458,8 @@ class Fighter {
                 // keep carried foes glued to us
                 for (const f of foesOf(this)) {
                     if (f._rollCarry !== this) continue;
-                    if (f.hitstun > 0) { const cox = f.x, coy = f.y; f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false; pushOutOfStage(f, cox, coy); }
+                    const offBall = Math.abs(f.x - this.x) > sz / 2 + f.width / 2 + 24 || Math.abs(f.y - this.y) > sz / 2 + f.height / 2 + 24;      // knocked / pushed clear of the fireball by something else
+                    if (f.hitstun > 0 && !offBall) { const cox = f.x, coy = f.y; f.x = this.x; f.y = this.y; f.vx = this.vx; f.vy = this.vy; f.grounded = false; pushOutOfStage(f, cox, coy); }
                     else this.rollRelease(f, x);                                        // they got off the fireball early: the knockback and the burn start now
                 }
                 // the fireball itself deals no damage while it carries someone: all of it (red 10, white 8, blue 12) comes as burn ticks once they are OFF the fireball
@@ -1720,6 +1721,7 @@ class Fighter {
         f.burnDmg = 2; f.burnT = Math.max(f.burnT > 0 ? f.burnT : 0, (total / 2) * 12); f.burnBy = this; f.lastHitBy = this; f.lastHitT = 0;
         if (full || mid) {
             let rb = sp.rocketBkb != null ? sp.rocketBkb : 9.12, rk = sp.rocketKbg != null ? sp.rocketKbg : 0.684;
+            rb *= 1.7; rk *= 1.5;                                                       // the throw has to beat the speed they were carried at, or it reads as 'no knockback'
             if (full) { rb *= 0.7; rk *= 0.7; }                                       // blue end knockback 0.7x
             const rd = x.d || this.facing || 1, ang = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
             const before = f.damage; f.grounded = false;
