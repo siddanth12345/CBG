@@ -730,13 +730,8 @@ class Fighter {
             if (this.haltT === 0) this.haltV = 0;
             if (!lowGfx() && this.grounded && this.haltElapsed % 3 === 0 && Math.abs(this.haltV) > 1) createParticles(this.x - Math.sign(this.haltV) * 14, this.y + this.height / 2 - 4, '#e7d3a8', 2);   // skid dust (off on Low)
         }
-        // Melee T/K follow-through: keep current velocity (forward or back), light coast, no freeze
-        if (this.zSlide > 0) {
-            this.zSlide--;
-            // slightly less friction so the leap continues smoothly in the direction it was going
-            if (this.grounded) this.vx *= 1.02; // compensate a bit of ground friction applied later
-            else this.vx *= 1.01;
-        }
+        // Melee T/K follow-through: coast on reduced leap velocity (no freeze, no walk add)
+        if (this.zSlide > 0) this.zSlide--;
         if (this.trapId) {
             if (orbs.some(o => o.id === this.trapId)) {
                 this.hitstun = Math.max(this.hitstun, 2);
@@ -1082,7 +1077,12 @@ class Fighter {
             if (i !== this._stg) { this._stg = i; if (i >= 0) { this.swingHit = false; if (sw.stages[i].step) this.vx += sw.d * sw.stages[i].step; } }
             st = i >= 0 ? sw.stages[i] : null;
         }
-        if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable)) { const l = this.zLeap; this.zLeap = null; if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy); this.vx = l.vx; }
+        if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable)) {
+            const l = this.zLeap; this.zLeap = null;
+            if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy);
+            // Keep-velocity follow-through: 60% less leap speed (except Bulwark)
+            this.vx = l.vx * (this.char === 'bulwark' ? 1 : 0.4);
+        }
         // T / K (all chars): follow-through keeps leap velocity — no freeze, mild action lock only
         if (this.zLock && e >= this.zLock) {
             this.zSlide = Math.max(this.zSlide || 0, this.zLockN);
@@ -5298,9 +5298,15 @@ function drive(f, h) {
                 else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
             } else {
             // on ledge: only jump gets you off; during Ember post-roll halt: no walk input
-            if (!f.isHanging && f.haltT <= 0) {
+            // Forward/back melees (T/K): no walkspeed until the move + follow-through end (Bulwark excluded)
+            const meleeCoast = f.char !== 'bulwark' && (f.zv === 'T' || f.zv === 'K') && (f.attackTimer > 0 || f.zSlide > 0);
+            if (!f.isHanging && f.haltT <= 0 && !meleeCoast) {
                 if (h.left) { f.vx = -spd; if (!swinging) f.facing = -1; }
                 if (h.right) { f.vx = spd; if (!swinging) f.facing = 1; }
+            } else if (meleeCoast) {
+                // still allow facing update from input without rewriting velocity
+                if (h.left && !swinging) f.facing = -1;
+                if (h.right && !swinging) f.facing = 1;
             }
             }
         }
