@@ -4205,7 +4205,7 @@ function updateDrops() {
             }
         }
         if (d.owner) {                                                          // Umbra's melee soaks up a falling sword / rock too (he can throw it back out later)
-            const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== d.owner && foesOf(e).includes(d.owner) &&
+            const um = fighters.find(e => e.char === 'umbra' && e.zv === 'UG' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== d.owner && foesOf(e).includes(d.owner) &&
                 Math.abs(e.activeHitbox.x - d.x) < e.activeHitbox.w + d.w / 2 && Math.abs(e.activeHitbox.y - d.y) < e.activeHitbox.h + d.h / 2);
             if (um) {
                 const col = d.kind === 'rock' ? '#a8a29e' : '#e2e8f0', rr = d.kind === 'rock' ? 26 : 22;
@@ -4616,7 +4616,7 @@ function updateOrbs() {
         }
         if (o.owner) {             // Umbra's melee soaks up a projectile that touches it: he can send it back out later
             // Catch hitbox is 2x the attack hitbox (damage / knockback stay on the normal activeHitbox)
-            const um = fighters.find(e => e.char === 'umbra' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
+            const um = fighters.find(e => e.char === 'umbra' && e.zv === 'UG' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== o.owner && foesOf(e).includes(o.owner) &&
                 Math.abs(e.activeHitbox.x - o.x) < e.activeHitbox.w + o.r && Math.abs(e.activeHitbox.y - o.y) < e.activeHitbox.h + o.r);
             if (um) {
                 um._ugHit = true;

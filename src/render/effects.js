@@ -1036,15 +1036,16 @@ export class Effects {
                 m.visible = true;
                 m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
             }
+            // Catch (yellow + white trail) only on Umbra up-melee hat throw (zv UG)
             if (yb) {
-                if (this.showHB && hb && f.char === 'umbra' && f.attackTimer > 0) {
+                if (this.showHB && hb && f.char === 'umbra' && f.zv === 'UG' && f.attackTimer > 0) {
                     yb.visible = true;
                     yb.position.set(wx(hb.x), wy(hb.y), 0);
                     yb.scale.set(hb.w * 2, hb.h * 2, 48);
                 } else yb.visible = false;
             }
-            // White trail of 2× catch — always while Umbra melee is active (any gfx, hitboxes on or off)
-            if (hb && f.char === 'umbra' && f.attackTimer > 0) {
+            // White trail of 2× catch — only hat up-melee (always visible, hitboxes on or off)
+            if (hb && f.char === 'umbra' && f.zv === 'UG' && f.attackTimer > 0) {
                 const cx = hb.x, cy = hb.y, cw = hb.w * 2, ch = hb.h * 2;
                 const last = this.catchTrail[this.catchTrail.length - 1];
                 if (!last || Math.hypot(last.x - cx, last.y - cy) > 3) {
