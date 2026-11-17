@@ -25,8 +25,8 @@ export const MELEE = {
         SL: m(24, [s(6, 10, 56, 90, 0, 58, 5, 0, 0, -PI / 2, { stun: 24 }), s(16, 19, 66, 84, 0, 56, 5, 8, 1, -PI / 2)]),                    // cards fan out straight below him
     },
     volt: {
-        H: m(24, [s(4, 6, 52, 40, 46, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(9, 11, 52, 40, 52, -4, 3, 3, 0.3, -0.2, { step: 4 }), s(14, 17, 60, 46, 58, -4, 5, 11, 1.2, -0.35, { step: 5 })]),   // three sparking jabs, stepping in each time
-        T: m(28, [s(3, 14, 72, 56, (k) => 30 + 20 * k, -2, 7, 11, 1.2, -0.3)], { leap: { vx: 17, vy: 0, g: false }, lock: [16, 16] }),         // lightning-rod charge, he staggers while the current discharges
+        H: m(24, [s(4, 6, 100, 34, 74, -4, 3, 3, 0.3, -0.2), s(9, 11, 108, 36, 82, -4, 3, 3, 0.3, -0.2), s(14, 17, 134, 42, 98, -4, 5, 11, 1.2, -0.35)], { leap: { vx: 9, vy: 0, g: false } }),   // a crackling yellow whip, three lashes while he glides forward (ground and air)
+        T: m(28, [s(3, 14, 128, 44, (k) => 40 + 44 * k, -2, 7, 11, 1.2, -0.3)], { leap: { vx: 17, vy: 0, g: false }, lock: [16, 16] }),         // running: he slides in cracking the yellow whip ahead of him, then staggers
         K: m(22, [s(5, 9, 56, 44, 40, 8, 4, 5, 0.5, -0.3), s(11, 16, 122, 70, 62, -10, 5, 11, 1.2, -0.4)], { leap: { vx: 10, vy: -6, g: true } }),   // reverse kick, then arcs jump toward the foe
         UG: m(22, [s(4, 8, 46, 70, 26, -30, 5, 5, 0.5, -PI / 2), s(11, 15, 112, 92, 0, -62, 5, 11, 1.2, -PI / 2)]),                            // conductor uppercut, the arc catches anyone overhead
         SL: m(26, [s(8, 16, 200, 26, 0, 30, 8, 11, 1.2, -0.5, { radial: true })]),                                                              // grounding stomp: a flat shock ring both ways

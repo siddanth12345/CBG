@@ -1031,7 +1031,7 @@ class Fighter {
 
         if (this.attackTimer > 0) {
             const sw = this.swing;
-            if (this.attackHeld && sw && sw.chargeable && this.atkN - this.attackTimer >= sw.a - 1) {
+            if (this.attackHeld && sw && sw.chargeable && this.grounded && this.atkN - this.attackTimer >= sw.a - 1) {     // melees only charge on the ground
                 // button still held at the wind-up: the swing waits there, charging (up to 1.7 s)
                 this.actionLock = Math.max(this.actionLock, LOCK - sw.a + 1 + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0));
                 if (this.meleeCharge < MELEE_CHARGE_MAX) this.meleeCharge++;   // stays fully charged until you let go
@@ -1077,7 +1077,7 @@ class Fighter {
             if (i !== this._stg) { this._stg = i; if (i >= 0) { this.swingHit = false; if (sw.stages[i].step) this.vx += sw.d * sw.stages[i].step; } }
             st = i >= 0 ? sw.stages[i] : null;
         }
-        if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable)) {
+        if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable && this.grounded)) {
             const l = this.zLeap; this.zLeap = null;
             if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy);
             // Keep-velocity follow-through: 60% less leap speed (except Bulwark)

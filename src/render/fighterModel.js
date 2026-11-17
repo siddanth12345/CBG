@@ -880,18 +880,19 @@ export class FighterModel {
             whip.frustumCulled = false; whip.visible = false; whip.renderOrder = 8; whip.setColorAt(0, new THREE.Color(1, 1, 1)); this.root.add(whip);
             this.uP = { cards, hat, whip, dm: new THREE.Object3D(), col: new THREE.Color() };
         }
-        const P = this.uP, side = f.zv === 'H' || f.zv === 'T', hatMove = f.zv === 'UG', on = f.zv && f.attackTimer > 0;
+        const P = this.uP, volt = f.char === 'volt', side = f.zv === 'H' || f.zv === 'T', hatMove = f.zv === 'UG' && !volt, on = f.zv && f.attackTimer > 0;
         const u = on ? clamp01(((f.atkN || 20) - 1 - f.attackTimer) / (f.atkN || 20)) : 0;
         if (this.hatParts) for (const m of this.hatParts) m.visible = !(hatMove && on && u > 0.08 && u < 0.92);            // the real hat comes off for the throw
         // ---- the rainbow whip: starts at the hand, cracks out along the swing, each bead a colour of the rainbow
         if (side && on && u > 0.14 && u < 0.88) {
-            const ext = Math.min(1, (u - 0.14) / 0.14) * Math.min(1, (0.88 - u) / 0.12), R = (f.char === 'umbra' && f.zv === 'T' ? 120 : 150) * ext, d = f.facing || 1;
+            const ext = Math.min(1, (u - 0.14) / 0.14) * Math.min(1, (0.88 - u) / 0.12), R = (volt ? (f.zv === 'T' ? 150 : 135) : f.char === 'umbra' && f.zv === 'T' ? 120 : 150) * ext, d = f.facing || 1;
             const th = 0.75 - 1.35 * Math.min(1, Math.max(0, (u - 0.14) / 0.6)), hx = d * 14, hy = 6, N = P.whip.count;
             for (let i = 0; i < N; i++) {
                 const t = i / (N - 1), wave = Math.sin(t * 9 - this.t * 38) * 9 * t * (1 - 0.4 * t) * ext;
                 const x = hx + Math.cos(th) * R * t * d + -Math.sin(th) * wave * d, y = hy + Math.sin(th) * R * t + Math.cos(th) * wave;
-                P.dm.position.set(x, y, 3); const r = 3.2 + 2.2 * (1 - t); P.dm.scale.set(r, r, r); P.dm.updateMatrix(); P.whip.setMatrixAt(i, P.dm.matrix);
-                P.whip.setColorAt(i, P.col.setHSL(((t * 0.9 + this.t * 1.4) % 1), 1, 0.58));
+                P.dm.position.set(x, y, 3); const r = (3.2 + 2.2 * (1 - t)) * (volt ? 1.35 : 1); P.dm.scale.set(r, r, r); P.dm.updateMatrix(); P.whip.setMatrixAt(i, P.dm.matrix);
+                if (volt) P.whip.setColorAt(i, P.col.setHSL(0.13 + 0.03 * Math.sin(t * 12 - this.t * 50), 1, 0.52 + 0.2 * (1 - t) + 0.12 * Math.sin(i * 2.1 + this.t * 60)));       // yellow, with sparks flickering along it
+                else P.whip.setColorAt(i, P.col.setHSL(((t * 0.9 + this.t * 1.4) % 1), 1, 0.58));
             }
             P.whip.instanceMatrix.needsUpdate = true; if (P.whip.instanceColor) P.whip.instanceColor.needsUpdate = true; P.whip.visible = true;
         } else P.whip.visible = false;
@@ -901,7 +902,7 @@ export class FighterModel {
         if (P.hat.visible) { P.hat.position.set(cx, cy - 6, 0); P.hat.rotation.set(0.3, this.t * 18, this.t * 9); P.hat.scale.setScalar(1.5); }
         for (let i = 0; i < 3; i++) {
             const m = P.cards[i], a = this.t * 20 + i * Math.PI * 2 / 3;
-            m.visible = !!hb && !side && !hatMove;
+            m.visible = !volt && !!hb && !side && !hatMove;
             if (m.visible) { m.position.set(cx + Math.cos(a) * r * 0.55, cy + Math.sin(a) * r * 0.45, 2); m.rotation.set(0, a, a * 1.3); }
         }
     }
@@ -1069,6 +1070,7 @@ export class FighterModel {
         if (this.bwSw) this.#bwAim(dt);
         if (f.char === 'zephyr') this.#zephRings(f);
         else if (f.char === 'umbra') { this.#umbraCards(f); this.#umbraStore(f); }
+        else if (f.char === 'volt') this.#umbraCards(f);                       // Volt borrows the whip: a crackling yellow one
         this.legR.hip.rotation.set(-pose.rHx * D2R, 0, pose.rHz * D2R);
         this.legL.hip.rotation.set(-pose.lHx * D2R, 0, -pose.lHz * D2R);
         this.legR.kn.rotation.set(pose.rK * D2R, 0, 0);
