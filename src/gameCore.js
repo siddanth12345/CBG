@@ -643,6 +643,10 @@ class Fighter {
     }
 
     update() {
+        if (this._rollCarry) {                                  // safety net: the roller's fireball is gone (cancelled, hit, clashed...) but this foe was never released: throw / stun / burn them now
+            const c = this._rollCarry, sxc = c.sx;
+            if (!(sxc && sxc.k === 'roll' && sxc.ph === 'roll')) { this._rollCarry = null; if (c._rollLast && isAlive(c)) c.rollRelease(this, c._rollLast); }
+        }
         if (!(this.hitstun > 0 || this.clashStunTimer > 0 || this.dizzyTimer > 0)) this._freeFace = this.facing;      // remembered for Umbra's backstab: which way they faced before being stunned
         if (this.spawnT > 0) {                                          // 1 s pre-spawn: hold still in the light while it plays, then drop in
             this.spawnT--; this.vx = this.vy = 0; this.y = STAGE.y - 300; this.grounded = false; this.isHanging = false;
@@ -1446,6 +1450,7 @@ class Fighter {
                 const isTick = (x.tickN % every) === 0;
                 if (isTick) this.swingHitSet = new Set();
                 this.activeMove = { type: 'BLINK', t: 2 };
+                this._rollLast = x;
                 // remaining frames — red deals 2 on each of the last 5 tick beats only
                 const left = life - x.t;
                 const ticksRemaining = Math.ceil(Math.max(0, left) / every);
