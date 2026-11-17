@@ -217,18 +217,21 @@ export class Effects {
         }
 
         this.showHB = getHitboxes(); window.addEventListener('cbg-hb', () => { this.showHB = getHitboxes(); });
-        // ---- hitbox boxes (red = attack; yellow = Umbra projectile-catch, 2x attack size)
+        // ---- hitbox boxes (red = attack; white trail = Umbra 2× projectile-catch beyond the hat/melee box)
         this.hbPool = [];
-        this.catchPool = [];
+        this.catchTrail = [];   // fading white catch samples {x,y,w,h,a}
+        this.catchTrailPool = [];
         const hbGeo = new THREE.BoxGeometry(1, 1, 1);
         const hbEdges = new THREE.EdgesGeometry(hbGeo);
         for (let i = 0; i < 8; i++) {
             const m = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.16, depthWrite: false, blending: ADD, toneMapped: false }));
             m.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75, toneMapped: false })));
             m.visible = false; m.renderOrder = 5; scene.add(m); this.hbPool.push(m);
-            const c = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.12, depthWrite: false, blending: ADD, toneMapped: false }));
-            c.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.7, toneMapped: false })));
-            c.visible = false; c.renderOrder = 4; scene.add(c); this.catchPool.push(c);
+        }
+        for (let i = 0; i < 28; i++) {
+            const c = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false, blending: ADD, toneMapped: false }));
+            c.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, toneMapped: false })));
+            c.visible = false; c.renderOrder = 4; scene.add(c); this.catchTrailPool.push(c);
         }
 
         // ---- CBG Core orbs (projectiles) and the charge orbs held by fighters
@@ -895,6 +898,7 @@ export class Effects {
         for (const f of this.timed) { this.scene.remove(f.obj); try { f.free && f.free(); } catch (e) { /* already freed */ } }
         this.timed.length = 0; if (this._byId) this._byId.clear();
         this.sparks_.length = 0;
+        if (this.catchTrail) this.catchTrail.length = 0;
         if (this.flames && this.flames.clear) this.flames.clear();
         fxEvents.length = 0;
     }
@@ -1018,27 +1022,43 @@ export class Effects {
             g.userData.outer.material.opacity = b.alpha * 0.55; g.userData.inner.material.opacity = b.alpha * 0.9;
         }
 
-        // ---- hitboxes (red = damage; yellow Umbra catch = 2x, visual only when hitboxes on)
+        // ---- hitboxes (red = damage; white trail = Umbra 2× catch, the zone the hat/melee box doesn't cover alone)
         fighters.forEach((f, i) => {
             const m = this.hbPool[i], hb = f.activeHitbox; if (!m) return;
-            const c = this.catchPool[i];
             if (!this.showHB || !hb) {
                 m.visible = false;
-                if (c) c.visible = false;
                 return;
             }
-            // Attack / damage / knockback box (unchanged size)
+            // Attack / damage / knockback box (unchanged size) — hat/melee itself
             m.visible = true;
             m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
-            // Umbra projectile catch = 2× attack size (yellow)
-            if (c) {
-                if (f.char === 'umbra' && f.attackTimer > 0) {
-                    c.visible = true;
-                    c.position.set(wx(hb.x), wy(hb.y), 0);
-                    c.scale.set(hb.w * 2, hb.h * 2, 48);
-                } else c.visible = false;
+            // Umbra: leave a white trail of the 2× catch zone (what the hat hitbox alone doesn't cover)
+            if (f.char === 'umbra' && f.attackTimer > 0) {
+                const last = this.catchTrail[this.catchTrail.length - 1];
+                const cx = hb.x, cy = hb.y, cw = hb.w * 2, ch = hb.h * 2;
+                if (!last || Math.hypot(last.x - cx, last.y - cy) > 6) {
+                    this.catchTrail.push({ x: cx, y: cy, w: cw, h: ch, a: 0.55 });
+                    if (this.catchTrail.length > 24) this.catchTrail.shift();
+                } else {
+                    last.x = cx; last.y = cy; last.w = cw; last.h = ch; last.a = Math.max(last.a, 0.5);
+                }
             }
         });
+        // age + draw white catch trail
+        for (let i = this.catchTrail.length - 1; i >= 0; i--) {
+            this.catchTrail[i].a -= 0.045;
+            if (this.catchTrail[i].a <= 0) this.catchTrail.splice(i, 1);
+        }
+        if (!this.showHB) this.catchTrail.length = 0;
+        for (let i = 0; i < this.catchTrailPool.length; i++) {
+            const mesh = this.catchTrailPool[i], s = this.catchTrail[i];
+            if (!s) { mesh.visible = false; continue; }
+            mesh.visible = true;
+            mesh.position.set(wx(s.x), wy(s.y), 0);
+            mesh.scale.set(s.w, s.h, 40);
+            mesh.material.opacity = 0.08 + s.a * 0.2;
+            if (mesh.children[0] && mesh.children[0].material) mesh.children[0].material.opacity = 0.25 + s.a * 0.5;
+        }
 
         // ---- core orbs in flight
         this.chargeT += dt;
