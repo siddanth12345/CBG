@@ -139,13 +139,15 @@ export function buildHorizon(scene, { D }) {
         parent.add(g); return g;
     };
     const pillarH = Math.max(260, H * 3.6), pr = Math.max(26, H * 0.32);
+    const ruins = [];                                                        // the standing ruins ride on whichever stage piece they stand on when the stage splits
     for (const sx of [-1, 1]) {
         const c = column(pillarH * (sx < 0 ? 1 : 0.62), pr, stage);          // the right one is broken
-        c.position.set(sx * (W / 2 - pr * 2.6), topY, -D / 2 - pr * 1.6);
+        c.position.set(sx * (W / 2 - pr * 2.6), topY, -D / 2 - pr * 1.6); ruins.push({ o: c, fx: 0.5 + sx * (0.5 - pr * 2.6 / W), bx: c.position.x, by: c.position.y });
     }
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, pr * 0.9, pr * 2.2), mMarble);
     lintel.position.set(-W * 0.27, topY + pillarH + pr * 0.9, -D / 2 - pr * 1.6); lintel.castShadow = true; stage.add(lintel);
     const lk = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, pr * 0.22, pr * 2.3), mGold); lk.position.set(-W * 0.27, topY + pillarH + pr * 0.35, -D / 2 - pr * 1.6); stage.add(lk);
+    ruins.push({ o: lintel, fx: 0.23, bx: lintel.position.x, by: lintel.position.y, span: [-0.02, 0.48] }, { o: lk, fx: 0.23, bx: lk.position.x, by: lk.position.y, span: [-0.02, 0.48] });
 
     // ------------------------------------------------------------ the soft platforms (same positions as Frontier)
     const platG = [];
@@ -421,12 +423,18 @@ export function buildHorizon(scene, { D }) {
                 const fr = [0, ...cuts, 1], key = cuts.join(',');
                 if (key !== pieceKey) { clearPieces(); pieceKey = key; for (let k = 0; k < fr.length - 1; k++) pieces.push(buildPiece(k, fr.length - 1, fr, cuts)); }
                 body.visible = false; keelSolo.visible = false; keelCracks.visible = false;
+                for (const r of ruins) {                                                     // standing columns / arch follow their own piece; an arch that a crack runs through collapses
+                    let k = 0; while (k < cuts.length && r.fx > cuts[k]) k++;
+                    const q = segs && segs[k], dxr = (q ? wx(q.off) - wx(0) : 0) + jx(k);
+                    r.o.position.set(r.bx + dxr, r.by + jy(k), r.o.position.z);
+                    r.o.visible = !(r.span && cuts.some(c => c > r.span[0] + 0.02 && c < r.span[1] - 0.02));
+                }
                 pieces.forEach((g, k) => {
                     g.visible = true; const q = segs && segs[k]; const dx = (q ? wx(q.off) - wx(0) : 0) + jx(k);
                     g.position.set(cx + g.userData.mid * W + dx, jy(k), 0);
                     const cps = g.userData.cps; if (cps) { cps[0].constant = -(cx + g.userData.xl + dx); cps[1].constant = cx + g.userData.xr + dx; }
                 });
-            } else { body.visible = true; keelSolo.visible = false; keelCracks.visible = false; pieces.forEach(g => { g.visible = false; }); }
+            } else { body.visible = true; keelSolo.visible = false; keelCracks.visible = false; pieces.forEach(g => { g.visible = false; }); for (const r of ruins) { r.o.position.x = r.bx; r.o.position.y = r.by; r.o.visible = true; } }
             // crack lines on the top just before it breaks
             const warn = cuts.length && clk >= 300 && clk < 330 ? Math.min(1, splitShake(splitClock()) * 1.4) : 0;
             decals.forEach((d, i) => {

@@ -163,7 +163,7 @@ export class View {
             const H = def.height || 70, kx = S.kcVx || 0, ky = -(S.kcVy || 0), kl = Math.hypot(kx, ky) || 1, ux = kx / kl, uy = ky / kl, L = 6000;
             const grow = Math.min(1, e / 0.12), th = H * 0.25 * (0.6 + 0.4 * grow), fade = e > 1 ? Math.max(0, 1 - (e - 1) / 0.2) : 1;
             const st = this.streak; st.visible = true; st.material.opacity = fade;
-            st.position.set(m.root.position.x + ux * (L / 2 - 90), m.root.position.y + (def.height || 70) * 0.5 + uy * (L / 2 - 90), m.root.position.z - 70);
+            st.position.set(m.root.position.x + ux * (L / 2 - 20), m.root.position.y + uy * (L / 2 - 20), m.root.position.z - 70);
             st.rotation.set(0, 0, Math.atan2(uy, ux)); st.scale.set(L, th, 1);
         } else if (this.streak && this.streak.visible) this.streak.visible = false;
         if (on === !!this.dark) { if (on) this.#darkLight(m); return; }

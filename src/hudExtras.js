@@ -1,6 +1,6 @@
 import { getReduceFlash } from './gfx.js';
 /** On-screen extras: the combo counter (with a warning before the finisher) and the training-mode numbers readout. Pure DOM, fed by gameCore each HUD tick. */
-let box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcCanvas = null, last = { c: '', r: '' };
+let kcDots = null, box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcCanvas = null, last = { c: '', r: '' };
 
 function ensure() {
     if (box) return;
@@ -14,13 +14,18 @@ function ensure() {
     kc = document.createElement('div');                                             // the black-and-white "impact frame" for the final blow (lines + flashes, drawn over the canvas)
     kc.style.cssText = 'position:fixed;inset:0;z-index:31;pointer-events:none;overflow:hidden;display:none;';
     kcLines = document.createElement('div');
-    kcLines.style.cssText = 'position:absolute;inset:-20%;background:repeating-conic-gradient(from 3deg at 50% 50%,#fff 0 .9deg,#000 .9deg 2.3deg,#fff 2.3deg 2.7deg,#000 2.7deg 5.1deg,#fff 5.1deg 5.4deg,#000 5.4deg 7.3deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mask-image:radial-gradient(circle at 50% 50%,transparent 14%,#000 62%);mix-blend-mode:difference;';
+    kcLines.style.cssText = 'position:absolute;inset:-25%;background:' +                          // hair-thin white wedges: a point toward the middle, widening a hair at the screen edge (not straight bars)
+        'repeating-conic-gradient(from 1deg at 50% 50%,#fff 0 .09deg,transparent .09deg 1.7deg),' +
+        'repeating-conic-gradient(from 0.4deg at 50% 50%,#fff 0 .16deg,transparent .16deg 2.9deg),' +
+        'repeating-conic-gradient(from 2.3deg at 50% 50%,#fff 0 .05deg,transparent .05deg 1.15deg),' +
+        'repeating-conic-gradient(from 5deg at 50% 50%,#fff 0 .24deg,transparent .24deg 6.3deg);' +
+        '-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent 30%,#000 66%);mask-image:radial-gradient(circle at 50% 50%,transparent 30%,#000 66%);';
     kcFlash = document.createElement('div');
     kcFlash.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:0;';
     const kt = document.createElement('div'); kt.textContent = 'FINAL BLOW'; kt.style.cssText = 'position:absolute;left:0;right:0;top:14%;text-align:center;font:900 clamp(30px,7vw,72px) system-ui;letter-spacing:.14em;color:#fff;mix-blend-mode:difference;transform:skewX(-8deg);';
     const dots = document.createElement('div');                                    // manga screen-tone: the lit parts look hand-shaded and flat, 2D
-    dots.style.cssText = 'position:absolute;inset:0;background-image:radial-gradient(circle,#000 38%,transparent 42%);background-size:6px 6px;mix-blend-mode:multiply;opacity:.4;';
-    kc.append(kcFlash, kt); kcTxt = kt;                                                // nothing but black, the white streak and the air rings: no tone dots, no speed lines
+    dots.style.cssText = 'position:absolute;inset:0;background-image:radial-gradient(circle,rgba(150,150,150,.8) 30%,transparent 36%);background-size:7px 7px;-webkit-mask-image:radial-gradient(ellipse at 50% 50%,transparent 38%,#000 92%);mask-image:radial-gradient(ellipse at 50% 50%,transparent 38%,#000 92%);opacity:0;';
+    kc.append(dots, kcLines, kcFlash, kt); kcTxt = kt; kcDots = dots;                                                // nothing but black, the white streak and the air rings: no tone dots, no speed lines
     box.append(combo, readout);
     document.body.append(box, kc);
 }
@@ -98,8 +103,9 @@ function impactFrame(S, playing) {
     else filt = 'grayscale(' + Math.max(0, 1 - (e - 0.95) / 0.25).toFixed(2) + ')';
     if (kcCanvas) kcCanvas.style.filter = filt;
     kcFlash.style.opacity = flash;
-    const lines = false;
-    kcLines.style.opacity = lines ? 0.35 * (getReduceFlash() ? 0.4 : 1) * (e < 0.6 ? 0.85 : 0.85 * (0.9 - e) / 0.3) : 0;
+    const lines = e >= 0.03 && e < 1.0;
+    if (kcDots) kcDots.style.opacity = getReduceFlash() ? 0.3 : 0.75;
+    kcLines.style.opacity = lines ? 0.95 * (getReduceFlash() ? 0.4 : 1) * (e < 0.7 ? 1 : Math.max(0, (1.0 - e) / 0.3)) : 0;
     kcLines.style.transform = getReduceFlash() ? 'scale(' + (1 + e * 0.12) + ')' : 'rotate(' + ((Math.floor(e * 24) % 2) * 3) + 'deg) scale(' + (1 + e * 0.12) + ')';      // lines jitter like hand-drawn frames
     kcTxt.style.opacity = 0;                                                                // no "FINAL BLOW" text
 }

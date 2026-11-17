@@ -2586,7 +2586,7 @@ class Fighter {
     }
 
     takeKO() {
-        if (S.instantBlow) {                                  // instant final blow practice: nobody loses a stock, they just come back
+        if (S.instantBlow && S.gameMode === 'training' && !S.match) {      // instant final blow in training: nobody loses a stock, they just come back (in custom matches KOs count normally)
             audio.playKO(); createExplosion(this.x, this.y); fx('ko', this.x, this.y);
             this.lastHitBy = null; this.lastHitT = 9999; this.reset(false);
             return;
