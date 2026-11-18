@@ -3,7 +3,7 @@
 // carried over 1:1 from the original single-file game.
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
-    updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay,
+    updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay, tickReplay,
 } from './gameCore.js';
 import { MetaUI } from './metaUI.js';
 import { initKills, tickKills } from './killsUI.js';
@@ -321,10 +321,11 @@ $('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.a
 function frame(now) {
     tickKills();
     S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online);
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.min(0.1, (now - last) / 1000), rawDt = Math.min(0.5, (now - last) / 1000);
     last = now;
     try {
-        if (!window.__luminaryPaused) {
+        if (S.replay) { if (!window.__luminaryPaused) tickReplay(rawDt * 60); acc = 0; }          // replays follow the clock, not the frame count: smooth and true speed even when the match itself lagged
+        else if (!window.__luminaryPaused) {
             acc += dt;
             if (S.kcT > 0 && !S.replay) S.kcT = Math.max(0, S.kcT - dt);
             let n = 0;

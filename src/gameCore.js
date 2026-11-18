@@ -2576,6 +2576,12 @@ class Fighter {
         const st = this._stored; if (!st) return false;
         const aim = aimOf(this); let dx = aim.x - this.x, dy = aim.y - this.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
         if (Math.abs(dx) > 0.15) this.facing = dx > 0 ? 1 : -1;
+        if (st.tornado) {                                                           // a soaked-up tornado rolls out along the ground the way he faces
+            const f = this.facing, feet = this.y + this.height / 2;
+            const T = { id: ++windId, x: this.x + f * 60, y: feet, vx: f * 5.2, r: 105, h: 300, life: st.life, owner: this, caught: new Map(), age: 0 };
+            tornadoes.push(T); fx('twister', T.x, T.y, f * T.r, T.life, T.id);
+            this._stored = null; this.storedC = ''; this.storedR = 0; this.actionLock = Math.max(this.actionLock, 18); this.throwFxT = 14; audio.playThrow(); return true;
+        }
         const sp = Math.max(14, Math.min(24, st.spd || 19));
         orbs.push({ ...st.o, x: this.x + dx * 40, y: this.y + dy * 40 - 4, vx: dx * sp, vy: dy * sp, owner: this, id: ++orbSerial, age: 0, life: Math.max(150, st.o.life || 0), stuck: false, ctrl: null, homing: null, cap: null, spd: sp });
         this._stored = null; this.storedC = ''; this.storedR = 0;
@@ -4503,11 +4509,20 @@ function updateHazards() {
     }
 }
 
-const tornadoes = [];
+export const tornadoes = [];
 /** Zephyr's Roaming Twister: a tornado rolls across the ground; foes it touches are lifted and spun round inside it, and when it ends (or they have spun long enough) they are flung out forward. */
 function updateTornadoes() {
     for (let i = tornadoes.length - 1; i >= 0; i--) {
         const t = tornadoes[i]; t.age++;
+        if (t.owner) {                                                              // Umbra's up melee soaks up an enemy tornado: he can roll it back out with the neutral melee
+            const um = fighters.find(e => e.char === 'umbra' && e.zv === 'UG' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== t.owner && foesOf(e).includes(t.owner) &&
+                Math.abs(e.activeHitbox.x - t.x) < e.activeHitbox.w + t.r && Math.abs(e.activeHitbox.y - (t.y - t.h / 2)) < e.activeHitbox.h + t.h / 2);
+            if (um) {
+                um._ugHit = true; um._stored = { tornado: true, life: Math.max(90, t.life), o: {}, spd: 19 }; um.storedC = '#e0f2fe'; um.storedR = 26;
+                for (const [f] of t.caught) if (isAlive(f)) f._inTwister = false;
+                fx('twisterend', 0, 0, 0, 0, t.id); fx('block', t.x, t.y - 80); createParticles(t.x, t.y - 80, '#e0f2fe', 14); audio.playParry(); tornadoes.splice(i, 1); continue;
+            }
+        }
         const x0 = t.x; t.x += t.vx;
         if (t.x < STAGE.x - 200 || t.x > STAGE.x + STAGE.width + 200) t.life = Math.min(t.life, 1);
         if (--t.life <= 0 || !t.owner) {
@@ -5644,17 +5659,26 @@ export function startReplay(onDone, clip) {
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     S.fxClear++; whirlpools.length = 0; tornadoes.length = 0; winds.length = 0; pillars.length = 0; zapTrails.length = 0; particles.length = 0;       // nothing from the live match is left on screen
     dramaticZoom.active = false;
-    S.replay = { frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
+    S.replay = { fresh: true, frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
     return true;
 }
 export function stopReplay() { S.kcImpT = 0; if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
-function tickReplay() {
+export function tickReplay(adv = 1) {                       // adv = recorded frames to move on (the main loop passes real elapsed time x 60, so a replay runs at true speed however slow the screen is)
     const R = S.replay, c = R.clip;
-    R.i += c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1;           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
+    if (R.fresh) { R.fresh = false; adv = 0; }                  // the first frame after it starts carries whatever time the switch took
+    R.i += adv * (c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1);           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
     if (c && R.i >= R.frames.length - 1) { R.i = R.frames.length - 1; R.ended = true; }      // a kill clip stops on its last frame: the viewer moves on by hand
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }
-    if (n !== R.n) { R.n = n; applyReplayFrame(R.frames[n]); }
+    if (n !== R.n) {
+        if (R.n >= 0 && n > R.n + 1 && n - R.n <= 12) for (let k = R.n + 1; k < n; k++) {        // the screen was slow and skipped recorded frames: still play their effects and sounds
+            const fr = R.frames[k]; if (!fr) continue;
+            for (const e of fr.fx || []) fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 });
+            for (const q of fr.pt || []) createParticles(q[0], q[1], q[2], q[3]);
+            for (const q of fr.snd || []) { try { audio[q[0]](...q.slice(1)); } catch (e) { /* audio unavailable */ } }
+        }
+        R.n = n; applyReplayFrame(R.frames[n]);
+    }
     if (c && !R.ended) {                                                    // zoom in on the victim from just before the blow until the KO has happened
         const s0 = c.hit - 14, e0 = c.ko + 14, el = R.i - s0;
         if (el >= 0 && R.i < e0) { S.kcDur = Math.max(1.2, (e0 - s0) / 60); S.kcT = S.kcDur - el / 60; S.kcFull = true; S.kcDef = c.meta.def; }
