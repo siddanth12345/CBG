@@ -8,7 +8,7 @@ export const DEFAULT_CHAR = 'luminent';
 export const CHARS = {
     luminent: {
         id: 'luminent', name: 'Luminent', role: 'All-rounder', walk: 1.0, orb: 1.0, blink: 1.0, scale: 1.0,
-        desc: 'The original fighter of light. Balanced speed, a blade of light and a halo on its back. Nothing is its weakness, nothing is its trick.',
+        desc: 'The original fighter of light. Balanced speed, a lightsaber in its own colour and a halo on its back. Side: an up-thrust-cross combo that only continues after a hit. Running: a launching slide. Back: a boomerang swing. Spiral uppercut and downward kick. Nothing is its weakness, nothing is its trick.',
         look: { suit: 0x0f172a, trim: 0xcbd5e1, head: 'crest', weapon: 'blade', anim: 'sword', extra: 'halo' },
         art: { skin: '#cbd5e1', feature: 'crest' },
     },
@@ -79,6 +79,7 @@ export const BRIEF = {
         U: ['Rising Spiral', 'Tap up F to rise while hitting. It does not spend a jump.'],
         DG: ['Suplex', 'On the ground, down F dashes and grabs. If you catch someone you slam them. It beats shield.'],
         DA: ['Headbutt', 'In the air, down F dives with small hits, then slams the floor and stuns nearby.'],
+        M: ['Lightsaber Combo', 'Side melee (ground or air) is a 3-hit combo: up slash, thrust, cross cut. It only starts moving on if the first hit lands: that freezes you and the foe for 0.5 s, press again within that time for the thrust (another freeze), then again for the cross cut that knocks back. Running side: a slide that knocks foes up. Backward: a mini boomerang swing, out and back. Up: a spiral uppercut. Down on the ground: a quick 360 spin that knocks foes away from you. Down in the air: a downward kick wrapped in a glowing spiral.'],
     },
     bulwark: {
         N: ['Bastion Core', 'Hold F for a slow, huge orb. A full charge hits very hard (up to 22).'],

@@ -14,7 +14,7 @@ import { Trail } from './trail.js';
 import { lowGfx, getHitboxes } from '../gfx.js';
 import { buildSword } from './swordModel.js';
 
-const BLADE_LEN = 40;
+const BLADE_LEN = 40, LS_REST = -1.1;
 const WHITE = new THREE.Color(0xffffff), YELLOW = new THREE.Color(0xfacc15);
 const ATTACK_FRAMES = 18;
 
@@ -289,6 +289,13 @@ export class FighterModel {
         this.bladeBaseM = G(this.blade, 0, 0, 0);
         this.bladeG.visible = false;
         this.bladeParts = [hilt, guard, core, outer];
+        if (L.weapon === 'blade') {                                                  // lightsaber: an emitter ring, a pommel cap, a brighter core and a wide glow in his colour
+            const em = M(new THREE.CylinderGeometry(1.9, 1.5, 1.6, 10), trim); em.position.y = -7.6; this.bladeG.add(em);
+            const pm = M(new THREE.SphereGeometry(1.5, 8, 6), trim); pm.position.y = 0.4; this.bladeG.add(pm);
+            const halo = new THREE.Mesh(new THREE.BoxGeometry(8, 1, 4.4), new THREE.MeshBasicMaterial({ color: base.clone().multiplyScalar(1.6), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+            halo.position.y = -0.5; this.blade.add(halo);
+            this.bladeParts.push(em, pm, halo);
+        }
         this.bladeCore = core; this.bladeOuter = outer;
         this.#weaponStyle(L, { M, G, trim, glow, hilt, guard, core, outer });
         // firestick: lives in the right hand, so it follows every arm swing (and drags a little behind it)
@@ -798,7 +805,7 @@ export class FighterModel {
 
     /** Zephyr's melees: haymaker (H), running thrust (T), backwards drop kick (K), uppercut (UG), bicycle kick (UA), iron sweep (DG), double-leg stomp (DA) */
     #zephMelee(f, u) {
-        const v = f.zv, o = {}, ez = smooth, Sg = (a, b) => ez(seg(u, a, b));
+        const v = f.zv === 'C2' ? 'H' : f.zv === 'C3' ? 'SL' : f.zv, o = {}, ez = smooth, Sg = (a, b) => ez(seg(u, a, b));
         let spinYaw = 0;
         Object.assign(o, { rSx: 20, lSx: 20, rSz: 12, lSz: 12, rE: 20, lE: 20, rHx: 0, lHx: 0, rK: 8, lK: 8, lean: 0, dy: 0, fwd: 0, torsoY: 0, twist: 0, headX: 0, pitch: 0, spin: 0 });
         if (v === 'H') {
@@ -953,13 +960,16 @@ export class FighterModel {
     #styleTweak(f, v, u, o, Sg) {
         const sw = (a, b) => Sg(a, b), P2 = Math.PI * 2;
         switch (f.char) {
-            case 'luminent':                                                 // clean two-handed sword work
-                if (v === 'H') { o.lSx = o.rSx; o.lE = o.rE; o.twist *= 1.6; }
-                else if (v === 'T') { o.pitch = -14; o.rHx = 62; o.lHx = -58; o.rSx = 70; o.lSx = 70; o.rE = 14; o.lE = 14; }
-                else if (v === 'K') { o.rSx = 100; o.lSx = 100; o.rE = 20; o.lE = 20; return P2 * sw(0.12, 0.6); }
-                else if (v === 'UG') { o.spin = 360 * sw(0.18, 0.78); o.rSx = 150; o.lSx = 150; o.rK = 70; o.lK = 70; o.rHx = 60; o.lHx = 40; }
-                else if (v === 'SL') { o.lean = 34 * sw(0.28, 0.45); o.rSx = lerp(176, 84, sw(0.3, 0.46)); o.lSx = o.rSx; o.rHx = 50 * sw(0.3, 0.46); o.lHx = -30 * sw(0.3, 0.46); }
-                break;
+            case 'luminent': {                                               // the lightsaber: up slash / thrust / cross combo, slide, boomerang, spin, spiral uppercut and kick
+                const zv = f.zv;
+                if (zv === 'H') { const r = sw(0.18, 0.5) * (1 - sw(0.78, 1)); o.rSx = lerp(-14, 172, sw(0.18, 0.5)) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.rE = 10; o.lE = 10; o.lean = -16 * sw(0.1, 0.2) + 26 * r; o.twist = 18 * r; o.fwd = 6 * r; }
+                else if (zv === 'C2') { const th = sw(0.1, 0.34) * (1 - sw(0.7, 1)); o.rSx = 20 + 76 * th; o.lSx = 20 + 70 * th; o.rE = 6; o.lE = 6; o.rSz = 4; o.lSz = 4; o.lean = 20 * th; o.fwd = 12 * th; o.rHx = 34 * th; o.lHx = -26 * th; o.twist = 8 * th; }
+                else if (zv === 'C3') { const c3 = sw(0.04, 0.4); o.rSx = lerp(176, 70, c3) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.lean = 30 * c3 * (1 - sw(0.75, 1)); o.rHx = 46 * c3; o.lHx = -30 * c3; o.twist = -14 * c3; }
+                else if (zv === 'T') { const sl = sw(0, 0.16) * (1 - sw(0.78, 1)); o.pitch = -62 * sl; o.fwd = 28 * sl; o.dy = 12 * sl; o.rHx = 96 * sl; o.rK = 6; o.lHx = -24 * sl; o.lK = 100 * sl + 8; o.rSx = 40; o.lSx = 40; o.rSz = 20; o.lSz = 20; }
+                else if (zv === 'K') { o.rSx = 100; o.lSx = 100; o.rE = 20; o.lE = 20; return Math.PI * Math.sin(Math.PI * sw(0.1, 0.78)); }
+                else if (zv === 'UG' || zv === 'UA') { const up = sw(0.12, 0.34) * (1 - sw(0.75, 1)); o.rSx = lerp(-16, 176, sw(0.12, 0.34)) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.lean = -10 * up; o.dy = 8 * up; o.rHx = 20 * up; o.lHx = -14 * up; o.rK = 20 + 50 * up; o.lK = 20; }
+                else if (zv === 'DG') { o.rSx = 92; o.lSx = 92; o.rSz = 30; o.lSz = 30; o.rE = 6; o.lE = 6; o.dy = 6 * sw(0, 0.15) * (1 - sw(0.8, 1)); return P2 * sw(0.14, 0.52); }
+                break; }
             case 'umbra':                                                    // low and twisting, one blade then the other
                 o.dy = Math.min(o.dy, -7 * Math.sin(Math.PI * Math.min(1, u * 1.2)));
                 if (v === 'H') { const a2 = sw(0.45, 0.62); o.lSx = lerp(40, 160, a2) * (1 - sw(0.7, 1)) + 20 * sw(0.7, 1); o.lE = 10; o.twist = (o.twist || 0) - 26 * a2 * (1 - sw(0.7, 1)); }
@@ -1110,12 +1120,14 @@ export class FighterModel {
         this.legL.kn.rotation.set(pose.lK * D2R, 0, 0);
 
         // blade + aura (a held firestick replaces the light blade: same swing, longer reach, flame on the tip)
-        const bl = clamp01(pose.blade);
+        const lsb = this.charLook.weapon === 'blade';                                // Luminent's lightsaber is always out
+        const bl = lsb ? 1 : clamp01(pose.blade);
         const hs = f.heldItem && f.heldItem.type === 'FIRESTICK' && f.heldItem.st === 'held' ? f.heldItem : null;
         const lenK = hs ? (hs.len || 5) : 1;
         this.bladeG.visible = bl > 0.02;
         for (const m of this.bladeParts) m.visible = !hs && !m.userData.hide;
         this.blade.scale.y = Math.max(0.001, BLADE_LEN * bl * (hs ? lenK * 0.5 : 1));
+        if (lsb) this.bladeG.rotation.x = LS_REST * (1 - clamp01(pose.blade));
         this.stickG.visible = !!hs;
         if (hs) f._stickAt = performance.now();                           // tells the item renderer this hand is drawing the stick
         if (hs) {

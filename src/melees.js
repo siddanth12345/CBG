@@ -10,12 +10,15 @@ const m = (n, st, o = {}) => ({ n, st, ch: true, ...o });
 const s = (a, b, w, h, x, y, dmg, bkb, kbg, ang, o = {}) => ({ a, b, w, h, x, y, dmg, bkb, kbg, ang, ...o });
 
 export const MELEE = {
-    luminent: {
-        H: m(22, [s(5, 8, 56, 46, 52, -6, 5, 6, 0.6, -0.3), s(12, 15, 86, 30, 74, -4, 5, 11, 1.2, -0.5)]),                                  // draw-cut, then the light line it left detonates
-        T: m(30, [s(4, 12, 70, 40, (k) => 30 + 30 * k, 0, 5, 5, 0.5, -0.2), s(17, 20, 84, 50, -44, 0, 6, 11, 1.2, -0.45)], { leap: { vx: 15, vy: 0, g: false } }),   // slide-through slash, the line explodes behind him
-        K: m(24, [s(5, 9, 60, 56, 40, 0, 5, 6, 0.6, -0.3), s(10, 15, 72, 72, 112, -4, 6, 11, 1.2, -0.4)], { leap: { vx: 8, vy: -3, g: false } }),   // spin-back cut + a thrown crescent of light
-        UG: m(22, [s(4, 9, 56, 74, 30, -36, 5, 5, 0.5, -PI / 2), s(12, 16, 112, 112, 0, -86, 6, 12, 1.25, -PI / 2)]),                          // rising flip, a sun-ring at the top
-        SL: m(24, [s(5, 8, 40, 40, 44, 24, 4, 3, 0.3, -PI / 2), s(14, 18, 52, 74, 72, 16, 7, 12, 1.25, -1.2)]),                              // blade into the floor, a light spike erupts a beat later
+    luminent: {                                                                                                                                 // the lightsaber: an up-thrust-cross combo that only continues after a hit
+        H: m(22, [s(5, 9, 84, 84, 46, -24, 3, 0, 0, -1.0, { cmb: 1 })]),                                                                        // combo 1: an up slash. Hitting freezes both fighters for 0.5 s (click again for the thrust)
+        C2: m(18, [s(3, 8, 124, 34, 72, -2, 3, 0, 0, 0, { cmb: 2 })]),                                                                          // combo 2: a thrust, the same freeze
+        C3: m(20, [s(3, 9, 112, 104, 50, 14, 6, 9, 1, 0.6)]),                                                                                   // combo 3: the cross cut that knocks back
+        T: m(30, [s(4, 14, 100, 44, (k) => 40 + 30 * k, 8, 5, 9, 1.1, -1.3)]),                                                                  // running: a slide (animation only) that knocks foes up
+        K: m(30, [s(6, 11, 104, 58, 62, -4, 3, 3, 0.3, -0.3), s(17, 23, 104, 58, 62, -4, 5, 10, 1.1, -0.4)]),                                  // backwards: a mini boomerang swing, out and back
+        UG: m(26, [s(5, 14, 84, 132, 24, -52, 6, 11, 1.2, -PI / 2)]),                                                                           // up: a spiralling uppercut
+        DG: m(26, [s(5, 14, 200, 70, 0, 0, 5, 10, 1.1, -0.5, { radial: true })]),                                                               // ground down: a quick 360 spin, knocks foes away from him
+        DA: m(26, [s(7, 18, 56, 100, 12, 56, 5, 9, 1, PI / 2)]),                                                                                // air down: a downward kick wrapped in a glowing spiral
     },
     umbra: {
         H: m(18, [s(4, 7, 120, 34, 84, -6, 4, 4, 0.4, -0.3), s(11, 14, 150, 38, 104, -4, 6, 11, 1.2, -0.35)]),                                // a rainbow whip: two long cracks, the second one lands hard
@@ -63,7 +66,7 @@ export const MELEE = {
 /** build the playable swing for one move and one direction (d = +1 / -1: the way the move is aimed) */
 export function buildMelee(spec, d) {
     const st = spec.st.map((q) => ({
-        a: q.a, b: q.b, w: q.w, h: q.h, damage: q.dmg, bkb: q.bkb, kbg: q.kbg, stun: q.stun || 0, twin: !!q.twin, pull: !!q.pull, step: q.step || 0, radial: !!q.radial,
+        a: q.a, b: q.b, w: q.w, h: q.h, damage: q.dmg, bkb: q.bkb, kbg: q.kbg, stun: q.stun || 0, twin: !!q.twin, cmb: q.cmb || 0, pull: !!q.pull, step: q.step || 0, radial: !!q.radial,
         path: () => null, px: q.x, py: q.y,
         angle: () => q.pull ? (d === 1 ? PI + 0.15 : -0.15) : (d === 1 ? q.ang : PI - q.ang),
     }));

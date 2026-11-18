@@ -658,6 +658,7 @@ class Fighter {
     }
 
     update() {
+        if (this._cmb) { const c = this._cmb; if (c.t-- > 0 && isAlive(c.foe) && this.stocks > 0 && !(S.kcPause > 0) && !(this.hitstun > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; } this._cmb = null; }     // Luminent's combo freeze: he hangs in place for 0.5 s with the foe
         if (this._hp) {                                                      // hit pause: only the one who was hit is held for 0.2 s, then their launch velocity carries on unchanged
             const h = this._hp;
             if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
@@ -1083,6 +1084,7 @@ class Fighter {
         const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
         if (this.char === 'ember' && this.zv && this.attackTimer > 0) emberMeleeFx(this, e);
         else if (this.char === 'tide' && this.zv && this.attackTimer > 0) tideMeleeFx(this, e);
+        else if (this.char === 'luminent' && this.zv && this.attackTimer > 0) luminentMeleeFx(this, e);
         let st = null;
         if (sw.stages) {                                 // a move with several hit windows in a row
             const i = sw.stages.findIndex(q => e >= q.a && e <= q.b);
@@ -1128,8 +1130,8 @@ class Fighter {
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
             damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: this.airDown ? Math.PI / 2 - 0.3 * this.facing : sw.angle(this.facing, this.grounded), radial: this.airDown ? false : !!sw.radial, type: sw.type,
-            multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: (st && sw0.stages.indexOf(st) < sw0.stages.length - 1) ? 0 : (sw.stun || 0), burn,
-            fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && !st.pull) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
+            cmb: sw.cmb || 0, multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: (st && sw0.stages.indexOf(st) < sw0.stages.length - 1) ? 0 : (sw.stun || 0), burn,
+            fixed: sw.cmb ? { vx: 0, vy: 0, hitstun: 36 } : sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && !st.pull) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
         };
         if (st && st.twin) { const W = this.width || 44, Hh = this.height || 68, o = W * 1.5, sd = this.swing.d || 1; this.activeHitbox.rects = [{ x: this.x - o, y: this.y, w: W, h: Hh }, { x: this.x + o, y: this.y, w: W, h: Hh }]; this.activeHitbox.w = W * 4; this.activeHitbox.h = Hh; this.activeHitbox.x = this.x; this.activeHitbox.y = this.y; }
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
@@ -2496,9 +2498,11 @@ class Fighter {
             else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
         }
         let mv = null;                                                  // everyone else's new melees (melees.js): side / running side / opposite side / up / down
+        const cmbOn = this.char === 'luminent' && this._cmb && this._cmb.t > 0 && isAlive(this._cmb.foe);          // Luminent's combo window: any attack press continues it
         if (this.char !== 'zephyr' && MELEE[this.char]) {
             let v = '';
-            if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
+            if (cmbOn) { v = this._cmb.st === 1 ? 'C2' : 'C3'; zdir = this._cmb.d; }
+            else if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
                 zdir = aimDirection === 'SIDE_LEFT' ? -1 : 1;
                 v = zdir === -this.facing ? 'K' : (this.grounded && Math.abs(this.vx) > 3 && Math.sign(this.vx) === zdir) ? 'T' : 'H';
             } else if (aimDirection === 'UP') v = (!this.grounded && MELEE[this.char].UA) ? 'UA' : 'UG'; else if (aimDirection === 'DOWN') v = this.grounded ? (MELEE[this.char].DG ? 'DG' : 'SL') : (MELEE[this.char].DA ? 'DA' : 'SL');
@@ -2510,6 +2514,8 @@ class Fighter {
             case 'SIDE_LEFT': kind = 'SIDE_LEFT'; if (zv !== 'K') this.facing = -1; break;
             case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; if (zv !== 'K') this.facing = 1; break;
         }
+        if (cmbOn) { kind = zdir > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT'; this.facing = zdir; const fo = this._cmb.foe; if (fo._hp) fo._hp.n = Math.max(fo._hp.n, 14); fo.hitstun = Math.max(fo.hitstun, 30); this._cmb = null; }
+        else if (this.char === 'luminent') this._cmb = null;
         if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
         this.attackSerial++;
@@ -4005,6 +4011,23 @@ function emberMeleeFx(f, e) {
     else if (f.zv === 'DA' && e >= 6 && e <= 20) { cP(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); cP(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
     else if (f.zv === 'H' && e >= 8 && e <= 18) { cP(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
 }
+/** Luminent's combo hit 1 / 2: both fighters freeze for 0.5 s so the next press can continue it */
+function comboHit(att, def, hb) {
+    if (att.char !== 'luminent') return;
+    def._hp = { n: 30, vx: 0, vy: 0 }; def.hitstun = Math.max(def.hitstun, 36);
+    att._cmb = { st: hb.cmb, t: 30, foe: def, d: att.swing && att.swing.d || att.facing };
+    att.attackTimer = 0; att.swing = null; att.activeHitbox = null; att.actionLock = 0; att.zSlide = 0; att.zLock = 0;
+    fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 10); S.screenShake = Math.max(S.screenShake, 4);
+}
+/** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
+function luminentMeleeFx(f, e) {
+    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const d = f.facing || 1, mvd = f.swing && f.swing.d || d, col = f.color || '#ffffff', feet = f.y + (f.height || 68) / 2;
+    if ((f.zv === 'UG' || f.zv === 'UA') && e === 4 || f.zv === 'DA' && e === 6) { if (f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x + mvd * 10, f.zv === 'DA' ? f.y + 10 : f.y - 6, f.zv === 'DA' ? 1 : -1, 22, col); audio.playThrow(); } }
+    else if (f.zv === 'T' && e >= 4 && e <= 16) cP(f.x - mvd * 20, feet - 4, col, 2);
+    else if (f.zv === 'DG' && e >= 5 && e <= 14) { const a = (e - 5) / 9 * Math.PI * 2 * mvd; cP(f.x + Math.cos(a) * 90, f.y + Math.sin(a) * 24, col, 2); if (e === 5 && f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x, f.y, 0, 14, col); } }
+    else if (f.zv === 'K' && (e >= 6 && e <= 11 || e >= 17 && e <= 23) && e % 2 === 0) cP(f.x + mvd * (40 + (e % 12) * 6), f.y - 4, col, 2);
+}
 /** Tide's trident visuals: a blue orb forms on the trident, pops and splashes (up / down), a breakdance with splashes, a slice, a thrust. Low graphics: 70% fewer particles. */
 function tideMeleeFx(f, e) {
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
@@ -4155,6 +4178,7 @@ function launch(attacker, defender, hb) {
         defender.hitstun = hb.fixed.hitstun;
         defender.grounded = false;
         hitPause(defender, hb);
+        if (hb.cmb) comboHit(attacker, defender, hb);
         if (hb.rollCarry) defender._rollCarry = attacker;   // Ember roll: stick to the roller
         S.screenShake = Math.max(S.screenShake, 5);
         audio.playHit(false);

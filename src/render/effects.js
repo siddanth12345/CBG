@@ -455,8 +455,7 @@ export class Effects {
         // No Array.shift() — O(n²) drains caused late-match lag when events piled up
         const queue = fxEvents;
         if (queue.length > 100) queue.splice(0, queue.length - 100);
-        const nEv = queue.length;
-        for (let ei = 0; ei < nEv; ei++) {
+        for (let ei = 0; ei < queue.length && ei < 300; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
             const e = queue[ei];
             const pos = new THREE.Vector3(wx(e.x), wy(e.y), 0);
             switch (e.type) {
@@ -595,7 +594,7 @@ export class Effects {
                         const rr = R * (1 - i * 0.14);
                         const tor = new THREE.Mesh(
                             new THREE.TorusGeometry(rr * 0.55, Math.max(2.5, rr * 0.04), 8, 36),
-                            new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? P[1] : P[0]).multiplyScalar(1.6), transparent: true, opacity: 0.85 - i * 0.1, blending: ADD, depthWrite: false, toneMapped: false })
+                            new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? P[1] : P[0]).multiplyScalar(0.95), transparent: true, opacity: 0.7 - i * 0.08, blending: ADD, depthWrite: false, toneMapped: false })
                         );
                         tor.rotation.x = Math.PI / 2;
                         tor.position.y = 4 + i * 5;
@@ -620,7 +619,7 @@ export class Effects {
                             const spin = ent.t * 6.28; if (g.userData.px !== undefined) g.position.x += (g.userData.px - g.position.x) * 0.5; const rem = ent.dur - ent.t; g.scale.setScalar(rem < 0.3 ? Math.max(0.01, rem / 0.3) : 1);
                             rings.forEach((r, i) => {
                                 r.rotation.z = spin * (1 + i * 0.15) * (i % 2 ? -1 : 1);
-                                r.material.opacity = (0.85 - i * 0.1) * (1 - u * 0.5);
+                                r.material.opacity = (0.7 - i * 0.08) * (1 - u * 0.5);
                                 const pulse = 1 + Math.sin(u * 20 + i) * 0.04;
                                 r.scale.set(pulse, pulse, pulse);
                             });
@@ -648,7 +647,7 @@ export class Effects {
                     break;
                 }
                 case 'pool': {            // Tide's whirlpool as ONE object that can be moved: a = radius, b = max life frames, c = id
-                    this._poolId = e.c; fxEvents.unshift({ type: 'whirlpool', x: e.x, y: e.y, a: e.a, b: e.b, c: 'water' }); break;
+                    this._poolId = e.c; fxEvents.push({ type: 'whirlpool', x: e.x, y: e.y, a: e.a, b: e.b, c: 'water' }); break;
                 }
                 case 'meteor': {          // a falling magma ball (Ember's fireball look): a, b = velocity per frame (game units), c = id
                     const mt = magmaTextures(), g = new THREE.Group(), R = 44;
@@ -694,6 +693,21 @@ export class Effects {
                     (this._byId || (this._byId = new Map())).set('tw' + (kt ? 'k' : red ? 'r' : '') + e.c, ent);
                     this.timed.push(ent);
                     this.sparks(pos, red ? '#fb923c' : '#e0f2fe', 12, R * 1.3, 0.5);
+                    break;
+                }
+                case 'lspiral': {          // Luminent's glowing spiral (a = -1 up / 1 down / 0 flat spin, b = life frames, c = colour): two strands wound round the move
+                    const dir = e.a || 0, dur = Math.max(0.2, (e.b || 22) / 60), col = new THREE.Color(typeof e.c === 'string' ? e.c : '#ffffff'), Ht = dir ? 130 : 0, N = dir ? 40 : 48, g = new THREE.Group(); g.position.copy(pos);
+                    const mats = [], strands = [];
+                    for (let s2 = 0; s2 < 2; s2++) {
+                        const pts = []; for (let i = 0; i < N; i++) { const k = i / (N - 1), a = k * Math.PI * (dir ? 6 : 2) + s2 * Math.PI, r = dir ? 20 + 8 * Math.sin(k * Math.PI) : 70 + 30 * k; pts.push(new THREE.Vector3(dir ? Math.cos(a) * r * 0.5 : Math.cos(a) * r, dir ? (dir < 0 ? 1 : -1) * k * Ht : 0, dir ? Math.sin(a) * r : Math.sin(a) * r * 0.35)); }
+                        const mt = new THREE.LineBasicMaterial({ color: col.clone().multiplyScalar(s2 ? 1 : 1.4), transparent: true, opacity: 0.95, blending: ADD, depthWrite: false, toneMapped: false }); mats.push(mt);
+                        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mt); g.add(ln); strands.push(ln);
+                        const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), N, 1.6, 5, false), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(1.3), transparent: true, opacity: 0.55, blending: ADD, depthWrite: false, toneMapped: false })); g.add(tube); mats.push(tube.material); strands.push(tube);
+                    }
+                    this.scene.add(g);
+                    const ent = { obj: g, t: 0, dur, step: () => { const u = ent.t / dur; g.rotation.y = ent.t * 14 * (dir || 1); if (dir) g.position.y = pos.y - dir * 0 + (dir < 0 ? 1 : -1) * 0; g.scale.y = 0.4 + 0.6 * Math.min(1, u * 3); for (const m of mats) m.opacity = (m.blending === ADD && m.depthWrite === false ? 1 : 1) * Math.max(0, 1 - u) * 0.9; },
+                        free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } };
+                    this.timed.push(ent);
                     break;
                 }
                 case 'twisterend': { const en = this._byId && this._byId.get('tw' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.25); break; }
