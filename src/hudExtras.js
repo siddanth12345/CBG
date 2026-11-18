@@ -57,7 +57,7 @@ export function tickExtras(S, fighters, me) {
 
     // ---- training readout
     const train = S.gameMode === 'training';
-    S_ = S; if (tools) tools.style.display = train ? 'flex' : 'none';
+    S_ = S; if (tools) tools.style.display = train && S.trainTools ? 'flex' : 'none';
     readout.style.display = train ? 'block' : 'none';
     if (!train) return;
     const h = S.lastHit;

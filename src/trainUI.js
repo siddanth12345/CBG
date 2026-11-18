@@ -204,6 +204,10 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.instantBlow ? '' : 'lm-btn-ghost'}" data-ib="1">On</button>
                     <button class="lm-btn lm-mini ${t.instantBlow ? 'lm-btn-ghost' : ''}" data-ib="0">Off</button>
                 </span></div>
+                <div class="lm-setrow"><span>Training tools <small>(reset, hitboxes, pause / frame step, dummy %)</small></span><span>
+                    <button class="lm-btn lm-mini ${S.trainTools ? '' : 'lm-btn-ghost'}" data-tt="1">On</button>
+                    <button class="lm-btn lm-mini ${S.trainTools ? 'lm-btn-ghost' : ''}" data-tt="0">Off</button>
+                </span></div>
                 <div class="lm-setrow"><span>Stun (frames)</span><input data-k="stun" type="number" min="0" max="120" value="${t.stun}"></div>
                 <div class="lm-setrow"><span>Move cooldown (frames)</span><input data-k="lock" type="number" min="0" max="120" value="${t.lock}"></div>
                 <div class="lm-setrow"><span>Jumps (blank = character default)</span><input data-k="jumps" type="number" min="1" max="10" placeholder="default" value="${t.jumps == null ? '' : t.jumps}"></div>
@@ -243,6 +247,9 @@ export class TrainUI {
         if (this.msg) html += `<p class="lm-status">${esc(this.msg)}</p>`;
         this.body.innerHTML = html;
 
+        this.body.querySelectorAll('[data-tt]').forEach(btn => {
+            btn.addEventListener('click', (e) => { e.stopPropagation(); S.trainTools = btn.dataset.tt === '1'; if (!S.trainTools) window.__luminaryPaused = false; this.render(); });
+        });
         this.body.querySelectorAll('[data-ib]').forEach(btn => {
             btn.addEventListener('click', (e) => { e.stopPropagation(); ensureTrain().instantBlow = btn.dataset.ib === '1'; applySnap(snap(), true); this.render(); });
         });
