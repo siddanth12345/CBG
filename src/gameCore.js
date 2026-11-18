@@ -1090,9 +1090,11 @@ class Fighter {
         }
         if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable && this.grounded && this.zv !== 'T')) {
             const l = this.zLeap; this.zLeap = null;
-            if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy);
-            // Keep-velocity follow-through: 60% less leap speed (except Bulwark)
-            this.vx = l.vx * (this.char === 'bulwark' ? 1 : 0.4);
+            // T/K: melee itself does not move you (keep player walk control). Bulwark keeps leap.
+            if (this.char === 'bulwark' || (this.zv !== 'T' && this.zv !== 'K')) {
+                if (l.g) { this.grounded = false; this.vy = l.vy; } else this.vy = Math.min(this.vy, l.vy);
+                this.vx = l.vx;
+            }
         }
         // T / K (all chars): follow-through keeps leap velocity — no freeze, mild action lock only
         if (this.zLock && e >= this.zLock) {
@@ -5359,15 +5361,10 @@ function drive(f, h) {
                 else if (jy < -0.5 && f.vy > -3.5) f.vy -= 0.5;
             } else {
             // on ledge: only jump gets you off; during Ember post-roll halt: no walk input
-            // Forward/back melees (T/K): no walkspeed until the move + follow-through end (Bulwark excluded)
-            const meleeCoast = f.char !== 'bulwark' && (f.zv === 'T' || f.zv === 'K') && (f.attackTimer > 0 || f.zSlide > 0);
-            if (!f.isHanging && f.haltT <= 0 && !meleeCoast) {
+            // Running / back melees: player can still walk; the melee itself does not force movement
+            if (!f.isHanging && f.haltT <= 0) {
                 if (h.left) { f.vx = -spd; if (!swinging) f.facing = -1; }
                 if (h.right) { f.vx = spd; if (!swinging) f.facing = 1; }
-            } else if (meleeCoast) {
-                // still allow facing update from input without rewriting velocity
-                if (h.left && !swinging) f.facing = -1;
-                if (h.right && !swinging) f.facing = 1;
             }
             }
         }
