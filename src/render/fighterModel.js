@@ -117,7 +117,12 @@ export class FighterModel {
         const glow = this.#mat(base.clone().multiplyScalar(0.25), { emissive: base, ei: 2.6, tint: '#5a5f68' });
         this.glowMat = glow;
 
-        const M = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; return m; };
+        const M = (geo, mat) => {
+            const m = new THREE.Mesh(geo, mat);
+            if (!geo.boundingSphere) geo.computeBoundingSphere();
+            m.castShadow = geo.boundingSphere.radius >= 8;                    // only the big body parts cast shadows: the small ones (fingers, trim, studs) doubled the draw calls for nothing
+            return m;
+        };
         const G = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
         const cap = (r, len) => new THREE.CapsuleGeometry(r, len, 5, 10);
 
@@ -914,6 +919,34 @@ export class FighterModel {
             g.visible = false; g.renderOrder = 22; g.position.set(0, 112, 0); this.root.add(g); this.uBall = g;
         }
         this.uBall.visible = !!(f.storedC && f.storedC !== '') && this.root.visible;
+        if (!this.uVuln) {                                                   // open-guard window after a missed hat throw: a purple flicker over his body
+            const v = new THREE.Mesh(new THREE.SphereGeometry(52, 16, 12), new THREE.MeshBasicMaterial({ color: 0xc026d3, transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false }));
+            v.visible = false; v.renderOrder = 21; v.position.set(0, 4, 0); this.root.add(v); this.uVuln = v;
+        }
+        this.uVuln.visible = f.vulnT > 0 && this.root.visible && Math.floor(f.vulnT / 3) % 2 === 0;
+        // burn timer over a burning fighter (Ember's fireball): seconds left
+        if (!this.bTimer) {
+            const cv = document.createElement('canvas'); cv.width = 128; cv.height = 48; const tx = new THREE.CanvasTexture(cv);
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false, toneMapped: false }));
+            sp.scale.set(64, 24, 1); sp.position.set(0, 100, 0); sp.renderOrder = 23; sp.visible = false; this.root.add(sp); this.bTimer = { sp, cv, tx, n: -1 };
+        }
+        { const bt = this.bTimer, sec = f.burnT > 0 ? Math.ceil(f.burnT / 6) / 10 : 0; bt.sp.visible = sec > 0 && this.root.visible;
+          if (sec > 0 && bt.n !== sec) { bt.n = sec; const c2 = bt.cv.getContext('2d'); c2.clearRect(0, 0, 128, 48); c2.font = 'bold 30px sans-serif'; c2.textAlign = 'center'; c2.fillStyle = '#fb923c'; c2.strokeStyle = '#431407'; c2.lineWidth = 5; const t = '🔥' + (sec).toFixed(1) + 's'; c2.strokeText(t, 64, 34); c2.fillText(t, 64, 34); bt.tx.needsUpdate = true; } }
+        // backstab chain counter (only the cloaked Umbra sees it): x1.25, x1.56, x1.95 ...
+        if (!this.uChain) {
+            const cv = document.createElement('canvas'); cv.width = 128; cv.height = 48;
+            const tx = new THREE.CanvasTexture(cv);
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false, toneMapped: false }));
+            sp.scale.set(64, 24, 1); sp.position.set(0, 138, 0); sp.renderOrder = 23; sp.visible = false; this.root.add(sp);
+            this.uChain = { sp, cv, tx, n: -1 };
+        }
+        const ch = this.uChain, showCh = f.cloakT > 0 && f === viewerFighter();
+        ch.sp.visible = showCh;
+        if (showCh && ch.n !== f.bsN) {
+            ch.n = f.bsN; const c2 = ch.cv.getContext('2d'); c2.clearRect(0, 0, 128, 48);
+            c2.font = 'bold 34px sans-serif'; c2.textAlign = 'center'; c2.fillStyle = '#fde047'; c2.strokeStyle = '#3b0764'; c2.lineWidth = 5;
+            const t = 'x' + Math.pow(1.25, (f.bsN || 0) + 1).toFixed(2); c2.strokeText(t, 64, 36); c2.fillText(t, 64, 36); ch.tx.needsUpdate = true;
+        }
     }
 
     /** gives each character's melee its own body language on top of the shared pose (returns a yaw spin, or 0) */

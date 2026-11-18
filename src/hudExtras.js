@@ -1,5 +1,6 @@
-import { getReduceFlash } from './gfx.js';
+import { getReduceFlash, getHitboxes, setHitboxes } from './gfx.js';
 /** On-screen extras: the combo counter (with a warning before the finisher) and the training-mode numbers readout. Pure DOM, fed by gameCore each HUD tick. */
+let tools = null, S_ = null;
 let kcDots = null, box = null, combo = null, readout = null, kc = null, kcLines = null, kcFlash = null, kcTxt = null, kcCanvas = null, last = { c: '', r: '' };
 
 function ensure() {
@@ -26,7 +27,18 @@ function ensure() {
     const dots = document.createElement('div');                                    // manga screen-tone: the lit parts look hand-shaded and flat, 2D
     dots.style.cssText = 'position:absolute;inset:0;background-image:radial-gradient(circle,rgba(150,150,150,.8) 30%,transparent 36%);background-size:7px 7px;-webkit-mask-image:radial-gradient(ellipse at 50% 50%,transparent 38%,#000 92%);mask-image:radial-gradient(ellipse at 50% 50%,transparent 38%,#000 92%);opacity:0;';
     kc.append(dots, kcLines, kcFlash, kt); kcTxt = kt; kcDots = dots;                                                // nothing but black, the white streak and the air rings: no tone dots, no speed lines
-    box.append(combo, readout);
+    tools = document.createElement('div');                                           // training tools: reset, hitboxes, pause / frame step, dummy %
+    tools.style.cssText = 'position:absolute;left:50%;top:max(58px,env(safe-area-inset-top));transform:translateX(-50%);display:none;gap:6px;align-items:center;padding:5px 8px;border-radius:10px;background:rgba(15,23,42,.78);border:1px solid rgba(148,163,184,.35);pointer-events:auto;font:600 12px system-ui,sans-serif;color:#e2e8f0;white-space:nowrap;';
+    const mk = (t, fn, id) => { const b = document.createElement('button'); b.textContent = t; if (id) b.id = id; b.style.cssText = 'font:inherit;color:#e2e8f0;background:rgba(51,65,85,.9);border:1px solid rgba(148,163,184,.4);border-radius:7px;padding:4px 8px;cursor:pointer;'; b.addEventListener('click', (e) => { e.stopPropagation(); fn(b); b.blur(); }); b.addEventListener('pointerdown', (e) => e.stopPropagation()); tools.appendChild(b); return b; };
+    mk('Reset', () => S_.trainReset && S_.trainReset());
+    mk('Hitboxes: ' + (getHitboxes() ? 'on' : 'off'), (b) => { setHitboxes(!getHitboxes()); b.textContent = 'Hitboxes: ' + (getHitboxes() ? 'on' : 'off'); });
+    mk('Pause', (b) => { window.__luminaryPaused = !window.__luminaryPaused; b.textContent = window.__luminaryPaused ? 'Resume' : 'Pause'; });
+    mk('Step', () => { window.__luminaryPaused = true; const pb = tools.children[2]; if (pb) pb.textContent = 'Resume'; S_.stepOnce && S_.stepOnce(); });
+    const lab = document.createElement('span'); lab.textContent = 'Dummy %'; tools.appendChild(lab);
+    const inp = document.createElement('input'); inp.type = 'number'; inp.min = 0; inp.max = 999; inp.value = 0; inp.style.cssText = 'width:54px;font:inherit;border-radius:6px;border:1px solid rgba(148,163,184,.4);background:#0f172a;color:#e2e8f0;padding:2px 4px;';
+    inp.addEventListener('change', () => S_.trainDmg && S_.trainDmg(inp.value)); for (const ev of ['keydown', 'keyup', 'pointerdown']) inp.addEventListener(ev, (e) => e.stopPropagation());
+    tools.appendChild(inp);
+    box.append(combo, readout, tools);
     document.body.append(box, kc);
 }
 
@@ -45,12 +57,13 @@ export function tickExtras(S, fighters, me) {
 
     // ---- training readout
     const train = S.gameMode === 'training';
+    S_ = S; if (tools) tools.style.display = train ? 'flex' : 'none';
     readout.style.display = train ? 'block' : 'none';
     if (!train) return;
     const h = S.lastHit;
-    if (h && h.def && h.age < 8) { h.stunMax = Math.max(h.stunMax, h.def.hitstun || 0, h.def.clashStunTimer || 0); h.age++; if (h.age === 8 && h.stat) h.stat.stun += h.stunMax; }
+    if (h && h.def && h.age < 8) { if (h.age >= 1 && h.age <= 3) { h.spd = Math.max(h.spd || 0, Math.hypot(h.def.vx, h.def.vy)); if (h.age === 2 && S.willKO) { try { h.ko = !!S.willKO(h.def); } catch (e) { h.ko = false; } } } h.stunMax = Math.max(h.stunMax, h.def.hitstun || 0, h.def.clashStunTimer || 0); h.age++; if (h.age === 8 && h.stat) h.stat.stun += h.stunMax; }
     const rows = [];
-    if (h) rows.push(`<div style="font-weight:800;color:#fff">Last hit: ${h.char} ${h.move}</div><div>damage <b>${h.dmg.toFixed(1)}</b> · stun <b>${h.stunMax}f</b> (${(h.stunMax / 60).toFixed(2)} s) · combo <b>${h.combo}</b></div>`);
+    if (h) rows.push(`<div style="font-weight:800;color:#fff">Last hit: ${h.char} ${h.move}</div><div>damage <b>${h.dmg.toFixed(1)}</b> · stun <b>${h.stunMax}f</b> (${(h.stunMax / 60).toFixed(2)} s) · knockback speed <b>${(h.spd || 0).toFixed(1)}</b> · <b style="color:${h.ko ? '#f87171' : '#4ade80'}">${h.ko ? 'would KO' : 'no KO'}</b> · combo <b>${h.combo}</b></div>`);
     else rows.push('<div style="color:#94a3b8">Hit the dummy to see numbers</div>');
     const ms = S.moveStats ? Object.entries(S.moveStats).slice(-6) : [];
     if (ms.length) rows.push('<div style="margin-top:4px;color:#94a3b8">per move (avg damage × hits)</div>' + ms.map(([k, v]) => `<div>${k}: <b>${(v.dmg / v.n).toFixed(1)}</b> × ${v.n} · stun ${(v.stun / v.n / 60).toFixed(2)} s</div>`).join(''));

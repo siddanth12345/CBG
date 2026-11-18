@@ -548,6 +548,7 @@ class Fighter {
         this.upT = 0;                        // frames an Up-F move is in progress (Ember's roll counters these too)
         this.sideT = 0;                      // frames a Side-F move is in progress (Ember's Fireball Roll counters these)
         this.glide = false;                  // Tide: keeps the Geyser boost momentum in the air
+        this.bsN = 0;                       // Umbra: backstabs in a row while the cloak held (synced for the x1.25 chain counter)
         this.vulnT = 0;                     // Umbra after a missed up-melee: takes 2x damage and knockback while this runs
         this.burnT = 0; this.burnDmg = 3; this.burnBy = null;     // burning (Ember's roll): damage ticks while it lasts
         this.trapId = 0;                     // id of the bubble this fighter is trapped in (Tide's Bubble Trap)
@@ -686,7 +687,7 @@ class Fighter {
         if (this._wpT > 0) this._wpT--;
         if (this.slowT > 0) this.slowT--;
         if (this.soakT > 0) { this.soakT--; if (!lowGfx() && this.soakT % 14 === 0) createParticles(this.x + (Math.random() - 0.5) * 30, this.y - 10, '#38bdf8', 2); }
-        if (this.cloakT > 0) { if (--this.cloakT === 0) { this._edgeBoost = false; this._bsN = 0; } } else { this._edgeBoost = false; this._bsN = 0; }
+        if (this.cloakT > 0) { if (--this.cloakT === 0) { this._edgeBoost = false; this.bsN = 0; } } else { this._edgeBoost = false; this.bsN = 0; }
         if (this.backT > 0) { this.backT--; this.hitstun = Math.max(this.hitstun, 2); this.invincibleTimer = Math.max(this.invincibleTimer, this.backT > 0 ? 3 : 12); if (this.grounded) { this.vx *= 0.5; this.vy = Math.min(this.vy, 0); } if (this.backT === 0) { this.hitstun = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 12); } }
         if (this.isGrabDashing || this.grabHolding || this.suplexPending || this.suplexT > 0) this.invincibleTimer = Math.max(this.invincibleTimer, 30);      // grabbers can't be hit while grabbing, nor for 0.5 s after the grab is over
         if (this.ffT > 0) this.ffT = (this.out || this.stocks <= 0) ? Math.min(this.ffT, 1) - 1 : this.ffT - 1;
@@ -1776,7 +1777,7 @@ class Fighter {
      *  the way a side melee would in the direction it rolled. Red only stuns. */
     rollRelease(f, x) {
         const sp = spec(this.char, 'S'), c = x.c || 0, full = c >= 0.9, mid = c >= 0.4 && !full;
-        f._rollCarry = null;
+        f._rollCarry = null; audio.playThrow();
         const total = full ? 12 : (mid ? 8 : 10);
         f.burnDmg = 2; f.burnT = Math.max(f.burnT > 0 ? f.burnT : 0, (total / 2) * 12); f.burnBy = this; f.lastHitBy = this; f.lastHitT = 0;
         if (full || mid) {
@@ -3569,6 +3570,16 @@ function updateItems() {
         const k = it.type === 'CLOCK' ? 1 : slowAt(it.x, it.y);
         it.py = it.y;
         if (it.grace > 0) it.grace--;
+        if (it.st === 'thrown' && it.type === 'BALL' && it.owner && !it.used) {                // Umbra's up melee soaks up a ball thrown at him too
+            const um = fighters.find(e => e.char === 'umbra' && e.zv === 'UG' && !e._stored && e.activeHitbox && e.attackTimer > 0 && isAlive(e) && e !== it.owner && foesOf(e).includes(it.owner) &&
+                Math.abs(e.activeHitbox.x - it.x) < e.activeHitbox.w + it.r && Math.abs(e.activeHitbox.y - it.y) < e.activeHitbox.h + it.r);
+            if (um) {
+                um._ugHit = true;
+                um._stored = { o: { x: it.x, y: it.y, vx: 0, vy: 0, r: 20, charge: 0.3, owner: null, life: 200, color: '#fbbf24', d: 10, R: 40, bkb: 7, kbg: 0.7, grav: WORLD.gravity * 0.4, curve: 0, wobble: 0, pull: 0, age: 0, kind: 'boulder' }, spd: Math.max(14, Math.min(24, Math.hypot(it.vx, it.vy))) };
+                um.storedC = '#fbbf24'; um.storedR = 20;
+                it.st = 'dead'; fx('block', it.x, it.y); createParticles(it.x, it.y, '#fbbf24', 10); audio.playParry(); continue;
+            }
+        }
         const thrown = it.st === 'thrown';
         it.vy = Math.min(thrown ? 16 : 14, it.vy + WORLD.gravity * (thrown ? 0.55 : 1) * (it.type === 'BALL' ? 0.85 : 1) * k);
         it.x += it.vx * k; it.y += it.vy * k;
@@ -4900,9 +4911,9 @@ function umbraEdge(att, def, hb) {
     const behind = defFace === (att.facing || 1);
     if (!behind) return hb;
     bump(att, 'backstabs');
-    if (att.cloakT > 0) { att._bsN = (att._bsN || 0) + 1; att._shadowT = 240; att.cloakT = 240; }   // backstab while still invisible: the cloak resets to 4 s and the chain grows
-    else { att._bsN = 0; att._shadowT = 240; att.cloakT = 240; }             // first backstab: 1.7x speed and invisible for 4 s
-    const chain = Math.pow(1.25, att._bsN || 0);                             // each consecutive backstab (cloak never ran out) hits 1.25x harder and farther than the one before
+    if (att.cloakT > 0) { att.bsN = (att.bsN || 0) + 1; att._shadowT = 240; att.cloakT = 240; }   // backstab while still invisible: the cloak resets to 4 s and the chain grows
+    else { att.bsN = 0; att._shadowT = 240; att.cloakT = 240; }             // first backstab: 1.7x speed and invisible for 4 s
+    const chain = Math.pow(1.25, att.bsN || 0);                             // each consecutive backstab (cloak never ran out) hits 1.25x harder and farther than the one before
     fx('counter', def.x, def.y - 4); fx('burn', def.x, def.y - 4, 0, 0, 'dark'); fx('explosion', att.x, att.y, 50, 0.25, 'dark');
     createParticles(def.x, def.y - 6, '#a855f7', 18); S.screenShake = Math.max(S.screenShake, 7); audio.playStab();
     return { ...hb, damage: (hb.damage || 0) * 1.4 * chain, bkb: (hb.bkb || 0) * 1.2 * chain, kbg: (hb.kbg || 0) * chain };
@@ -5053,7 +5064,7 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
-    resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5206,6 +5217,16 @@ export function trainAttach(name, char) {
     p2.isAI = false; p2.diff = null; p2.char = S.peerChar; p2.name = name; p2.reset(true); p2.shieldHold = 0; p2.remoteAim = null; remote.helds = {}; resetSnapshotState();
 }
 export function trainDetach() { S.online = null; S.opponentName = null; applyTrainPrefs(); p2.reset(true); }
+/** training tools (buttons on the training strip in hudExtras.js) */
+S.willKO = willKO; S.stepOnce = () => step();
+S.trainReset = () => {
+    for (const [f, k, d] of [[p1, 0.35, 1], [p2, 0.65, -1]]) {
+        f.x = f.px = STAGE.x + STAGE.width * k; f.y = f.py = STAGE.y - (f.height || 80) / 2 - 2; f.vx = f.vy = 0; f.hitstun = 0; f.clashStunTimer = 0; f.facing = d; f.comboN = 0; f.comboT = 0;
+        f.interrupt && f.interrupt(); f._fz = null; f.invincibleTimer = 0;
+    }
+    S.lastHit = null;
+};
+S.trainDmg = (n) => { if (S.gameMode === 'training') p2.damage = Math.max(0, Math.min(999, +n || 0)); };
 export function applyTrainPrefs() {
     const t = ensureTrain();
     const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
@@ -5575,11 +5596,12 @@ function pumpClips(fr) {
     for (let i = P.length - 1; i >= 0; i--) { const c = P[i]; c.frames.push(fr); if (++c.post >= 30) { P.splice(i, 1); finishClip(c); } }
 }
 function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (L.length > 16) L.shift(); }
+const EMPTY_REC = [];
 const REC_FRAMES = 900;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
 function recordFrame() {
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })), f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.splice(0), pt: recBuf.p.splice(0), kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt, S.kcVx, S.kcVy] : null, snd: recBuf.snd.splice(0), bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
-    if (rec.length > REC_FRAMES) rec.shift();
+    rec.push({ it: items.length ? items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })) : 0, f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: !orbs.length ? EMPTY_REC : orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.length ? recBuf.fx.splice(0) : 0, pt: recBuf.p.length ? recBuf.p.splice(0) : 0, kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt, S.kcVx, S.kcVy] : null, snd: recBuf.snd.length ? recBuf.snd.splice(0) : 0, bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
+    if (rec.length > REC_FRAMES + 90) rec.splice(0, rec.length - REC_FRAMES);      // trimmed in batches: shift() on a 900-long array every frame was a steady cost
     S.recN = (S.recN || 0) + 1;
     pumpClips(rec[rec.length - 1]);
 }

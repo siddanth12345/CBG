@@ -1,6 +1,6 @@
 // Guided tutorial: plays in a real training match. Each step watches the game state and advances
 // by itself when you do what it asks. Backspace = previous step, Enter = skip, Esc = leave.
-import { S, p1, orbs, startMatchSequence } from './gameCore.js';
+import { S, p1, orbs, startMatchSequence, fighters, whirlpools } from './gameCore.js';
 import { keyLabel } from './controls.js';
 import { touchMode } from './layout.js';
 import { items, spawnItem } from './gameCore.js';
@@ -12,7 +12,7 @@ const K = (a) => `<kbd>${esc(keyLabel(a))}</kbd>`;
 const KIND = { JAB: 'neutral', UP: 'up', DOWN: 'down', SIDE_LEFT: 'side', SIDE_RIGHT: 'side' };
 
 /** each step: title, text(), init() -> fresh per-visit state, check(st) -> true when done, progress(st) -> optional "2 / 4" */
-const STEPS = [
+const ALL = [
     {
         title: 'Walk',
         text: (m) => m ? `Touch the <b>left half</b> of the screen and drag left and right: a joystick appears under your thumb.` : `Walk left and right with ${K('left')} and ${K('right')}.`,
@@ -146,6 +146,61 @@ const STEPS = [
     }
 ];
 
+// melee-variant helper: remembers which move variants (zv) / neutral swings you have used
+const mv = (want, text, title, extra = {}) => ({
+    title, only: extra.only,
+    text,
+    init: () => ({ serial: p1.attackSerial }),
+    check(st) {
+        if (p1.attackSerial !== st.serial) { st.serial = p1.attackSerial; if (p1.zv === want || (want === 'JAB' && p1.attackKind === 'JAB')) return true; }
+        return false;
+    },
+});
+const CHAR_STEPS = [
+    mv('UG', (m) => `<b>Umbra's up melee</b> takes his top hat off and hurls it upward. ${m ? 'Tap the <b>up arrow</b>' : 'Aim <b>up</b> and press ' + K('attack')}. If it hits nothing he is wide open for 1 s (he takes 1.25x damage and 1.1x knockback), so use it with care.`, 'Umbra: the hat throw', { only: 'umbra' }),
+    {
+        only: 'umbra', title: 'Umbra: soak a projectile',
+        text: (m) => `Swing any melee <b>into an incoming projectile</b> (a ball, a falling sword or rock, a stuck bomb) and Umbra soaks it up. A purple ball over your name shows you are holding one. The dummy keeps throwing a ball at you for this.`,
+        init: () => ({ t: 0 }),
+        check(st) {
+            if (p1.storedR > 0) return true;
+            const foe = fighters.find(f => f !== p1);
+            if (foe && ++st.t % 110 === 1 && !orbs.some(o => o.owner === foe)) {
+                const dir = Math.sign(p1.x - foe.x) || 1;
+                orbs.push({ x: p1.x - dir * 330, y: p1.y - 20, vx: dir * 6, vy: 0, r: 22, charge: 0.4, owner: foe, life: 240, color: '#fb923c', id: 9e6 + st.t, d: 6, R: 40, bkb: 6, kbg: 0.6, bkb0: 6, grav: 0, curve: 0, wobble: 0, pull: 0, age: 0, kind: 0 });
+            }
+            return false;
+        },
+    },
+    {
+        only: 'umbra', title: 'Umbra: fire it back',
+        text: (m) => `While you hold a soaked-up projectile, the <b>neutral melee</b> (${m ? 'tap the red centre' : K('neutral') + ' + ' + K('attack')}) lets it go again at its old speed. Soak one first if you let it go.`,
+        init: () => ({ serial: p1.attackSerial, had: p1.storedR > 0 }),
+        check(st) {
+            if (p1.storedR > 0) st.had = true;
+            if (p1.attackSerial !== st.serial) { st.serial = p1.attackSerial; if (st.had && p1.attackKind === 'JAB' && !p1.storedR) return true; }
+            return false;
+        },
+    },
+    mv('H', (m) => `<b>Volt's side melee</b> is a crackling yellow whip: three lashes while he glides forward (on the ground or in the air). Aim <b>side</b> the way you face and ${m ? 'tap the arrow' : 'press ' + K('attack')}.`, 'Volt: the whip', { only: 'volt' }),
+    mv('T', (m) => `Run, then aim side the way you run: <b>Volt slides in</b> cracking the whip ahead of him, then staggers. A strong hit with a short recovery penalty.`, 'Volt: running whip', { only: 'volt' }),
+    mv('K', (m) => `Aim side <b>against</b> the way you face: a reverse kick that arcs him toward the foe.`, 'Volt: reverse kick', { only: 'volt' }),
+    mv('K', (m) => `Aim side <b>against</b> the way you face: Bulwark thrusts the great-sword straight out behind him and leaps. This is his only quick melee: his other melees are slow and heavy.`, 'Bulwark: back thrust', { only: 'bulwark' }),
+    mv('T', (m) => `Run, then aim side the way you run: a <b>sliding side melee</b> that carries you forward. ${'Hits harder than the standing one.'}`, 'Running melee', { only: ['luminent', 'ember', 'tide', 'terra'] }),
+    mv('K', (m) => `Aim side <b>against</b> the way you face for a <b>backward melee</b>: a hop or leap that hits behind you.`, 'Backward melee', { only: ['luminent', 'ember', 'tide', 'terra'] }),
+    mv('JAB', (m) => `Terra's <b>neutral melee</b> throws a rock. ${m ? 'Tap the red centre' : 'Hold ' + K('neutral') + ' and press ' + K('attack')}.`, 'Terra: rock throw', { only: 'terra' }),
+    {
+        only: 'tide', title: 'Tide: whirlpool ride',
+        text: (m) => `Tide's <b>neutral melee</b> only works in his own whirlpool: make one with a special, stand in it and use the neutral melee to dive in and ride it.`,
+        init: () => ({}),
+        check: () => whirlpools.some(w => w.rider === p1),
+    },
+];
+const SPECIAL_AT = ALL.findIndex(s => s.title === 'Neutral special');
+ALL.splice(SPECIAL_AT, 0, ...CHAR_STEPS);
+let STEPS = ALL;
+const forChar = (c) => ALL.filter(s => !s.only || (Array.isArray(s.only) ? s.only.includes(c) : s.only === c));
+
 export class Guide {
     constructor({ root, isBlocked }) {
         this.isBlocked = isBlocked || (() => false);
@@ -187,6 +242,7 @@ export class Guide {
         this.doneAt = 0;
         this.el.classList.remove('lm-hidden');
         startMatchSequence('training');          // a real training match: you, plus a dummy to hit
+        STEPS = forChar(p1.char);
         const n = Math.max(0, Math.min(STEPS.length - 1, at | 0));
         if (n > 0) this.go(n);
         else this.render();
@@ -227,7 +283,7 @@ export class Guide {
         this.el.classList.remove('ok');
     }
 
-    markSettingsOpened() { if (this.active && this.i === 16) { this.st = this.st || STEPS[this.i].init(); this.st.opened = true; } }
+    markSettingsOpened() { if (this.active && this.i === STEPS.findIndex(x => x.title === 'Open settings')) { this.st = this.st || STEPS[this.i].init(); this.st.opened = true; } }
 
     /** called every frame by main.js */
     tick() {

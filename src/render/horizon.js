@@ -344,6 +344,17 @@ export function buildHorizon(scene, { D }) {
     const pieces = []; let pieceKey = '', keelKey = '';
     const edgeLine = new THREE.LineBasicMaterial({ color: new THREE.Color('#ff9a3c').multiplyScalar(1.6), toneMapped: false });
     const jag = (seed, n, A) => { const r = rng(seed), o = [0]; for (let m = 1; m <= n; m++) o.push((m % 2 ? 1 : -1) * (0.35 + r() * 0.65) * A); return o; };
+    const lavaMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff2a08').multiplyScalar(1.5), toneMapped: false, side: THREE.DoubleSide });
+    const lavaFace = (g, rows, d, dir) => {                                // a glowing red face along a cut edge: rows = [{x, y}] top to bottom, d = depth (z), dir = which way the gap is
+        if (rows.length < 2) return;
+        const pos = [];
+        for (let i = 0; i + 1 < rows.length; i++) {
+            const a = rows[i], b = rows[i + 1], o = dir * 0.6;
+            pos.push(a.x + o, a.y, -d / 2, a.x + o, a.y, d / 2, b.x + o, b.y, -d / 2, a.x + o, a.y, d / 2, b.x + o, b.y, d / 2, b.x + o, b.y, -d / 2);
+        }
+        const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        const m = new THREE.Mesh(bg, lavaMat); m.renderOrder = 3; g.add(m);
+    };
     function buildPiece(k, n, fr, cuts) {
         const pw = (fr[k + 1] - fr[k]) * W, g = new THREE.Group(), N = 8, A = 8, rowH = bodyH / N;
         const UR = 7 + 8, jl = k > 0 ? jag(Math.round(cuts[k - 1] * 1000) + 3, N + UR, A) : null, jr = k < n - 1 ? jag(Math.round(cuts[k] * 1000) + 3, N + UR, A) : null;      // the cut continues down through the underside and the keel (same zigzag)
@@ -352,6 +363,7 @@ export function buildHorizon(scene, { D }) {
         for (let m = N; m >= 1; m--) sh.lineTo(-pw / 2 + (jl ? jl[m] : 0), -m * rowH);
         sh.lineTo(-pw / 2, 0);
         const geo = new THREE.ExtrudeGeometry(sh, { depth: D, bevelEnabled: false }); geo.translate(0, 0, -D / 2);
+        for (const [j, sx] of [[jl, -1], [jr, 1]]) if (j) { const rows = []; for (let m = 0; m <= N; m++) rows.push({ x: sx * pw / 2 + j[m], y: topY - 6 - m * rowH }); lavaFace(g, rows, D, sx); }
         const slabP = new THREE.Mesh(geo, mSilver); slabP.position.y = topY - 6; slabP.castShadow = true; slabP.receiveShadow = true; g.add(slabP);
         for (const zs of [1, -1]) {                                    // Greek key band + gold trims on the front and back
             const bw = Math.max(40, pw - 2 * (A + 6)), fh = bodyH * 0.5;
@@ -377,7 +389,7 @@ export function buildHorizon(scene, { D }) {
                 const rh = sc.h / sc.rows, pts = [];
                 for (let r = 0; r <= sc.rows; r++) {
                     const hw = sc.w0 + (sc.w1 - sc.w0) * r / sc.rows, idx = Math.min(gi + r, N + UR);
-                    const L = Math.max(-hw, jl ? xl + jl[idx] : -1e9), R = Math.min(hw, jr ? xr + jr[idx] : 1e9);
+                    const L = Math.max(-hw - mid, jl ? xl + jl[idx] : -1e9), R = Math.min(hw - mid, jr ? xr + jr[idx] : 1e9);
                     pts.push({ y: y - r * rh, L, R, ok: R - L > 2 });
                 }
                 for (let a0 = 0; a0 < pts.length;) {                      // every unbroken run of rows becomes one solid block
@@ -390,6 +402,10 @@ export function buildHorizon(scene, { D }) {
                         sh2.lineTo(pts[a0].L, pts[a0].y);
                         const gg = new THREE.ExtrudeGeometry(sh2, { depth: sc.d, bevelEnabled: false }); gg.translate(0, 0, -sc.d / 2);
                         const mm = new THREE.Mesh(gg, sc.m); mm.castShadow = true; g.add(mm);
+                    }
+                    if (b0 > a0) for (const [cut, key, sx] of [[jl, 'L', -1], [jr, 'R', 1]]) {                          // the stepped underside glows along the cut too
+                        const rws = []; for (let r = a0; r <= b0; r++) { const lim = sx < 0 ? -(sc.w0 + (sc.w1 - sc.w0) * r / sc.rows) - mid : (sc.w0 + (sc.w1 - sc.w0) * r / sc.rows) - mid; if (cut && Math.abs(pts[r][key] - lim) > 0.01) rws.push({ x: pts[r][key], y: pts[r].y }); }
+                        lavaFace(g, rws, sc.d, sx);
                     }
                     a0 = b0 + 1;
                 }

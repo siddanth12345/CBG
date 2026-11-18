@@ -366,11 +366,14 @@ export class View {
         // adaptive quality ladder: measure the real frame time; below ~30 fps step down (bloom, then shadows, then resolution),
         // and step back up after a long smooth stretch
         this.ft = this.ft ? this.ft * 0.92 + dt * 0.08 : dt;
-        this.qT = (this.qT || 0) + dt;
-        if (this.qT > 1.2) {
-            if (getGfx() === 'auto' && this.ft > 1 / 44 && this.q < 4) { this.q++; this.qT = 0; this.applyQuality(); }
-            else if (getGfx() === 'auto' && this.ft < 1 / 75 && this.q > 0 && this.qT > 20) { this.q--; this.qT = 0; this.applyQuality(); }
-            else if (this.ft < 1 / 44) this.qT = Math.min(this.qT, 1.2);
+        this.qT = (this.qT || 0) + dt; this.upT = (this.upT || 0); this.sinceUp = (this.sinceUp || 99) + dt; this.upBlock = Math.max(0, (this.upBlock || 0) - dt);
+        const auto = getGfx() === 'auto' && S.gameState === 'playing';
+        if (auto && this.ft > 1 / 44 && this.q < 4 && this.qT > 1.2) {
+            if (this.sinceUp < 12) this.upBlock = Math.min(240, (this.upBlock > 0 ? this.upBlock : 30) * 2);          // stepping up did not hold: wait longer before the next try
+            this.q++; this.qT = 0; this.upT = 0; this.applyQuality();
+        } else if (auto && this.q > 0) {                                      // smooth for a long stretch (near the screen's top speed, so 60 Hz screens count): try one step better
+            if (this.ft < 1 / 52) this.upT += dt; else this.upT = Math.max(0, this.upT - dt * 2);
+            if (this.upT > 15 && this.upBlock <= 0) { this.q--; this.upT = 0; this.qT = 0; this.sinceUp = 0; this.applyQuality(); }
         }
 
         // outside a match (menu / lobby) keep the scene light: no rocks, fewer stars, no fighters or shadows

@@ -12,7 +12,20 @@ import { bindChat, onRemoteChat, clearChat } from './chat.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
-const TIMEOUT_MS = 7000;
+const TIMEOUT_MS = 7000, GRACE_MS = 15000;
+/** small "ping" badge (bottom right while online) and the reconnecting banner */
+let badgeEl = null, bannerEl = null, badgeTimer = 0;
+function netBanner(txt) {
+    if (!bannerEl && txt) { bannerEl = document.createElement('div'); bannerEl.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:9000;padding:8px 14px;border-radius:10px;background:rgba(127,29,29,.92);color:#fff;font:700 13px system-ui,sans-serif;pointer-events:none;'; document.body.appendChild(bannerEl); }
+    if (bannerEl) { bannerEl.style.display = txt ? 'block' : 'none'; if (txt) bannerEl.textContent = txt; }
+}
+function pingBadge() {
+    if (!badgeEl) { badgeEl = document.createElement('div'); badgeEl.style.cssText = 'position:fixed;right:10px;bottom:8px;z-index:50;padding:3px 8px;border-radius:8px;background:rgba(15,23,42,.7);color:#e2e8f0;font:600 11px system-ui,sans-serif;pointer-events:none;display:none;'; document.body.appendChild(badgeEl); }
+    const on = !!Online.t && Online.status === 'connected' && S.gameState === 'playing';
+    badgeEl.style.display = on ? 'block' : 'none';
+    if (on) { const r = Online.rtt; badgeEl.textContent = r ? Math.round(r) + ' ms' : 'ping …'; badgeEl.style.color = !r ? '#e2e8f0' : r < 80 ? '#4ade80' : r < 160 ? '#fbbf24' : '#f87171'; }
+    if (!Online.t) netBanner('');
+}
 
 
 export function cleanItems(i) {
@@ -35,7 +48,7 @@ export const Online = {
     cfg: null, trainOn: false, inTrain: false,   // cfg: the running custom match (late spectators get it); trainOn: a friend is in my training
     peerName: 'Opponent',
     t: null,
-    lastRecv: 0,
+    lastRecv: 0, rtt: 0,
     onChange: () => {},   // UI refresh
     onLeft: () => {},     // peer left / connection lost
 };
@@ -47,6 +60,7 @@ const MAX_PLAYERS = 8;
 
 function set(status, note = '') { Online.status = status; Online.note = note; Online.onChange(); }
 
+if (typeof window !== 'undefined') badgeTimer = setInterval(pingBadge, 1000);
 function stopTimers() { clearInterval(pingTimer); clearInterval(watchTimer); pingTimer = watchTimer = 0; }
 
 
@@ -66,7 +80,10 @@ function watch() {
     Online.lastRecv = performance.now();
     watchTimer = setInterval(() => {
         if (Online.status !== 'connected' || (Online.role === 'host' && (Online.mode === 'lobby' || Online.mode === 'train'))) return;
-        if (performance.now() - Online.lastRecv > TIMEOUT_MS) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'Connection lost'); cb('Connection lost'); }
+        const lost = performance.now() - Online.lastRecv;
+        if (lost > TIMEOUT_MS + GRACE_MS) { netBanner(''); const cb = Online.onLeft; leaveRoom(false); set('closed', 'Connection lost'); cb('Connection lost'); }
+        else if (lost > TIMEOUT_MS) netBanner('Connection lost, reconnecting… ' + Math.max(0, Math.ceil((TIMEOUT_MS + GRACE_MS - lost) / 1000)) + 's');   // the link may come back by itself: keep the match for a while
+        else netBanner('');
     }, 1000);
 }
 
@@ -115,7 +132,7 @@ export async function hostRoom(code, mode = 'pvp') {
                 t.send(start); break;
             }
             case 'chat': onRemoteChat(m); break;
-            case 'ping': { const mem = memberOf(m); if (mem) mem.seen = performance.now(); break; }
+            case 'ping': { const mem = memberOf(m); if (mem) mem.seen = performance.now(); if (m.ts) t.send({ t: 'pong', to: m.id, ts: m.ts }); if (m.r && Online.mode !== 'lobby') Online.rtt = m.r; break; }
         }
     };
     bindChat((msg) => t.send(msg)); clearChat();
@@ -260,6 +277,7 @@ export async function joinRoom(code) {
             case 'snap': if (S.online === 'guest') applySnapshot(m.s); break;
             case 'leave': { const cb = Online.onLeft; leaveRoom(false); set('closed', 'The host left'); cb('The host left'); break; }
             case 'chat': onRemoteChat(m); break;
+            case 'pong': if (m.to === myId && m.ts) { const r = performance.now() - m.ts; Online.rtt = Online.rtt ? Online.rtt * 0.7 + r * 0.3 : r; } break;
         }
     };
     bindChat((msg) => t.send(msg)); clearChat();
@@ -268,7 +286,7 @@ export async function joinRoom(code) {
     hello();
     const retry = setInterval(() => { if (welcomed || Online.role !== 'guest') clearInterval(retry); else hello(); }, 500);
     setTimeout(() => { if (!welcomed && Online.role === 'guest') { clearInterval(retry); leaveRoom(false); set('closed', 'No room with that code' + (t.local ? ' (this page cannot reach the internet: open the standalone link, see the lobby note)' : '')); } }, 15000);
-    pingTimer = setInterval(() => Online.t && Online.t.send({ t: 'ping', id: myId }), 2000);
+    pingTimer = setInterval(() => Online.t && Online.t.send({ t: 'ping', id: myId, ts: performance.now(), r: Online.rtt }), 2000);
     return true;
 }
 
