@@ -31,12 +31,14 @@ export const MELEE = {
         UG: m(22, [s(4, 8, 46, 70, 26, -30, 5, 5, 0.5, -PI / 2), s(11, 15, 112, 92, 0, -62, 5, 11, 1.2, -PI / 2)]),                            // conductor uppercut, the arc catches anyone overhead
         SL: m(26, [s(8, 16, 200, 26, 0, 30, 8, 11, 1.2, -0.5, { radial: true })]),                                                              // grounding stomp: a flat shock ring both ways
     },
-    ember: {
-        H: m(20, [s(6, 10, 62, 56, 50, -14, 8, 11, 1.2, -0.5), s(13, 17, 82, 36, 72, 4, 3, 5, 0.5, -0.3)]),                                  // flaming haymaker, embers fall after it
-        T: m(28, [s(3, 16, 84, 30, (k) => 30 + 30 * k, 20, 6, 7, 0.7, -0.5)], { leap: { vx: 15, vy: 0, g: false } }),                           // fire-slide scorching the ground
-        K: m(24, [s(5, 14, 60, 40, (k) => 34 + 30 * k, 6, 7, 11, 1.2, -PI / 5)], { leap: { vx: 13, vy: -4, g: true } }),                       // rocket kick that blasts him backwards
-        UG: m(22, [s(4, 12, 44, 100, 24, (k) => -10 - 90 * k, 8, 12, 1.3, -PI / 2)]),                                                          // dragon-fist with a fire trail
-        SL: m(26, [s(6, 9, 60, 40, 30, 34, 7, 9, 1, -1.2), s(11, 14, 80, 24, 36, 34, 2, 3, 0.3, -0.6), s(18, 21, 80, 24, 36, 34, 2, 3, 0.3, -0.6)]),   // stomp, then the fire patch burns twice more
+    ember: {                                                                                                                                    // Ember's reworked melees (no melee moves him: velocity is never touched)
+        H: m(30, [s(10, 16, 92, 60, 58, -6, 3, 9, 1, -0.4)]),                                                                                   // a sideways swipe with a fiery fist: a 0.5 s swing, no stun
+        T: m(30, [s(10, 16, 92, 60, 58, -6, 3, 9, 1, -0.4)]),                                                                                   // running: the same fiery swipe
+        K: m(30, [s(8, 18, 104, 64, 54, -10, 3, 10, 1.1, -PI / 4)]),                                                                            // backwards: a sideways tornado spin kick (a red twister), launching 45 degrees
+        UA: m(28, [s(8, 18, 150, 140, 0, -14, 3, 10, 1.1, -PI / 2)]),                                                                           // air up: an around-the-world fire kick trailing cluster sparks and flame
+        UG: m(34, [s(5, 9, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(11, 15, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(17, 21, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(23, 27, 82, 118, 48, -48, 3, 9, 1, -0.9)]),   // ground up: a small core-charge flamethrower, three licks then a push
+        DA: m(26, [s(8, 18, 56, 96, 12, 54, 3, 8, 1, PI / 2)]),                                                                                 // air down: a fiery rock-kick spike
+        DG: m(30, [s(8, 22, 230, 92, 0, 0, 3, 8, 1, -PI / 2)]),                                                                                 // ground down: cluster sparks spread along the floor both ways, smoke rising, throws foes up
     },
     tide: {
         H: m(22, [s(6, 12, 100, 40, 60, 6, 6, 4, 0.4, 0, { pull: true }), s(15, 18, 56, 46, 36, 0, 5, 11, 1.2, -0.4)]),                       // staff sweep drags the foe in, then shoves them out

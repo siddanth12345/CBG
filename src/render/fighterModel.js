@@ -978,7 +978,7 @@ export class FighterModel {
             case 'ember':                                                    // big hot swings, a lot of body
                 if (v === 'H') { o.twist *= 1.5; o.rSz = 50; return P2 * 0.5 * sw(0.28, 0.6); }
                 else if (v === 'T') { o.pitch = -20 * sw(0, 0.2); o.dy = -14 * sw(0, 0.2); o.rHx = 92 * sw(0, 0.2); o.lK = 110 * sw(0, 0.2); o.lHx = 30 * sw(0, 0.2); o.rSx = 50; o.lSx = 50; o.rSz = 56; o.lSz = 56; }
-                else if (v === 'K') { o.pitch *= 1.1; o.rSx = 20; o.lSx = 20; o.rSz = 10; o.lSz = 10; }
+                else if (v === 'K') { o.pitch = -45 * sw(0, 0.2) * (1 - sw(0.8, 1)); o.rHx = 84; o.rK = 3; o.lHx = -30; o.lK = 40; o.rSx = 20; o.lSx = 20; o.rSz = 10; o.lSz = 10; return P2 * sw(0.15, 0.7); }
                 else if (v === 'UG') { o.dy = lerp(o.dy, 12, sw(0.2, 0.4)); o.rHx = 14; o.lHx = -16; o.rK = 66; o.lK = 20; o.rSx = 178; o.lSx = 60; }
                 else if (v === 'SL') { const kn = sw(0, 0.28) * (1 - sw(0.28, 0.42)); o.rHx = 100 * kn; o.rK = 100 * kn + 8; o.rSx = 120 * kn; o.lSx = 120 * kn; o.dy += 8 * sw(0.28, 0.45) * (1 - sw(0.7, 1)); }
                 break;

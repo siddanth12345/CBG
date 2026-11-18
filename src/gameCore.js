@@ -658,6 +658,11 @@ class Fighter {
     }
 
     update() {
+        if (this._hp) {                                                      // hit pause: only the one who was hit is held for 0.2 s, then their launch velocity carries on unchanged
+            const h = this._hp;
+            if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
+            this.vx = h.vx; this.vy = h.vy; this._hp = null;
+        }
         // Instant Final Blow: lock at 200% every frame while the setting is on (survives stock loss / respawn)
         if (S.instantBlow && S.online !== 'guest') this.damage = 200;
         if (this.frozenBot) {                                                // Frozen Bot: pinned where it first stood, no velocity, no stun
@@ -1061,7 +1066,11 @@ class Fighter {
                     this.vx = dx / d * 26; this.vy = dy / d * 26; this.hitstun = Math.max(this.hitstun, 30); this._bzCool = 40;
                     S.screenShake = Math.max(S.screenShake, 14); audio.playHit(true); fx('hit', this.x, this.y, 25, Math.atan2(dy, dx));
                 }
-            } else this.takeKO();
+            } else {
+                const bx = Math.max(B.left, Math.min(B.right, this.x)), by = Math.max(B.top, Math.min(B.bottom, this.y));      // the firewall: a flare of fire exactly where the body touched the barrier
+                createParticles(bx, by, '#fb923c', 36); createParticles(bx, by, '#fde047', 20); fx('hit', bx, by, 40, Math.atan2((B.top + B.bottom) / 2 - by, (B.left + B.right) / 2 - bx)); S.screenShake = Math.max(S.screenShake, 10);
+                this.takeKO();
+            }
         }
         if (this._bzCool > 0) this._bzCool--;
     }
@@ -1072,10 +1081,11 @@ class Fighter {
         let sw = this.swing;
         if (!sw) return;
         const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
+        if (this.char === 'ember' && this.zv && this.attackTimer > 0) emberMeleeFx(this, e);
         let st = null;
         if (sw.stages) {                                 // a move with several hit windows in a row
             const i = sw.stages.findIndex(q => e >= q.a && e <= q.b);
-            if (i !== this._stg) { this._stg = i; if (i >= 0) { this.swingHit = false; if (sw.stages[i].step) this.vx += sw.d * sw.stages[i].step; } }
+            if (i !== this._stg) { this._stg = i; if (i >= 0) { this.swingHit = false; } }
             st = i >= 0 ? sw.stages[i] : null;
         }
         if (this.zLeap && e >= sw.a - 1 && !(this.attackHeld && sw.chargeable && this.grounded && this.zv !== 'T')) {
@@ -1115,8 +1125,8 @@ class Fighter {
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
             damage: dmg, bkb: sw.bkb * cm, kbg: sw.kbg * cm, angle: this.airDown ? Math.PI / 2 - 0.3 * this.facing : sw.angle(this.facing, this.grounded), radial: this.airDown ? false : !!sw.radial, type: sw.type,
-            multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: sw.stun || 0, burn,
-            fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && st.bkb <= 6 && !st.pull && !st.stun) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
+            multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: (st && sw0.stages.indexOf(st) < sw0.stages.length - 1) ? 0 : (sw.stun || 0), burn,
+            fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && !st.pull) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
         };
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
     }
@@ -2487,7 +2497,7 @@ class Fighter {
             if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
                 zdir = aimDirection === 'SIDE_LEFT' ? -1 : 1;
                 v = zdir === -this.facing ? 'K' : (this.grounded && Math.abs(this.vx) > 3 && Math.sign(this.vx) === zdir) ? 'T' : 'H';
-            } else if (aimDirection === 'UP') v = 'UG'; else if (aimDirection === 'DOWN') v = 'SL';
+            } else if (aimDirection === 'UP') v = (!this.grounded && MELEE[this.char].UA) ? 'UA' : 'UG'; else if (aimDirection === 'DOWN') v = this.grounded ? (MELEE[this.char].DG ? 'DG' : 'SL') : (MELEE[this.char].DA ? 'DA' : 'SL');
             if (v && MELEE[this.char][v]) { mv = MELEE[this.char][v]; zv = v; if (!zdir) zdir = this.facing; }
         }
         switch (aimDirection) {
@@ -2508,16 +2518,14 @@ class Fighter {
         if (mv) {
             this.swing = SWING['M_' + this.char + '_' + zv + '_' + zdir];
             this.attackTimer = this.atkN = mv.n;
-            if (mv.leap) this.zLeap = { vx: zdir * mv.leap.vx, vy: mv.leap.vy, g: mv.leap.g };
             if (mv.lock) { this.zLock = mv.lock[0]; this.zLockN = mv.lock[1]; }
         } else if (zv) {
             const key = zv === 'H' || zv === 'T' || zv === 'K' ? 'Z' + zv + (zdir === 1 ? '_R' : '_L') : 'Z' + zv;
             this.swing = SWING[key];
             this.attackTimer = this.atkN = zv === 'T' ? 34 : zv === 'K' ? (this.grounded ? 34 : 24) : zv === 'UA' ? 28 : zv === 'DG' ? 26 : zv === 'DA' ? 24 : zv === 'UG' ? 22 : 20;
-            if (zv === 'T') { this.zLeap = { vx: zdir * 16.5 * 1.5, vy: -8, g: true }; this.zLock = 25; this.zLockN = 6; }                    // running thrust: 1.5x leap, 0.1s stagger; punch hits late (heavy startup)
+            if (zv === 'T') { this.zLock = 25; this.zLockN = 6; }                    // running thrust: 1.5x leap, 0.1s stagger; punch hits late (heavy startup)
             if (zv === 'K') {                                                                                                          // flying backwards drop kick
-                if (this.grounded) { this.zLeap = { vx: zdir * 11, vy: -8, g: true }; this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
-                else this.zLeap = { vx: zdir * 9, vy: -2, g: false };                                                    // (the leap itself only starts once a charge is released)
+                if (this.grounded) { this.zLock = 22; this.zLockN = 12; }       // he jumps sideways and, on the ground, stumbles for 0.2 s after
             }
         }
         this.swingHit = false; this._ugHit = false;
@@ -3982,6 +3990,21 @@ function startKillCam(att, def) {
     applyKillCam(ai, di);
     fx('killcam', def.x, def.y, ai, di, 1);
 }
+/** Ember's melee visuals: red twister for the back kick, cluster sparks + fire for the air-up kick, floor sparks with smoke, the little flamethrower */
+function emberMeleeFx(f, e) {
+    const d = f.facing || 1, mvd = f.swing && f.swing.d || d;
+    if (f.zv === 'K' && e >= 6 && f._rtwS !== f.attackSerial) { f._rtwS = f.attackSerial; fx('rtwister', f.x + mvd * 40, f.y + (f.height || 80) / 2, 70, 34, ++windId); audio.playThrow(); }
+    else if (f.zv === 'UA' && e >= 6 && e <= 20) { const a = (e - 6) / 14 * Math.PI * 2; for (const c of ['#fb923c', '#fde047', '#ef4444']) createParticles(f.x + Math.cos(a) * 62, f.y + Math.sin(a) * 52, c, 2); }
+    else if (f.zv === 'DG' && e >= 8 && e <= 24) { const g = f.y + (f.height || 80) / 2; for (const sd of [-1, 1]) { const x = f.x + sd * (30 + (e - 8) * 5); createParticles(x, g - 6, '#fb923c', 2); createParticles(x, g - 20 - (e - 8) * 3, '#94a3b8', 1); createParticles(x + sd * 4, g - 50 - (e - 8) * 4, '#475569', 1); } }
+    else if (f.zv === 'UG' && e >= 5 && e <= 27 && e % 2 === 0) { for (let i = 0; i < 3; i++) createParticles(f.x + mvd * (24 + i * 26), f.y - 20 - i * 26, i % 2 ? '#fde047' : '#fb923c', 2); }
+    else if (f.zv === 'DA' && e >= 6 && e <= 20) { createParticles(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); createParticles(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
+    else if (f.zv === 'H' && e >= 8 && e <= 18) { createParticles(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
+}
+/** every melee hit freezes only the victim for 0.2 s (12 frames); the velocity they were launched with is kept and released afterwards */
+function hitPause(def, hb) {
+    if (!hb || !hb.type || S.kcVis > 0 || def.stocks <= 0 || def.frozenBot) return;
+    def._hp = { n: 12, vx: def.vx, vy: def.vy };
+}
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
@@ -4110,6 +4133,7 @@ function launch(attacker, defender, hb) {
         defender.vy = hb.fixed.vy;
         defender.hitstun = hb.fixed.hitstun;
         defender.grounded = false;
+        hitPause(defender, hb);
         if (hb.rollCarry) defender._rollCarry = attacker;   // Ember roll: stick to the roller
         S.screenShake = Math.max(S.screenShake, 5);
         audio.playHit(false);
@@ -4120,13 +4144,14 @@ function launch(attacker, defender, hb) {
 
     const effectiveDamage = defender.damage / 2;
     const percentFactor = (effectiveDamage / 10) + (effectiveDamage * hb.damage / 20);
-    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
+    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (defender.damage > 200 ? 1.3 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
     defender.hitstun = hb.hs || 60; defender._stunAfter = hb.stunAfter || 0;
     defender.grounded = false;
 
+    hitPause(defender, hb);
     const shk = Math.min(25, Math.floor(kbForce));
     audio.playHit(kbForce > 18);
     createParticles(defender.x, defender.y, '#f59e0b', Math.floor(kbForce));
@@ -5431,11 +5456,11 @@ export function snapshot() {
     return {
         f: fs, m: S.match ? 1 : 0, gs: S.gameState, win: S.winnerRole || null,
         ws: S.winnerSlots || null, wl: S.winnerLabel || null, sh: Math.round(S.screenShake * 10) / 10,
-        o: orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0, sw: o.sword ? 1 : 0 })),
-        it: items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
+        o: !orbs.length ? undefined : orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0, sw: o.sword ? 1 : 0 })),
+        it: !items.length ? undefined : items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
         sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0, sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
-        ev,
+        ev: ev.length ? ev : undefined,
     };
 }
 export function resetSnapshotState() { lastSent = Array.from({ length: 8 }, () => ({})); fullEvery = 0; outbox.length = 0; }
@@ -5521,7 +5546,7 @@ export function applySnapshot(s) {
     });
     // orbs, matched by id so the renderer keeps one object per projectile
     const seen = new Set();
-    for (const o of s.o) {
+    for (const o of (s.o || [])) {
         seen.add(o.id);
         const og = guestFlip(o.own);
         const own = og < 0 ? p1 : fighters[og];
@@ -5576,7 +5601,7 @@ export function applySnapshot(s) {
         }
     } else if (S.gameState !== 'countdown' || s.gs === 'playing') S.gameState = s.gs;
     // effects, sounds, particles the host produced since the last snapshot
-    for (const e of s.ev) {
+    for (const e of (s.ev || [])) {
         if (e.k === 'f' && e.e[0] === 'killcam') applyKillCam(e.e[3], e.e[4]);
         if (e.k === 'f') { fxEvents.push({ type: e.e[0], x: e.e[1], y: e.e[2], a: e.e[3], b: e.e[4], c: e.e[5] || 0 }); if (recBuf.fx.length < 80) recBuf.fx.push(e.e.slice(0, 6)); }
         else if (e.k === 'a') { try { audio[e.m](...e.a); } catch (err) { /* sound not available */ } }

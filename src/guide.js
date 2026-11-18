@@ -139,6 +139,7 @@ const ALL = [
         text: () => `<b>Combo limit:</b> hits on the same foe inside 1.5 s stack. From hit 4 the knockback grows, from hit 5 stuns turn into knockback, and hit 6 is a finisher that breaks the combo. The counter at the right of the screen warns you.<br>
 <b>Counters:</b> a shield or an active move beats most attacks (Volt's lose to everything). Bulwark's riposte also returns projectiles and breaks falling swords and rocks, but a DOWN move clashes with it and stuns both.<br>
 <b>I-frames:</b> grab stuns and counter stuns give 1.4 s, a grabber is safe until 0.5 s after the grab, and carried foes (Bulwark's sword) are safe from the finishing burst until their stun ends.<br>
+<b>Hits:</b> every melee hit freezes only the one hit for 0.2 s, melees never move you, from 200% damage knockback is 1.3x, and in a multi-hit move only the last hit stuns or launches.<br>
 <b>Carrying:</b> some moves pick foes up (sword, whirlpool, roll). Hit the carrier or counter to break free. Press next when you've read this.`,
         init: () => ({ f: 0 }),
         check(st) { return ++st.f > 480; },
@@ -182,12 +183,17 @@ const CHAR_STEPS = [
             return false;
         },
     },
-    mv('H', (m) => `<b>Volt's side melee</b> is a crackling yellow whip: three lashes while he glides forward (on the ground or in the air). Aim <b>side</b> the way you face and ${m ? 'tap the arrow' : 'press ' + K('attack')}.`, 'Volt: the whip', { only: 'volt' }),
-    mv('T', (m) => `Run, then aim side the way you run: <b>Volt slides in</b> cracking the whip ahead of him, then staggers. A strong hit with a short recovery penalty.`, 'Volt: running whip', { only: 'volt' }),
+    mv('H', (m) => `<b>Volt's side melee</b> is a crackling yellow whip: three lashes (on the ground or in the air); a melee never moves you any more. Aim <b>side</b> the way you face and ${m ? 'tap the arrow' : 'press ' + K('attack')}.`, 'Volt: the whip', { only: 'volt' }),
+    mv('T', (m) => `Run, then aim side the way you run: Volt cracks the whip ahead of him from where he stands, then staggers briefly.`, 'Volt: running whip', { only: 'volt' }),
     mv('K', (m) => `Aim side <b>against</b> the way you face: a reverse kick that arcs him toward the foe.`, 'Volt: reverse kick', { only: 'volt' }),
-    mv('K', (m) => `Aim side <b>against</b> the way you face: Bulwark thrusts the great-sword straight out behind him and leaps. This is his only quick melee: his other melees are slow and heavy.`, 'Bulwark: back thrust', { only: 'bulwark' }),
-    mv('T', (m) => `Run, then aim side the way you run: a <b>sliding side melee</b> that carries you forward. ${'Hits harder than the standing one.'}`, 'Running melee', { only: ['luminent', 'ember', 'tide', 'terra'] }),
-    mv('K', (m) => `Aim side <b>against</b> the way you face for a <b>backward melee</b>: a hop or leap that hits behind you.`, 'Backward melee', { only: ['luminent', 'ember', 'tide', 'terra'] }),
+    mv('K', (m) => `Aim side <b>against</b> the way you face: Bulwark thrusts the great-sword straight out behind him. This is his only quick melee: his other melees are slow and heavy.`, 'Bulwark: back thrust', { only: 'bulwark' }),
+    mv('T', (m) => `Run, then aim side the way you run: the running side melee. It no longer carries you anywhere.`, 'Running melee', { only: ['luminent', 'tide', 'terra'] }),
+    mv('K', (m) => `Aim side <b>against</b> the way you face for a <b>backward melee</b>: a quick kick that hits behind you.`, 'Backward melee', { only: ['luminent', 'tide', 'terra'] }),
+    mv('K', () => `Aim side <b>against</b> the way you face: Ember's <b>tornado spin kick</b> spins in a red twister and launches at 45 degrees.`, 'Ember: tornado spin kick', { only: 'ember' }),
+    mv('UG', () => `On the ground, aim <b>up</b>: a small <b>flamethrower</b>, three licks of fire and a push.`, 'Ember: ground flamethrower', { only: 'ember' }),
+    mv('UA', () => `Jump, then aim <b>up</b>: an <b>around-the-world fire kick</b> with cluster sparks.`, 'Ember: air fire kick', { only: 'ember' }),
+    mv('DG', () => `On the ground, aim <b>down</b>: cluster sparks spread along the floor on both sides, smoke rises and foes are thrown up.`, 'Ember: floor sparks', { only: 'ember' }),
+    mv('DA', () => `Jump, then aim <b>down</b>: a fiery <b>rock-kick spike</b>.`, 'Ember: spike kick', { only: 'ember' }),
     mv('JAB', (m) => `Terra's <b>neutral melee</b> throws a rock. ${m ? 'Tap the red centre' : 'Hold ' + K('neutral') + ' and press ' + K('attack')}.`, 'Terra: rock throw', { only: 'terra' }),
     {
         only: 'tide', title: 'Tide: whirlpool ride',

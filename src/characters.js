@@ -26,7 +26,7 @@ export const CHARS = {
     },
     ember: {
         id: 'ember', name: 'Ember', role: 'Brawler', walk: 1.0, orb: 1.0, blink: 1.0, scale: 1.0,
-        desc: 'A fire monk with bare hands. Palm strikes, flaming kicks, flame hair. Normal speed.',
+        desc: 'A fire monk with bare hands. A fiery-fist swipe, a red tornado spin kick behind him, an around-the-world fire kick, floor sparks and a small flamethrower. Everything he lands keeps burning. Normal speed.',
         look: { suit: 0x3b1d0f, trim: 0xfdba74, head: 'flame', weapon: 'fist', anim: 'palm', extra: 'sash' },
         art: { skin: '#fdba74', feature: 'flame' },
     },
@@ -38,13 +38,13 @@ export const CHARS = {
     },
     volt: {
         id: 'volt', name: 'Volt', role: 'Rushdown', walk: 1.2, orb: 1.05, blink: 1.2, scale: 0.97,
-        desc: 'A bare-fisted sprinter crackling with static. Fast, rapid punches and double stomps, shocking specials.',
+        desc: 'A bare-fisted sprinter crackling with static. A yellow lightning whip for side melees, a conductor uppercut and a grounding stomp, shocking specials.',
         look: { suit: 0x1e1b4b, trim: 0xfde047, head: 'spikes', weapon: 'fist', anim: 'rush', extra: 'bolt' },
         art: { skin: '#fde047', feature: 'spikes' },
     },
     umbra: {
         id: 'umbra', name: 'Umbra', role: 'Trickster', walk: 1.15, orb: 1.0, blink: 1.1, scale: 0.96,
-        desc: 'A shadow assassin with twin daggers, a top hat and a cape. Quick on its feet, slashes in tight crosses and throws playing cards.',
+        desc: 'A shadow assassin with a top hat and a cape. A rainbow whip, thrown playing cards and a hat throw that soaks up enemy projectiles. Quick on his feet.',
         look: { suit: 0x111827, trim: 0x6b7280, head: 'tophat', weapon: 'dagger', anim: 'dagger', extra: 'cape' },
         art: { skin: '#6b7280', feature: 'hood' },
     },
@@ -102,6 +102,7 @@ export const BRIEF = {
         U: ['Phoenix Dash', 'Tap up F, charge in place, then fly where you aim. Grab, melee, side, up, down, and Cores beat the dash itself. The homing rockets are separate.'],
         DG: ['Cluster Bomb', 'On the ground, down F primes you. Then a neutral melee throws sticky fire bubbles.'],
         DA: ['Meteor Fist', 'In the air, down F is a straight punch. The floor hit stuns and does not knock back.'],
+        M: ['Fire Melees', 'Every melee hit sets the foe burning (damage over time). Side: a fiery-fist swipe (0.5 s, no stun). Backward: a sideways tornado spin kick in a red twister, launching at 45 degrees. Up on the ground: a small flamethrower of three licks and a push. Up in the air: an around-the-world fire kick with cluster sparks. Down on the ground: cluster sparks spread along the floor both ways and throw foes up. Down in the air: a fiery rock-kick spike. Any non-neutral melee sets off your cluster bubbles first.'],
     },
     tide: {
         N: ['Water Orb', 'Hold F for a big water orb that flies far and pulls people in. It charges twice as fast.'],
@@ -117,6 +118,7 @@ export const BRIEF = {
         U: ['Lightning Rod', 'Tap up F: a short hop, a 0.3 s hang, then two teleports toward your aim (3 dashes). Each leaves lightning that only shoves foes the way the bolt went.'],
         DG: ['Shock Slam', 'On the ground, down F stomps and stuns everyone nearby for 0.5 s. Every Volt move has a 0.6 s delay before the next, anyone he hits gets 0.6 s of i-frames, a 3rd stun inside 10 s becomes a knockback, and any active move or shield beats his attacks.'],
         DA: ['Bolt Dive', 'In the air, down F is a very fast dive with a stunning hit.'],
+        M: ['Lightning Whip', 'Side melees (forward, in the air and running) lash a long yellow whip, three crackling hits; the last one knocks back. Backward is a reverse kick, up is a conductor uppercut and down is a grounding stomp: a flat shock ring both ways.'],
     },
     umbra: {
         N: ['Void Orb', 'Hold F for a slow orb that bends a little toward your opponent.'],
@@ -124,7 +126,7 @@ export const BRIEF = {
         U: ['Shadow Flight', 'Tap up F to fly where you aim for 1.1 s: harmless, straight through walls. Does not cloak you (cloak is from backstabs).'],
         DG: ['Void Pit', 'On the ground, down F marks a spot. After a delay a shadow pillar hits there.'],
         DA: ['Dagger Plunge', 'In the air, down F is a steep stab dive.'],
-        M: ['Shadow Edge', 'Passive. Melee hits on a foe who faces the same way he does (stunned foes: the way they faced before the stun) are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 4 s; only he sees himself, glowing yellow. Backstabbing again while invisible resets that to 4 s, and each consecutive backstab hits 1.25x harder and farther than the last (stacking) until the cloak runs out. Bots cannot see him either: hard bots gamble on where he is.'],
+        M: ['Shadow Edge', 'Passive. Melee hits on a foe who faces the same way he does (stunned foes: the way they faced before the stun) are backstabs: +40% damage, +20% knockback. A successful backstab makes him 1.7x faster and completely invisible (even his name) for 4 s; only he sees himself, glowing yellow. Backstabbing again while invisible resets that to 4 s, and each consecutive backstab hits 1.25x harder and farther than the last (stacking) until the cloak runs out. Bots cannot see him either: hard bots gamble on where he is. Up melee: he throws his hat. If it touches an enemy projectile (any orb, falling sword or rock, cluster bomb, thrown ball or Zephyr tornado) he soaks it up, shown as a purple ball over his name, and the neutral melee fires it back. A miss leaves him open for 1 s (1.25x damage, 1.1x knockback).'],
     },
     terra: {
         N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],
