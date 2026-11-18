@@ -225,6 +225,7 @@ export class Effects {
             const m = new THREE.Mesh(hbGeo, new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.16, depthWrite: false, blending: ADD, toneMapped: false }));
             m.add(new THREE.LineSegments(hbEdges, new THREE.LineBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75, toneMapped: false })));
             m.visible = false; m.renderOrder = 5; scene.add(m); this.hbPool.push(m);
+            const tw = m.clone(true); tw.visible = false; scene.add(tw); m.userData.tw = tw;
         }
 
         // ---- CBG Core orbs (projectiles) and the charge orbs held by fighters
@@ -667,10 +668,10 @@ export class Effects {
                 case 'meteorend': { const en = this._byId && this._byId.get('mt' + e.c); if (en) en.dur = en.t; break; }
                 case 'poolmove': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.obj.userData.px = pos.x; break; }
                 case 'poolend': { const en = this._byId && this._byId.get('pl' + e.c); if (en) en.dur = Math.min(en.dur, en.t + 0.3); break; }
-                case 'twister': case 'rtwister': {         // Zephyr's Roaming Twister: a = +/- radius (sign = travel direction), b = life frames, c = id. A visible spinning funnel with debris.
-                    const red = e.type === 'rtwister', dirx = (e.a || 1) < 0 ? -1 : 1, R = Math.max(50, Math.abs(e.a || 100)), H = red ? 170 : 300, dur = Math.max(0.3, (e.b || 150) / 60);
-                    const g = new THREE.Group(); g.position.copy(pos);
-                    const rings = [], N = 16;
+                case 'twister': case 'rtwister': case 'ktwister': {         // Zephyr's Roaming Twister: a = +/- radius (sign = travel direction), b = life frames, c = id. A visible spinning funnel with debris.
+                    const kt = e.type === 'ktwister', red = e.type !== 'twister', dirx = (e.a || 1) < 0 ? -1 : 1, R = Math.max(50, Math.abs(e.a || 100)), H = red ? 170 : 300, dur = Math.max(0.3, (e.b || 150) / 60);
+                    const g = new THREE.Group(); g.position.copy(pos); if (kt) g.rotation.z = -dirx * Math.PI / 4;       // Ember's spin kick: the twister is tilted 45 degrees toward his back and follows him
+                    const rings = [], N = kt && lowGfx() ? 8 : 16;
                     for (let i = 0; i < N; i++) {
                         const k = i / (N - 1), rr = R * (0.22 + 0.9 * k);
                         const m = new THREE.Mesh(new THREE.TorusGeometry(rr, Math.max(2, 3 + k * 3), 6, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(red ? (i % 2 ? '#ea580c' : '#b91c1c') : (i % 2 ? '#e0f2fe' : '#bae6fd')).multiplyScalar(red ? 1.1 : 1.5), transparent: true, opacity: 0.8 - k * 0.3, blending: ADD, depthWrite: false, toneMapped: false }));
@@ -679,17 +680,18 @@ export class Effects {
                     const cone = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.12, R * 0.22, H, 20, 1, true), new THREE.MeshBasicMaterial({ color: red ? 0xff3b1a : 0xcfeaff, transparent: true, opacity: 0.16, blending: ADD, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
                     cone.position.y = H / 2 + 6; g.add(cone);
                     const deb = [];                                              // flying debris orbiting up the funnel
-                    for (let i = 0; i < 22; i++) { const d = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 7), new THREE.MeshBasicMaterial({ color: i % 3 ? (red ? 0xfb923c : 0xe0f2fe) : (red ? 0x7f1d1d : 0x94a3b8), toneMapped: false })); g.add(d); deb.push({ d, ph: Math.random() * 6.28, k: Math.random(), sp: 1.5 + Math.random() * 2 }); }
+                    for (let i = 0; i < (kt && lowGfx() ? 7 : 22); i++) { const d = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 7), new THREE.MeshBasicMaterial({ color: i % 3 ? (red ? 0xfb923c : 0xe0f2fe) : (red ? 0x7f1d1d : 0x94a3b8), toneMapped: false })); g.add(d); deb.push({ d, ph: Math.random() * 6.28, k: Math.random(), sp: 1.5 + Math.random() * 2 }); }
                     this.scene.add(g);
                     const ent = { obj: g, t: 0, dur, id: e.c, step: (u) => {
                         const tt = ent.t;
                         g.position.x = pos.x + (red ? 0 : dirx * 5.2 * 60 * tt);
+                        if (kt) { const ff = fighters[e.c]; if (ff) g.position.set(wx(ff.x), wy(ff.y + (ff.height || 68) / 2), 0); }
                         rings.forEach((r, i) => { r.m.rotation.z = tt * (6 + r.k * 5) * (i % 2 ? -1 : 1); r.m.position.x = Math.sin(tt * 5 + i) * 6 * r.k; r.m.position.z = Math.cos(tt * 5 + i) * 6 * r.k; });
                         cone.rotation.y = tt * 7;
                         for (const q of deb) { const a = q.ph + tt * q.sp * 3, rr = R * (0.25 + 0.85 * q.k) * 1.05; q.d.position.set(Math.cos(a) * rr, 6 + q.k * H + Math.sin(tt * 4 + q.ph) * 12, Math.sin(a) * rr * 0.6); q.d.rotation.set(a, a * 1.3, 0); }
                         if (ent.dur - ent.t < 0.25) { const f = Math.max(0, (ent.dur - ent.t) / 0.25); g.scale.set(f, 1, f); }
                     }, free: () => { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } };
-                    (this._byId || (this._byId = new Map())).set('tw' + (red ? 'r' : '') + e.c, ent);
+                    (this._byId || (this._byId = new Map())).set('tw' + (kt ? 'k' : red ? 'r' : '') + e.c, ent);
                     this.timed.push(ent);
                     this.sparks(pos, red ? '#fb923c' : '#e0f2fe', 12, R * 1.3, 0.5);
                     break;
@@ -1031,8 +1033,11 @@ export class Effects {
         // ---- red damage hitboxes only when hitboxes setting is on
         fighters.forEach((f, i) => {
             const m = this.hbPool[i], hb = f.activeHitbox; if (!m) return;
-            if (!this.showHB || !hb) { m.visible = false; return; }
+            const tw = m.userData.tw;
+            if (!this.showHB || !hb) { m.visible = false; if (tw) tw.visible = false; return; }
             m.visible = true;
+            if (hb.rects) { const r0 = hb.rects[0], r1 = hb.rects[1]; m.position.set(wx(r0.x), wy(r0.y), 0); m.scale.set(r0.w, r0.h, 44); if (tw) { tw.visible = true; tw.position.set(wx(r1.x), wy(r1.y), 0); tw.scale.set(r1.w, r1.h, 44); } return; }
+            if (tw) tw.visible = false;
             m.position.set(wx(hb.x), wy(hb.y), 0); m.scale.set(hb.w, hb.h, 44);
         });
 

@@ -92,6 +92,15 @@ const BUILD = {
     },
     tide(m, c) {
         m.halo.visible = false;
+        // a golden trident carried like Bulwark's great sword (the same over-the-shoulder carry and keyframed moves); the prongs spread in the swing plane so they read from the side
+        const tr = c.G(m.armL.wr, 0, 0, 0); tr.rotation.z = 0.06; m.bwSw = tr; m.bwBaseM = new THREE.Object3D(); m.bwBaseM.position.y = 12; tr.add(m.bwBaseM); m.bwTipM = new THREE.Object3D(); m.bwTipM.position.y = 112; tr.add(m.bwTipM);
+        { const gold = new THREE.MeshBasicMaterial({ color: new THREE.Color('#f5b82e').multiplyScalar(1.15), toneMapped: false }), bright = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fde68a').multiplyScalar(1.3), toneMapped: false });
+          const shaft = c.M(new THREE.CylinderGeometry(1.7, 1.7, 112, 8), gold); shaft.position.y = 42; tr.add(shaft);
+          for (let i = 0; i < 5; i++) { const w = c.M(new THREE.TorusGeometry(1.95, 0.5, 5, 10), bright); w.rotation.x = Math.PI / 2; w.position.y = -8 + i * 3.2; tr.add(w); }
+          const pom = c.M(new THREE.SphereGeometry(3, 8, 6), bright); pom.position.y = -15; tr.add(pom);
+          const bar = c.M(new THREE.BoxGeometry(2.2, 3, 17), gold); bar.position.y = 96; tr.add(bar);
+          const mid = c.M(new THREE.ConeGeometry(3, 19, 6), bright); mid.position.y = 107; tr.add(mid);
+          for (const s of [-1, 1]) { const pr = c.M(new THREE.CylinderGeometry(1.4, 1.4, 17, 6), gold); pr.position.set(0, 104, s * 8); tr.add(pr); const pt = c.M(new THREE.ConeGeometry(2.6, 9, 6), bright); pt.position.set(0, 115, s * 8); tr.add(pt); const bk = c.M(new THREE.ConeGeometry(1.6, 6, 5), bright); bk.rotation.z = Math.PI; bk.position.set(0, 99, s * 10.6); tr.add(bk); } }
         const finM = glowMat('#7dd3fc', 1.1, 0.78), fin2 = glowMat('#38bdf8', 1.3, 0.6);
         // a tall curved dorsal fin and a flowing tail fin, plus swept fins on the forearms and calves, and a crest of three smooth head fins
         const dorsal = c.G(m.torso, 0, 17, -7); dorsal.rotation.y = -Math.PI / 2; const d = new THREE.Mesh(finGeo(36, 13, 1.1), finM); dorsal.add(d); dorsal.userData.kind = 'cape'; m.sway.push(dorsal);

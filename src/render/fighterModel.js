@@ -20,7 +20,7 @@ const ATTACK_FRAMES = 18;
 
 // ---- Bulwark's great-sword melees (frames of a 60-frame, 1 s swing; the hit window opens at frame ~38).
 // columns: lSx, lSz, lE, blade angle (0 up, 90 forward, 180 down, 270 back), lean, torsoY, twist, dy, fwd, lHx, rHx, lK, rK, headX ; [frame, values, easing]
-import { BW_KEYS, bwEval } from '../bwSword.js';
+import { BW_KEYS, TIDE_KEYS, bwEval } from '../bwSword.js';
 const BW_UP = new THREE.Vector3(0, 1, 0), BW_REST = new THREE.Euler(0, 0, 0.06);
 // ----------------------------------------------------------------- poses
 const POSE_DEFAULT = {
@@ -730,7 +730,7 @@ export class FighterModel {
         const hand = (f.attackSerial % 2 === 0) ? 'R' : 'L';
         const chg = f.attackHeld ? clamp01(f.meleeCharge / 102) : 0;
         const hv = f.char === 'bulwark', ez = smooth;
-        if (f.zv && !rip) { const r = this.#zephMelee(f, u); if (hv && f.zv === 'K') { r.bw = true; r.bk = true; r.fr = u * 26; r.spinYaw = 0; } return r; }       // Bulwark's backwards attack is a keyframed sword thrust (BW_KEYS.BACK)
+        if (f.zv && !rip) { const r = this.#zephMelee(f, u); if (f.char === 'tide') return this.#tideMelee(f, u); if (hv && f.zv === 'K') { r.bw = true; r.bk = true; r.fr = u * 26; r.spinYaw = 0; } return r; }       // Bulwark's backwards attack is a keyframed sword thrust (BW_KEYS.BACK)
         if (hv && !rip && f.atkN === BW_MELEE && ['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(f.attackKind)) return { w: 1, kind: f.attackKind, u, o: {}, bw: true, fr: u * 60 };       // Bulwark's great-sword melees are keyframed in #bwPose
 
         if (k === 'JAB') {                                   // around-the-world sword spin
@@ -1288,7 +1288,7 @@ export class FighterModel {
     #bwPose(atk, pose, dt) {
         const f = this.f;
         const rip = f.riposteT > 0 || f.stabT > 0 || f.riposteAfter > 0;
-        const pound = f.sx && f.sx.k === 'pound' && !atk;               // his Down-F on the ground is the same plunge, timed to its wind-up
+        const pound = f.char === 'bulwark' && f.sx && f.sx.k === 'pound' && !atk;               // his Down-F on the ground is the same plunge, timed to its wind-up
         const busy = true;                                              // the sword is always carried over the shoulder, standing still too
         const free = pound || (atk && atk.bw) || !(f.specialKind || f.swordRide || f.isRolling || f.hitstun > 0 || f.grabbedBy || f.isHanging || f.dizzyTimer > 0);
         this.swK += ((busy && free ? 1 : 0) - this.swK) * (1 - Math.exp(-dt * 14));
@@ -1296,13 +1296,14 @@ export class FighterModel {
         const CARRY = [125, 18, 95, -67];                                          // arm raised behind the shoulder, blade 23 degrees above horizontal, pointing back
         let tgt = CARRY.slice(), body = null, a = CARRY[3];
         if ((atk && atk.bw) || pound) {
-            const T = BW_KEYS[atk && atk.bk ? 'BACK' : pound ? 'DOWN' : atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
+            const T = atk && atk.tk ? TIDE_KEYS[atk.tk] : BW_KEYS[atk && atk.bk ? 'BACK' : pound ? 'DOWN' : atk.kind === 'UP' ? 'UP' : atk.kind === 'DOWN' ? 'DOWN' : 'SIDE'];
             const W = 20, pt = f.sx ? f.sx.t : 0, fr = pound ? Math.min(60, pt < W ? 38 * pt / W : 38 + (pt - W) * 1.7) : atk.fr;
             const v = bwEval(T, fr);
             tgt = [v[0], v[1], v[2], v[3]]; a = v[3]; body = v;
             pose.lean = v[4]; pose.torsoY = v[5]; pose.twist = v[6]; pose.dy = v[7]; pose.fwd = v[8]; pose.lHx = v[9]; pose.rHx = v[10]; pose.lK = v[11]; pose.rK = v[12]; pose.headX = v[13];
             pose.rSx = v[0] - 8; pose.rSz = v[1] * 0.5; pose.rE = v[2]; pose.lSx = v[0]; pose.lSz = v[1]; pose.lE = v[2];
             pose.blade = 0; pose.aura = Math.max(pose.aura, 0.2);
+            if (atk && atk.po) for (const q in atk.po) pose[q] = (q === 'fwd' || q === 'dy') ? pose[q] + atk.po[q] : atk.po[q];
             this.bwFr = pound ? -1 : atk.fr;
         } else if (rip) {
             tgt = [pose.lSx, pose.lSz, pose.lE, f.stabT > 0 ? 86 : 32]; a = tgt[3]; pose.blade = 0;
@@ -1315,6 +1316,21 @@ export class FighterModel {
     }
 
     /** Aims the blade along the wanted angle (sagittal plane, 0 = up, 90 = forward), whatever the arm does, and keeps its tip on the floor when it would dig in. */
+    /** Tide's trident melees: keyframed like Bulwark's sword (TIDE_KEYS), with the spin / lunge / breakdance layered on top */
+    #tideMelee(f, u) {
+        const v = f.zv, n = f.atkN || 24, Sg = (a, b) => smooth(seg(u, a, b));
+        const tk = v === 'K' ? 'K' : v === 'UG' || v === 'UA' ? 'UG' : v === 'DA' ? 'DA' : v === 'DG' ? 'DG' : 'H';
+        const r = { w: 1, kind: 'ZM', u, o: {}, bw: true, tk, fr: u * n, spinYaw: 0, po: {} };
+        if (v === 'K') r.spinYaw = Math.PI * Sg(0.08, 0.3) * (1 - Sg(0.7, 0.95));                   // a 180 degree spin, slicing behind
+        else if (v === 'T') { const l = Sg(0.15, 0.34) * (1 - Sg(0.55, 0.85)); r.po.fwd = 16 * l; r.po.rHx = 44 * l + 12; r.po.lHx = -30 * l; r.po.rK = 12; r.po.lK = 40 * l + 10; }      // the lunge is only an animation
+        else if (v === 'DG') {                                                                       // breakdance: down on the hands, legs windmilling
+            const dn = Sg(0.08, 0.2) * (1 - Sg(0.86, 1)), p = u * 46;
+            r.spinYaw = Math.PI * 6 * Sg(0.18, 0.84);
+            r.po.pitch = -78 * dn; r.po.dy = -10 * dn; r.po.rHx = 100 * Math.sin(p) * dn; r.po.lHx = -100 * Math.sin(p) * dn; r.po.rK = 20 + 20 * Math.cos(p) * dn; r.po.lK = 20 - 20 * Math.cos(p) * dn;
+        }
+        return r;
+    }
+
     #bwAim(dt) {
         const f = this.f, sw = this.bwSw, k = this.swK;
         if (k < 0.01) { sw.quaternion.setFromEuler(BW_REST); return; }
@@ -1347,7 +1363,7 @@ export class FighterModel {
 
     /** Effects of the Bulwark melees: a bright crescent on the fast part, sparks while the point drags the floor, a shock ring on the slam. */
     #bwAttackFx(a, dt) {
-        const fx = this.fx; if (!fx || lowGfx()) return;   // Low: the sword pose is enough; skip drag sparks and slam dust
+        const fx = this.fx; if (!fx || lowGfx() || a.tk) return;   // Low: the sword pose is enough; skip drag sparks and slam dust
         const f = this.f, fr = a.fr, col = this.baseColor, fired = this.firedAtk;
         const once = (key, c) => { if (!fired[key] && c) { fired[key] = true; return true; } return false; };
         if (this.bwDrag && a.kind !== 'UP' && fr < 52) {                                         // grinding along the ground

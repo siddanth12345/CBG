@@ -32,8 +32,8 @@ export const CHARS = {
     },
     tide: {
         id: 'tide', name: 'Tide', role: 'Zoner', walk: 0.9, orb: 1.1, blink: 1.0, scale: 1.0,
-        desc: 'A water caster with a long staff. Sweeping reach and long-range water specials.',
-        look: { suit: 0x0c4a6e, trim: 0x7dd3fc, head: 'smooth', weapon: 'staff', anim: 'staff', extra: 'staffback' },
+        desc: 'A water caster with a golden trident, carried like a great sword. Side: a thrust. Up / down: a blue water orb pops and splashes. Back: a 180 degree slice. Long-range water specials.',
+        look: { suit: 0x0c4a6e, trim: 0x7dd3fc, head: 'smooth', weapon: 'fist', anim: 'staff', extra: 'trident' },
         art: { skin: '#7dd3fc', feature: 'fin' },
     },
     volt: {

@@ -34,18 +34,19 @@ export const MELEE = {
     ember: {                                                                                                                                    // Ember's reworked melees (no melee moves him: velocity is never touched)
         H: m(30, [s(10, 16, 92, 60, 58, -6, 3, 9, 1, -0.4)]),                                                                                   // a sideways swipe with a fiery fist: a 0.5 s swing, no stun
         T: m(30, [s(10, 16, 92, 60, 58, -6, 3, 9, 1, -0.4)]),                                                                                   // running: the same fiery swipe
-        K: m(30, [s(8, 18, 104, 64, 54, -10, 3, 10, 1.1, -PI / 4)]),                                                                            // backwards: a sideways tornado spin kick (a red twister), launching 45 degrees
+        K: m(60, [s(6, 11, 112, 110, 50, -34, 3, 0.5, 0, -PI / 4), s(14, 19, 112, 110, 50, -34, 3, 0.5, 0, -PI / 4), s(22, 27, 112, 110, 50, -34, 3, 0.5, 0, -PI / 4), s(30, 35, 112, 110, 50, -34, 3, 0.5, 0, -PI / 4), s(38, 43, 112, 110, 50, -34, 3, 0.5, 0, -PI / 4), s(48, 54, 112, 110, 52, -34, 3, 10, 1.1, -PI / 4)]),                                                                            // backwards: a sideways tornado spin kick (a red twister), launching 45 degrees
         UA: m(28, [s(8, 18, 150, 140, 0, -14, 3, 10, 1.1, -PI / 2)]),                                                                           // air up: an around-the-world fire kick trailing cluster sparks and flame
         UG: m(34, [s(5, 9, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(11, 15, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(17, 21, 74, 112, 46, -46, 3, 0.5, 0, -0.9), s(23, 27, 82, 118, 48, -48, 3, 9, 1, -0.9)]),   // ground up: a small core-charge flamethrower, three licks then a push
         DA: m(26, [s(8, 18, 56, 96, 12, 54, 3, 8, 1, PI / 2)]),                                                                                 // air down: a fiery rock-kick spike
-        DG: m(30, [s(8, 22, 230, 92, 0, 0, 3, 8, 1, -PI / 2)]),                                                                                 // ground down: cluster sparks spread along the floor both ways, smoke rising, throws foes up
+        DG: m(30, [s(8, 22, 176, 68, 0, 0, 3, 8, 1, -PI / 2, { twin: true })]),                                                                                 // ground down: cluster sparks spread along the floor both ways, smoke rising, throws foes up
     },
-    tide: {
-        H: m(22, [s(6, 12, 100, 40, 60, 6, 6, 4, 0.4, 0, { pull: true }), s(15, 18, 56, 46, 36, 0, 5, 11, 1.2, -0.4)]),                       // staff sweep drags the foe in, then shoves them out
-        T: m(28, [s(3, 16, 90, 60, (k) => 32 + 20 * k, -4, 7, 11, 1.2, -0.3)], { leap: { vx: 14, vy: 0, g: false }, lock: [18, 14] }),        // surf-ride tackle on a wave
-        K: m(24, [s(4, 14, 90, 50, (k) => 50 + 30 * k, 0, 6, 11, 1.2, -0.4)], { leap: { vx: 13, vy: -3, g: false } }),                         // pushes off backward on a wave, sweeping as he goes
-        UG: m(22, [s(8, 16, 50, 130, 60, -45, 7, 12, 1.3, -PI / 2)]),                                                                          // geyser flick
-        SL: m(26, [s(6, 9, 44, 40, 36, 30, 3, 2, 0.2, -PI / 2), s(10, 20, 140, 20, 60, 34, 1, 0, 0, -PI / 2, { stun: 14 })]),                  // staff plant, a slowing puddle spreads
+    tide: {                                                                                                                                     // Tide's golden trident (no melee moves him)
+        H: m(24, [s(8, 13, 128, 34, 76, -2, 6, 9, 1, -0.3)]),                                                                                   // a trident thrust straight ahead (ground and air)
+        T: m(24, [s(8, 13, 128, 34, 76, -2, 6, 9, 1, -0.3)]),                                                                                   // running: the same thrust with a lunge (animation only)
+        K: m(28, [s(8, 16, 132, 64, 72, -2, 6, 10, 1.1, -0.35)]),                                                                               // backwards: he spins 180 degrees slicing the trident behind him
+        UG: m(38, [s(21, 27, 120, 170, 0, -96, 7, 11, 1.2, -PI / 2)]),                                                                          // up: a blue orb forms on the raised trident, pops and splashes upward
+        DA: m(38, [s(21, 27, 120, 170, 0, 96, 7, 10, 1.1, PI / 2)]),                                                                            // air down: trident pointed down, a blue orb forms, pops and splashes foes downward
+        DG: m(40, [s(8, 32, 200, 56, 0, 6, 4, 9, 1, -1.0, { radial: true })]),                                                                  // ground down: a breakdance with splashes all around
     },
     terra: {
         H: m(26, [s(8, 13, 64, 54, 50, -6, 10, 12, 1.25, -0.4), s(15, 19, 90, 36, 90, 4, 3, 5, 0.5, -0.3)]),                                  // boulder-fist hook, debris flies on
@@ -62,7 +63,7 @@ export const MELEE = {
 /** build the playable swing for one move and one direction (d = +1 / -1: the way the move is aimed) */
 export function buildMelee(spec, d) {
     const st = spec.st.map((q) => ({
-        a: q.a, b: q.b, w: q.w, h: q.h, damage: q.dmg, bkb: q.bkb, kbg: q.kbg, stun: q.stun || 0, pull: !!q.pull, step: q.step || 0, radial: !!q.radial,
+        a: q.a, b: q.b, w: q.w, h: q.h, damage: q.dmg, bkb: q.bkb, kbg: q.kbg, stun: q.stun || 0, twin: !!q.twin, pull: !!q.pull, step: q.step || 0, radial: !!q.radial,
         path: () => null, px: q.x, py: q.y,
         angle: () => q.pull ? (d === 1 ? PI + 0.15 : -0.15) : (d === 1 ? q.ang : PI - q.ang),
     }));

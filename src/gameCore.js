@@ -1082,6 +1082,7 @@ class Fighter {
         if (!sw) return;
         const e = this.atkN - this.attackTimer;          // frames elapsed (1..18)
         if (this.char === 'ember' && this.zv && this.attackTimer > 0) emberMeleeFx(this, e);
+        else if (this.char === 'tide' && this.zv && this.attackTimer > 0) tideMeleeFx(this, e);
         let st = null;
         if (sw.stages) {                                 // a move with several hit windows in a row
             const i = sw.stages.findIndex(q => e >= q.a && e <= q.b);
@@ -1128,6 +1129,7 @@ class Fighter {
             multi: !!sw.multi, chain: !!(st && sw0.stages.indexOf(st) < sw0.stages.length - 1), fire: fl > 1, stun: (st && sw0.stages.indexOf(st) < sw0.stages.length - 1) ? 0 : (sw.stun || 0), burn,
             fixed: sw.flow ? { vx: this.facing * sw.flow, vy: -1, hitstun: 8 } : (st && sw0.stages.indexOf(st) < sw0.stages.length - 1 && !st.pull) ? { vx: sw0.d * 3, vy: -1.5, hitstun: 10 } : null,       // the opening hits of a chain just hold the foe in place for the next one
         };
+        if (st && st.twin) { const W = this.width || 44, Hh = this.height || 68, o = W * 1.5, sd = this.swing.d || 1; this.activeHitbox.rects = [{ x: this.x - o, y: this.y, w: W, h: Hh }, { x: this.x + o, y: this.y, w: W, h: Hh }]; this.activeHitbox.w = W * 4; this.activeHitbox.h = Hh; this.activeHitbox.x = this.x; this.activeHitbox.y = this.y; }
         if (sw.type === 'J') this.setMove('J', 2);            // J only counters while its swing is live
     }
 
@@ -3992,18 +3994,35 @@ function startKillCam(att, def) {
 }
 /** Ember's melee visuals: red twister for the back kick, cluster sparks + fire for the air-up kick, floor sparks with smoke, the little flamethrower */
 function emberMeleeFx(f, e) {
+    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };     // Low graphics: 70% fewer particles
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d;
-    if (f.zv === 'K' && e >= 6 && f._rtwS !== f.attackSerial) { f._rtwS = f.attackSerial; fx('rtwister', f.x + mvd * 40, f.y + (f.height || 80) / 2, 70, 34, ++windId); audio.playThrow(); }
-    else if (f.zv === 'UA' && e >= 6 && e <= 20) { const a = (e - 6) / 14 * Math.PI * 2; for (const c of ['#fb923c', '#fde047', '#ef4444']) createParticles(f.x + Math.cos(a) * 62, f.y + Math.sin(a) * 52, c, 2); }
-    else if (f.zv === 'DG' && e >= 8 && e <= 24) { const g = f.y + (f.height || 80) / 2; for (const sd of [-1, 1]) { const x = f.x + sd * (30 + (e - 8) * 5); createParticles(x, g - 6, '#fb923c', 2); createParticles(x, g - 20 - (e - 8) * 3, '#94a3b8', 1); createParticles(x + sd * 4, g - 50 - (e - 8) * 4, '#475569', 1); } }
-    else if (f.zv === 'UG' && e >= 5 && e <= 27 && e % 2 === 0) { for (let i = 0; i < 3; i++) createParticles(f.x + mvd * (24 + i * 26), f.y - 20 - i * 26, i % 2 ? '#fde047' : '#fb923c', 2); }
-    else if (f.zv === 'DA' && e >= 6 && e <= 20) { createParticles(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); createParticles(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
-    else if (f.zv === 'H' && e >= 8 && e <= 18) { createParticles(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
+    if (f.zv === 'K' && e >= 2 && f._rtwS !== f.attackSerial) { f._rtwS = f.attackSerial; fx('ktwister', f.x, f.y + (f.height || 68) / 2, mvd * 74, 60, idxOf(f)); audio.playThrow(); }
+    else if (f.zv === 'UA' && e >= 6 && e <= 20) { const a = (e - 6) / 14 * Math.PI * 2; for (const c of ['#fb923c', '#fde047', '#ef4444']) cP(f.x + Math.cos(a) * 62, f.y + Math.sin(a) * 52, c, 2); }
+    else if (f.zv === 'DG' && e >= 8 && e <= 22) { const g = f.y + (f.height || 68) / 2, W = f.width || 44, H = f.height || 68; for (const sd of [-1, 1]) { const x = f.x + sd * W * 1.5 + (Math.random() - 0.5) * W; const u = (e - 8) / 14; cP(x, g - 4, '#fb923c', 3); cP(x, g - H * u, '#fde047', 2); cP(x, g - H - 6 - u * 30, '#94a3b8', 2); } }
+    else if (f.zv === 'UG' && e >= 5 && e <= 27 && e % 2 === 0) { for (let i = 0; i < 3; i++) cP(f.x + mvd * (24 + i * 26), f.y - 20 - i * 26, i % 2 ? '#fde047' : '#fb923c', 2); }
+    else if (f.zv === 'DA' && e >= 6 && e <= 20) { cP(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); cP(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
+    else if (f.zv === 'H' && e >= 8 && e <= 18) { cP(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
 }
-/** every melee hit freezes only the victim for 0.2 s (12 frames); the velocity they were launched with is kept and released afterwards */
+/** Tide's trident visuals: a blue orb forms on the trident, pops and splashes (up / down), a breakdance with splashes, a slice, a thrust. Low graphics: 70% fewer particles. */
+function tideMeleeFx(f, e) {
+    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const d = f.facing || 1, mvd = f.swing && f.swing.d || d, W = ['#38bdf8', '#bae6fd', '#ffffff'], feet = f.y + (f.height || 68) / 2;
+    if (f.zv === 'UG' || f.zv === 'DA') {
+        const sg = f.zv === 'UG' ? -1 : 1, tx = f.x, ty = f.y + sg * 84;
+        if (e >= 8 && e <= 20 && e % 3 === 0) { const u = (e - 8) / 12; fx('explosion', tx, ty, 8 + 26 * u, 0.12, STYLE_OF[f.char]); cP(tx + (Math.random() - 0.5) * 50, ty + (Math.random() - 0.5) * 50, W[0], 2); }
+        if (e === 21) { fx('explosion', tx, ty, 70, 0.3, STYLE_OF[f.char]); fx('gust', tx, ty, 90, 1, 'water'); S.screenShake = Math.max(S.screenShake, 5); audio.playHit(false);
+            for (let i = 0; i < 4; i++) cP(tx + (Math.random() - 0.5) * 110, ty + sg * (10 + Math.random() * 90), W[i % 3], 6); }
+        if (e > 21 && e <= 27 && e % 2 === 0) for (const c of W) cP(tx + (Math.random() - 0.5) * 100, ty + sg * (20 + (e - 21) * 14), c, 2);
+    } else if (f.zv === 'DG' && e >= 8 && e <= 32) {
+        if (e % 4 === 0) for (const sd of [-1, 1]) { const x = f.x + sd * (30 + (e - 8) * 3); fx('gust', x, feet, 40, 0, 'water'); for (const c of W) cP(x, feet - 8, c, 2); }
+        if (e === 10) { fx('explosion', f.x, feet - 6, 60, 0.25, STYLE_OF[f.char]); S.screenShake = Math.max(S.screenShake, 4); }
+    } else if (f.zv === 'K' && e >= 8 && e <= 16 && e % 2 === 0) { for (const c of W) cP(f.x + mvd * (30 + (e - 8) * 12), f.y - 6 + (Math.random() - 0.5) * 30, c, 2); }
+    else if ((f.zv === 'H' || f.zv === 'T') && e >= 8 && e <= 13) { for (const c of W) cP(f.x + mvd * (50 + (e - 8) * 12), f.y - 2, c, 1); }
+}
+/** every melee hit freezes only the victim for 0.3 s (18 frames); the velocity they were launched with is kept and released afterwards */
 function hitPause(def, hb) {
     if (!hb || !hb.type || S.kcVis > 0 || def.stocks <= 0 || def.frozenBot) return;
-    def._hp = { n: 12, vx: def.vx, vy: def.vy };
+    def._hp = { n: 18, vx: def.vx, vy: def.vy };
 }
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
@@ -4918,7 +4937,9 @@ function checkCombatCollisions(attacker, defender) {
     const hbTop = hb.y - hb.h / 2;
     const hbBottom = hb.y + hb.h / 2;
 
-    if (hbLeft < defRight && hbRight > defLeft && hbTop < defBottom && hbBottom > defTop) {
+    const hitNow = hb.rects ? hb.rects.some(r => r.x - r.w / 2 < defRight && r.x + r.w / 2 > defLeft && r.y - r.h / 2 < defBottom && r.y + r.h / 2 > defTop)
+        : (hbLeft < defRight && hbRight > defLeft && hbTop < defBottom && hbBottom > defTop);
+    if (hitNow) {
         const res = interaction(hb.type || 'J', defender, ((hb.type || 'J') === 'J' && attacker.attackKind === 'DOWN') || hb.type === 'HEADBUTT', attacker.char);
         if (hb.multi) {                                      // sword spin: hits everyone around you once, the swing carries on
             const set = attacker.swingHitSet || (attacker.swingHitSet = new Set());
