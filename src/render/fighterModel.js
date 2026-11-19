@@ -960,11 +960,29 @@ export class FighterModel {
     #styleTweak(f, v, u, o, Sg) {
         const sw = (a, b) => Sg(a, b), P2 = Math.PI * 2;
         switch (f.char) {
-            case 'luminent': {                                               // the lightsaber: up slash / thrust / cross combo, slide, boomerang, spin, spiral uppercut and kick
+            case 'luminent': {                                               // 3-hit: side swipe → thrust+retract → downward slam (0.2 s each)
                 const zv = f.zv;
-                if (zv === 'H') { const r = sw(0.18, 0.5) * (1 - sw(0.78, 1)); o.rSx = lerp(-14, 172, sw(0.18, 0.5)) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.rE = 10; o.lE = 10; o.lean = -16 * sw(0.1, 0.2) + 26 * r; o.twist = 18 * r; o.fwd = 6 * r; }
-                else if (zv === 'C2') { const th = sw(0.1, 0.34) * (1 - sw(0.7, 1)); o.rSx = 20 + 76 * th; o.lSx = 20 + 70 * th; o.rE = 6; o.lE = 6; o.rSz = 4; o.lSz = 4; o.lean = 20 * th; o.fwd = 12 * th; o.rHx = 34 * th; o.lHx = -26 * th; o.twist = 8 * th; }
-                else if (zv === 'C3') { const c3 = sw(0.04, 0.4); o.rSx = lerp(176, 70, c3) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.lean = 30 * c3 * (1 - sw(0.75, 1)); o.rHx = 46 * c3; o.lHx = -30 * c3; o.twist = -14 * c3; }
+                // H: swipe across to the side (horizontal cut)
+                if (zv === 'H') {
+                    const go = sw(0.05, 0.45), back = sw(0.7, 1);
+                    o.rSx = lerp(30, 100, go) * (1 - back * 0.35); o.lSx = 24;
+                    o.rSz = lerp(-70, 90, go) * (1 - back * 0.5); o.lSz = 8;
+                    o.rE = 16; o.lE = 10; o.lean = 18 * go * (1 - back); o.twist = 42 * go * (1 - back); o.fwd = 10 * go * (1 - back);
+                }
+                // C2: thrust forward then pull the blade back out
+                else if (zv === 'C2') {
+                    const out = sw(0.05, 0.4), in_ = sw(0.55, 0.95);
+                    const th = out * (1 - in_ * 0.85);
+                    o.rSx = 28 + 100 * th; o.lSx = 20 + 40 * th; o.rE = 4; o.lE = 8;
+                    o.rSz = 6; o.lSz = 6; o.lean = 22 * th; o.fwd = 28 * th; o.rHx = 20 * th; o.lHx = -16 * th; o.twist = 6 * th;
+                }
+                // C3: raise then slam down
+                else if (zv === 'C3') {
+                    const up = sw(0.0, 0.28), dn = sw(0.28, 0.7);
+                    o.rSx = lerp(lerp(40, 170, up), 40, dn); o.lSx = o.rSx * 0.85;
+                    o.lean = lerp(-12 * up, 28 * dn, dn > 0 ? 1 : 0); o.rHx = 30 * dn; o.lHx = -20 * dn;
+                    o.twist = -18 * dn; o.fwd = 8 * dn; o.dy = 6 * dn;
+                }
                 else if (zv === 'T') { const e = sw(0, 0.16) * (1 - 0.6 * sw(0.55, 1)); o.dy = -15 * e; o.lean = -26 * e; o.torsoX = -8 * e; o.rHx = 84 * e; o.lHx = 74 * e; o.rHz = 3 + 5 * e; o.lHz = 3 + 7 * e; o.rK = 14 * e; o.lK = 24 * e; o.rSx = 8 - 30 * e; o.lSx = 8 - 40 * e; o.rSz = 10 + 40 * e; o.lSz = 10 + 46 * e; o.rE = 18 + 10 * e; o.lE = 18 + 10 * e; o.headX = -6 * e; }      // the same skid as Ember's Side-F slide (animation only)
                 else if (zv === 'K') { o.rSx = 100; o.lSx = 100; o.rE = 20; o.lE = 20; return Math.PI * Math.sin(Math.PI * sw(0.1, 0.78)); }
                 else if (zv === 'UG' || zv === 'UA') { const up = sw(0.12, 0.34) * (1 - sw(0.75, 1)); o.rSx = lerp(-16, 176, sw(0.12, 0.34)) * (1 - sw(0.8, 1)) + 20 * sw(0.8, 1); o.lSx = o.rSx; o.lean = -10 * up; o.dy = 8 * up; o.rHx = 20 * up; o.lHx = -14 * up; o.rK = 20 + 50 * up; o.lK = 20; }

@@ -568,7 +568,7 @@ class Fighter {
         this.rollTotal = ROLL_FRAMES;
         this.hangTimer = 0;
         this.ledgeBan = 0;
-        this.haltT = 0; this.haltElapsed = 0; this.zSlide = 0;   // Ember post-roll slowdown (0.7 s)
+        this.haltT = 0; this.haltElapsed = 0; this.zSlide = 0; this._cmbQ = null;   // Ember post-roll slowdown (0.7 s)
         this.specialKind = null;             // presentation: 'CORE' | 'SPIRAL' | 'SUPLEX' | 'HEADBUTT'
         this.specialT = 0;
         this.specialDur = 0;
@@ -654,11 +654,27 @@ class Fighter {
         this.haltT = 0; this.haltElapsed = 0;
         this.specialKind = null; this.specialDur = 0; this.specialT = 0;
         this.activeMove = null; this.actionLock = 0; this.freezeTimer = 0; this.freezeAirTimer = 0;
-        this.isGrabDashing = false;
+        this.isGrabDashing = false; this._cmbQ = null;
     }
 
     update() {
-        if (this._cmb) { const c = this._cmb; if (c.t-- > 0 && isAlive(c.foe) && this.stocks > 0 && !(S.kcPause > 0) && !(this.hitstun > 0)) { if (this.level && c.t === 22 && Math.random() < (this.level === 'hard' ? 1 : this.level === 'medium' ? 0.7 : 0.4)) { this.attack(c.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT'); if (!this._cmb) return; } this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; } this._cmb = null; }     // Luminent's combo freeze: he hangs in place for 0.5 s with the foe
+        // Luminent 3-hit combo: window stays open until 0.3 s after the foe is fully up; queued input fires when current anim ends
+        if (this._cmb) {
+            const c = this._cmb, fo = c.foe;
+            if (!isAlive(fo) || this.stocks <= 0) this._cmb = null;
+            else if (fo.hitstun <= 0 && fo.clashStunTimer <= 0 && !fo._hp && fo.dizzyTimer <= 0) {
+                c.upT = (c.upT || 0) + 1;
+                if (c.upT > 18) this._cmb = null;           // 0.3 s after getting up → combo resets
+            } else c.upT = 0;
+            // AI continues the combo once the current swing is done
+            if (this._cmb && this.level && this.attackTimer <= 0 && !(S.kcPause > 0) && !(this.hitstun > 0) && Math.random() < (this.level === 'hard' ? 0.85 : this.level === 'medium' ? 0.55 : 0.3)) {
+                this.attack(c.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+            }
+        }
+        if (this._cmbQ && this.attackTimer <= 0 && this.char === 'luminent' && !(this.hitstun > 0)) {
+            const d = this._cmbQ; this._cmbQ = null;
+            this.attack(d);
+        }
         if (this._hp) {                                                      // hit pause: the one who was hit and the one who hit are held for 0.3 s (only on the last, knocking hit of a multi-hit move), then their launch velocity carries on unchanged
             const h = this._hp;
             if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
@@ -2499,7 +2515,15 @@ class Fighter {
             else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
         }
         let mv = null;                                                  // everyone else's new melees (melees.js): side / running side / opposite side / up / down
-        const cmbOn = this.char === 'luminent' && this._cmb && this._cmb.t > 0 && isAlive(this._cmb.foe);          // Luminent's combo window: any attack press continues it
+        // Mid-anim: queue the next combo press so it starts only after the 0.2 s swing finishes
+        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2' || this.zv === 'C3') && !this.actionBlocked()) {
+            // still allow queue while swinging (actionBlocked would be false after lock ends mid-anim)
+        }
+        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2')) {
+            this._cmbQ = aimDirection || (this.facing > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+            return true;
+        }
+        const cmbOn = this.char === 'luminent' && this._cmb && isAlive(this._cmb.foe);          // Luminent's combo window: continues until 0.3 s after foe gets up
         if (this.char !== 'zephyr' && MELEE[this.char]) {
             let v = '';
             if (cmbOn) { v = this._cmb.st === 1 ? 'C2' : 'C3'; zdir = this._cmb.d; }
@@ -2515,8 +2539,16 @@ class Fighter {
             case 'SIDE_LEFT': kind = 'SIDE_LEFT'; if (zv !== 'K') this.facing = -1; break;
             case 'SIDE_RIGHT': kind = 'SIDE_RIGHT'; if (zv !== 'K') this.facing = 1; break;
         }
-        if (cmbOn) { kind = zdir > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT'; this.facing = zdir; const fo = this._cmb.foe; if (fo._hp) fo._hp.n = Math.max(fo._hp.n, 14); fo.hitstun = Math.max(fo.hitstun, 30); this._cmb = null; }
-        else if (this.char === 'luminent') this._cmb = null;
+        if (cmbOn) {
+            kind = zdir > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT'; this.facing = zdir;
+            const fo = this._cmb.foe;
+            if (fo._hp) fo._hp.n = Math.max(fo._hp.n, 8);
+            fo.hitstun = Math.max(fo.hitstun, 16);
+            this._cmb = null;                               // step consumed; re-armed only if this swing hits
+            this._cmbQ = null;
+        } else if (this.char === 'luminent') {
+            this._cmb = null;
+        }
         if (kind === 'JAB' && this.char === 'tide') return enterWhirl(this);                  // Tide's neutral melee only dives into his own whirlpool
         this.attackKind = kind;
         this.attackSerial++;
@@ -4044,12 +4076,14 @@ function terraMeleeFx(f, e) {
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
 }
-/** Luminent's combo hit 1 / 2: both fighters freeze for 0.5 s so the next press can continue it */
+/** Luminent combo hit 1 / 2: keep 0.2 s anim; arm next step. Window lasts until 0.3 s after the foe gets up. */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
-    def._hp = { n: 30, vx: 0, vy: 0 }; def.hitstun = Math.max(def.hitstun, 36);
-    att._cmb = { st: hb.cmb, t: 30, foe: def, d: att.swing && att.swing.d || att.facing };
-    att.attackTimer = 0; att.swing = null; att.activeHitbox = null; att.actionLock = 0; att.zSlide = 0; att.zLock = 0;
+    // Short hold so the link feels solid without killing the swipe/thrust animation
+    def.hitstun = Math.max(def.hitstun, 18);
+    if (!def._hp) def._hp = { n: 12, vx: 0, vy: 0 };
+    att._cmb = { st: hb.cmb, foe: def, d: att.swing && att.swing.d || att.facing, upT: 0 };
+    // Do not clear attackTimer — let the 0.2 s animation finish; inputs queue via _cmbQ
     fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 10); S.screenShake = Math.max(S.screenShake, 4);
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
