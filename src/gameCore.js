@@ -675,9 +675,26 @@ class Fighter {
             const d = this._cmbQ; this._cmbQ = null;
             this.attack(d);
         }
-        if (this._hp) {                                                      // hit pause: the one who was hit and the one who hit are held for 0.3 s (only on the last, knocking hit of a multi-hit move), then their launch velocity carries on unchanged
+        if (this._hp) {                                                      // hit / combo pause: locked in place — no gravity, no movement
             const h = this._hp;
-            if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
+            if (h.x != null) { this.x = h.x; this.y = h.y; }
+            this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y;
+            if (h.n > 0 && this.stocks > 0 && !(S.kcPause > 0)) {
+                h.n--;
+                // Attacker during luminent combo: keep the swing anim ticking only
+                if (h.keepAnim && this.attackTimer > 0) {
+                    const sw = this.swing;
+                    if (!(this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1)) {
+                        this.attackTimer--;
+                        if (this.attackTimer === 0 && this.swing) {
+                            this.swing = null; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
+                            this.zv = null; this.zLeap = null; this.zLock = 0;
+                        }
+                    }
+                    this.updateSwing();
+                }
+                return;
+            }
             this.vx = h.vx; this.vy = h.vy; this._hp = null;
         }
         // Instant Final Blow: lock at 200% every frame while the setting is on (survives stock loss / respawn)
@@ -3412,8 +3429,8 @@ function createParticles(x, y, color, count = 10) {
             outbox.push({ k: 'p', e: [x, y, color, count] });
     }
     // hard cap so ledge thrash / KO spam can't melt the frame rate
-    const room = Math.max(0, Math.round(110 * (S.fxLod || 1)) - particles.length);
-    count = Math.min(count, room);
+    const room = Math.max(0, Math.round(72 * (S.fxLod || 1)) - particles.length);
+    count = Math.min(count, Math.min(10, room));
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
@@ -4073,15 +4090,15 @@ function terraMeleeFx(f, e) {
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
 }
-/** Luminent combo hit 1 / 2: keep 0.2 s anim; arm next step. Window lasts until 0.3 s after the foe gets up. */
+/** Luminent combo hit 1 / 2: both locked in place (no gravity, no movement) while the 0.4 s anim finishes. */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
-    // Short hold so the link feels solid without killing the swipe/thrust animation
-    def.hitstun = Math.max(def.hitstun, 18);
-    if (!def._hp) def._hp = { n: 12, vx: 0, vy: 0 };
+    const n = Math.max(24, att.attackTimer | 0);          // hold through the rest of the 0.4 s swing
+    def.hitstun = Math.max(def.hitstun, n);
+    def._hp = { n, vx: 0, vy: 0, x: def.x, y: def.y };
+    att._hp = { n, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true };   // attacker: anim ticks, body locked
     att._cmb = { st: hb.cmb, foe: def, d: att.swing && att.swing.d || att.facing, upT: 0 };
-    // Do not clear attackTimer — let the 0.2 s animation finish; inputs queue via _cmbQ
-    fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 10); S.screenShake = Math.max(S.screenShake, 4);
+    fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 6); S.screenShake = Math.max(S.screenShake, 3);
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
 function luminentMeleeFx(f, e) {
@@ -5456,6 +5473,7 @@ function aiWalk(f) {
 /** walking / shielding for one fighter from a held-input state ({left,right,shield,drop}) */
 function drive(f, h) {
     f._in = h;
+    if (f._hp) { f.isShielding = false; return; }           // combo / hit-pause: cannot move or shield
     const free = f.hitstun === 0 && f.dizzyTimer === 0 && f.clashStunTimer === 0 && !f.grabHolding &&
         !f.isRolling && f.freezeTimer === 0;
     if (free) {

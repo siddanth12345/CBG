@@ -141,7 +141,7 @@ export class Effects {
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
-        this.MAXP = 900;  // was 2600 — late-match instanced updates were a major lag source
+        this.MAXP = 420;  // tighter: late-match instanced updates were still laggy at 900
         this.pMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXP);
@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 360; this.sCap = 360;
+        this.MAXS = 180; this.sCap = 180;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
@@ -461,10 +461,10 @@ export class Effects {
             switch (e.type) {
                 case 'hit': {
                     const force = e.a || 10, ang = -e.b; // sim y is flipped
-                    this.star(pos, 30 + force * 1.8, '#fde68a', 0.2);
-                    this.ring(pos, 6, 38 + force * 1.6, 0.3, '#fbbf24', 'screen');
-                    if (lowGfx()) this.sparks(pos, '#ffffff', 5, 180, 0.18);   // Low: only ~5 hit sparks
-                    else { this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8); this.sparks(pos, '#ffffff', 6, 200, 0.2); }
+                    this.star(pos, 24 + force * 1.2, '#fde68a', 0.16);
+                    this.ring(pos, 5, 30 + force * 1.2, 0.24, '#fbbf24', 'screen');
+                    if (lowGfx()) this.sparks(pos, '#ffffff', 3, 140, 0.14);
+                    else { this.spray(pos, ang, '#fcd34d', Math.min(12, 4 + Math.floor(force * 0.35)), 240 + force * 8, 0.55); this.sparks(pos, '#ffffff', 4, 160, 0.16); }
                     break;
                 }
                 case 'block':
@@ -927,8 +927,8 @@ export class Effects {
 
     update(dt, models) {
         // Cap timed VFX objects so hit-spam / multi-hit rings don't accumulate
-        if (this.timed.length > 64) {
-            const drop = this.timed.splice(0, this.timed.length - 64);
+        if (this.timed.length > 36) {
+            const drop = this.timed.splice(0, this.timed.length - 36);
             for (const e of drop) { try { if (e.obj && e.obj.parent) e.obj.parent.remove(e.obj); if (e.free) e.free(); } catch (_) {} }
         }
 
