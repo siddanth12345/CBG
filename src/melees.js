@@ -10,10 +10,10 @@ const m = (n, st, o = {}) => ({ n, st, ch: true, ...o });
 const s = (a, b, w, h, x, y, dmg, bkb, kbg, ang, o = {}) => ({ a, b, w, h, x, y, dmg, bkb, kbg, ang, ...o });
 
 export const MELEE = {
-    luminent: {                                                                                                                                 // 3-hit side combo: swipe → thrust → slam (0.2 s each); next hit queues if pressed mid-anim
-        H: m(12, [s(3, 8, 96, 52, 58, -6, 3, 0, 0, -0.25, { cmb: 1 })]),                                                                       // combo 1: side swipe
-        C2: m(12, [s(3, 8, 120, 32, 76, -2, 3, 0, 0, 0, { cmb: 2 })]),                                                                         // combo 2: thrust out, then pull back
-        C3: m(12, [s(3, 9, 90, 110, 42, 18, 6, 9, 1, 0.95)]),                                                                                  // combo 3: slam down
+    luminent: {                                                                                                                                 // 3-hit side combo: swipe → thrust → slam (0.4 s each); next hit queues if pressed mid-anim
+        H: m(24, [s(6, 14, 108, 56, 62, -8, 3, 0, 0, -0.25, { cmb: 1 })]),                                                                     // combo 1: big side swipe
+        C2: m(24, [s(6, 14, 130, 34, 80, -2, 3, 0, 0, 0, { cmb: 2 })]),                                                                        // combo 2: thrust out, then pull back
+        C3: m(24, [s(6, 16, 96, 120, 44, 22, 6, 9, 1, 0.95)]),                                                                                 // combo 3: overhead slam down
         T: m(30, [s(4, 14, 100, 44, (k) => 40 + 30 * k, 8, 5, 9, 1.1, -1.3)]),                                                                  // running: a slide (animation only) that knocks foes up
         K: m(30, [s(6, 11, 104, 58, 62, -4, 3, 3, 0.3, -0.3), s(17, 23, 104, 58, 62, -4, 5, 10, 1.1, -0.4)]),                                  // backwards: a mini boomerang swing, out and back
         UG: m(26, [s(5, 14, 84, 132, 24, -52, 6, 11, 1.2, -PI / 2)]),                                                                           // up: a spiralling uppercut

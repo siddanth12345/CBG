@@ -2493,6 +2493,11 @@ class Fighter {
     attack(aimDirection, hold = false) {
         if (this.isHanging) return false;    // ledge: jump only
         if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this._swordRemain = this.spiralT; this.swordGroundCd = true; this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
+        // Queue next luminent combo step while the 0.4 s anim is still playing
+        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2')) {
+            this._cmbQ = aimDirection || (this.facing > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+            return true;
+        }
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();
@@ -2515,14 +2520,6 @@ class Fighter {
             else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
         }
         let mv = null;                                                  // everyone else's new melees (melees.js): side / running side / opposite side / up / down
-        // Mid-anim: queue the next combo press so it starts only after the 0.2 s swing finishes
-        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2' || this.zv === 'C3') && !this.actionBlocked()) {
-            // still allow queue while swinging (actionBlocked would be false after lock ends mid-anim)
-        }
-        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2')) {
-            this._cmbQ = aimDirection || (this.facing > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-            return true;
-        }
         const cmbOn = this.char === 'luminent' && this._cmb && isAlive(this._cmb.foe);          // Luminent's combo window: continues until 0.3 s after foe gets up
         if (this.char !== 'zephyr' && MELEE[this.char]) {
             let v = '';
