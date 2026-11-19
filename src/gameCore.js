@@ -1160,6 +1160,8 @@ class Fighter {
             // 1.6 s uncharged → 3 s full; tick every 0.2 s deals 1
             const burnFrames = Math.round(96 + ch * (180 - 96)); // 96..180
             burn = { t: burnFrames, dmg: 1 };
+            // Directed melees (side/up/down, not neutral) deal half damage
+            if (this.zv) { dmg *= 0.5; burn = { t: burnFrames, dmg: 0.5 }; }
         }
         this.activeHitbox = {
             x: this.x + p.x * reach, y: this.y + p.y * reach, w: sw.w * fl * (sw.type === 'J' ? 1.3 : 1), h: sw.h * (1 + (fl - 1) * 0.35) * (sw.type === 'J' ? 1.3 : 1),
