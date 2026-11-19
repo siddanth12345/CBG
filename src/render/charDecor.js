@@ -138,6 +138,7 @@ const BUILD = {
     },
     terra(m, c) {
         m.halo.visible = false;
+        { const g = c.G(m.armR.wr, 0, -6, 0); const rk = c.M(new THREE.DodecahedronGeometry(5, 0), c.armor); rk.scale.set(1.15, 0.95, 1); g.add(rk); const rk2 = c.M(new THREE.DodecahedronGeometry(2.6, 0), c.armorDark); rk2.position.set(3.4, 2.2, 2.4); g.add(rk2); g.visible = false; m.tRock = g; }      // the rock in his fist during melees
         for (let i = 0; i < 5; i++) {                                                 // a cluster of glowing crystals growing from the back
             const g = c.G(m.torso, (i - 2) * 3.4, 14, -9); g.rotation.set(-0.5 - (i % 2) * 0.25, 0, (i - 2) * 0.32);
             const cr = c.M(new THREE.OctahedronGeometry(3, 0), c.glow); cr.scale.set(0.8, 3.6 - Math.abs(i - 2) * 0.5, 0.8); cr.position.y = 7; g.add(cr);

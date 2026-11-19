@@ -999,14 +999,19 @@ export class FighterModel {
                 else if (v === 'UG') { o.rSx = 172; o.lSx = 172; o.rSz = 20; o.lSz = 20; o.dy = 8 * sw(0.2, 0.4) * (1 - sw(0.6, 0.9)); o.lean = -6; }
                 else if (v === 'SL') { o.rSx = lerp(176, 60, sw(0.3, 0.46)); o.lSx = lerp(176, 30, sw(0.3, 0.46)); o.rSz = 14; o.lSz = 14; o.lean = 20 * sw(0.3, 0.46) * (1 - sw(0.7, 1)); }
                 break;
-            case 'terra':                                                    // slow, heavy, planted
+            case 'terra': {                                                  // slow, heavy, planted; rocks in hand
                 o.dy -= 5 * Math.sin(Math.PI * Math.min(1, u * 1.1));
                 if (v === 'H') { o.rSx = lerp(-40, 96, sw(0.25, 0.5)); o.lSx = 30; o.rE = 20; o.lean = lerp(-10, 26, sw(0.25, 0.5)); o.twist *= 1.5; }
-                else if (v === 'T') { o.lean = 42; o.rSx = 60; o.lSx = 60; o.rE = 120; o.lE = 120; o.rSz = 30; o.lSz = 30; o.rK = 40; o.lK = 40; }
-                else if (v === 'K') { const st2 = sw(0.12, 0.3) * (1 - sw(0.5, 0.8)); o.pitch *= 0.3; o.rHx = 100 * st2; o.rK = 20; o.rSx = 40; o.lSx = 40; }
+                else if (v === 'T') { const dv = sw(0.05, 0.32) * (1 - sw(0.7, 1)); o.pitch = 82 * dv; o.dy = -22 * dv; o.fwd = 20 * dv; o.rSx = 150 * dv + 20; o.lSx = 150 * dv + 20; o.rE = 6; o.lE = 6; o.rK = 10; o.lK = 10; o.rHx = -30 * dv; o.lHx = -30 * dv; }      // a belly-flop slam (animation only)
+                else if (v === 'K') { o.rSx = 100; o.lSx = 60; o.rSz = 34; o.lSz = 20; o.rE = 14; o.lE = 40; o.pitch = 0; o.rHx = 0; return P2 * sw(0.14, 0.6); }
                 else if (v === 'UG') { const cr = sw(0, 0.3); o.dy -= 12 * cr * (1 - sw(0.3, 0.45)); o.rSx = lerp(-10, 176, sw(0.3, 0.5)); o.lSx = o.rSx; o.rK = 70 * cr; o.lK = 70 * cr; o.lean = lerp(24, -8, sw(0.3, 0.5)); }
-                else if (v === 'SL') { o.dy -= 8 * sw(0, 0.3); o.rK = 40; o.lK = 40; o.rSz = 26; o.lSz = 26; }
-                break;
+                else if (v === 'DG') { const lift = sw(0, 0.3) * (1 - sw(0.3, 0.42)), hit = sw(0.3, 0.45) * (1 - sw(0.7, 1)); o.rK = 8 + 112 * lift; o.rHx = 52 * lift; o.lHx = -12 * lift; o.dy = -6 * lift + 8 * hit; o.rSx = 30; o.lSx = 30; o.rSz = 30; o.lSz = 30; o.lean = -8 * lift + 14 * hit; }
+                else if (v === 'DA') {                                         // faces the screen, lifts a rock overhead, flips and slams it down
+                    const tn = sw(0, 0.16) * (1 - sw(0.86, 1)), up = sw(0.1, 0.24) * (1 - sw(0.46, 0.56)), fl = sw(0.42, 0.74), sl = sw(0.56, 0.7) * (1 - sw(0.86, 1));
+                    o.rSx = lerp(lerp(20, 172, up), 30, sl); o.lSx = o.rSx; o.rE = lerp(30, 4, up); o.lE = o.rE; o.rSz = 12; o.lSz = 12; o.pitch = 360 * fl; o.rK = 40 * up; o.lK = 40 * up; o.dy = -4 * up + 6 * sl;
+                    return -Math.PI / 2 * tn;
+                }
+                break; }
             case 'bulwark':                                                  // shield first
                 if (v === 'T') { o.lSx = 92; o.lE = 100; o.lSz = 6; o.rSx = -10; o.rE = 20; o.lean = 30; }
                 else if (v === 'K') { o.lSx = 150; o.lE = 60; o.lSz = 10; o.rSx = 40; o.lean = -10; }
@@ -1121,6 +1126,7 @@ export class FighterModel {
 
         // blade + aura (a held firestick replaces the light blade: same swing, longer reach, flame on the tip)
         const lsb = this.charLook.weapon === 'blade';                                // Luminent's lightsaber is always out
+        if (this.tRock) { const z = f.zv, on = f.char === 'terra' && f.attackTimer > 0 && (z === 'H' || z === 'K' || z === 'DA' && f.atkN && (f.atkN - f.attackTimer) / f.atkN < 0.7); this.tRock.visible = on; if (on) this.tRock.scale.setScalar(z === 'K' ? 1.9 : z === 'DA' ? 1.7 : 1); }
         const bl = lsb ? 1 : clamp01(pose.blade);
         const hs = f.heldItem && f.heldItem.type === 'FIRESTICK' && f.heldItem.st === 'held' ? f.heldItem : null;
         const lenK = hs ? (hs.len || 5) : 1;

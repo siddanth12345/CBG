@@ -658,7 +658,7 @@ class Fighter {
     }
 
     update() {
-        if (this._cmb) { const c = this._cmb; if (c.t-- > 0 && isAlive(c.foe) && this.stocks > 0 && !(S.kcPause > 0) && !(this.hitstun > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; } this._cmb = null; }     // Luminent's combo freeze: he hangs in place for 0.5 s with the foe
+        if (this._cmb) { const c = this._cmb; if (c.t-- > 0 && isAlive(c.foe) && this.stocks > 0 && !(S.kcPause > 0) && !(this.hitstun > 0)) { if (this.level && c.t === 22 && Math.random() < (this.level === 'hard' ? 1 : this.level === 'medium' ? 0.7 : 0.4)) { this.attack(c.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT'); if (!this._cmb) return; } this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; } this._cmb = null; }     // Luminent's combo freeze: he hangs in place for 0.5 s with the foe
         if (this._hp) {                                                      // hit pause: the one who was hit and the one who hit are held for 0.3 s (only on the last, knocking hit of a multi-hit move), then their launch velocity carries on unchanged
             const h = this._hp;
             if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
@@ -1085,6 +1085,7 @@ class Fighter {
         if (this.char === 'ember' && this.zv && this.attackTimer > 0) emberMeleeFx(this, e);
         else if (this.char === 'tide' && this.zv && this.attackTimer > 0) tideMeleeFx(this, e);
         else if (this.char === 'luminent' && this.zv && this.attackTimer > 0) luminentMeleeFx(this, e);
+        else if (this.char === 'terra' && this.zv && this.attackTimer > 0) terraMeleeFx(this, e);
         let st = null;
         if (sw.stages) {                                 // a move with several hit windows in a row
             const i = sw.stages.findIndex(q => e >= q.a && e <= q.b);
@@ -3229,7 +3230,7 @@ class AIBot extends Fighter {
             // 6) neutral game at close / mid range
             if (dist < 130 && !this.grabHolding) {
                 const opts = [];
-                opts.push([3, () => this.attack(aim)]);
+                this.aiMeleeOpts(opts, target, distToTargetX, distToTargetY, aim);
                 if (this.canGrab) opts.push([1 + 3 * habit('SHIELD'), () => this.executeGrabDash(target.x, target.y)]);
                 if (this.grounded && target.grounded && dist < 260) opts.push([2, () => this.useSpecial('SUPLEX', target.x, target.y)]);
                 if (this.cd.BLINK <= 0 && Math.abs(distToTargetY) < 60 && dist > 80) opts.push([1, () => this.useSpecial('BLINK', target.x, target.y)]);
@@ -3326,6 +3327,22 @@ class AIBot extends Fighter {
         const key = ch + ':' + pick[1]; const e = aiStats[lv][key] || (aiStats[lv][key] = { use: 0, hit: 0 });
         e.use++; this.aiMove = { slot: pick[1], t: 100, hit: false };
         return true;
+    }
+
+    /** Bots practise every melee of their character (side / backwards / up / down) and learn which ones land: success rates are stored per character and level like the specials */
+    aiMeleeOpts(opts, t, dx, dy, aim) {
+        const lv = this.level, ch = this.char, adx = Math.abs(dx), g = this.grounded, front = dx * this.facing >= 0, n0 = opts.length;
+        if (lv !== 'easy' && lv !== 'medium' && lv !== 'hard') { opts.push([3, () => this.attack(aim)]); return; }
+        const add = (w, slot, a) => opts.push([w * (0.35 + 1.65 * aiRate(lv, ch + ':' + slot)), () => {
+            const s0 = this.attackSerial; this.attack(a);
+            if (this.attackSerial !== s0) { const e = aiStats[lv][ch + ':' + slot] || (aiStats[lv][ch + ':' + slot] = { use: 0, hit: 0 }); e.use++; this.aiMove = { slot, t: 45, hit: false }; }
+        }]);
+        if (front && adx < 140 && Math.abs(dy) < 70) add(3, 'MH', this.facing === 1 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+        if (!front && adx < 130 && Math.abs(dy) < 70) add(3.5, 'MK', dx > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
+        if (dy < -30 && adx < 100) add(3, 'MU', 'UP');
+        if (g && adx < 90 && Math.abs(dy) < 60) add(1.6, 'MD', 'DOWN');
+        else if (!g && dy > 40 && adx < 80) add(3, 'MD', 'DOWN');
+        if (opts.length === n0) opts.push([3, () => this.attack(aim)]);
     }
 
     pickWeighted(opts) {
@@ -4011,6 +4028,16 @@ function emberMeleeFx(f, e) {
     else if (f.zv === 'DA' && e >= 6 && e <= 20) { cP(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); cP(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
     else if (f.zv === 'H' && e >= 8 && e <= 18) { cP(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
 }
+/** Terra's rock melees: dust and debris on the body slam / stomp / rock slam, a rubble trail on the spin (70% fewer particles on Low) */
+function terraMeleeFx(f, e) {
+    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const mvd = f.swing && f.swing.d || f.facing || 1, feet = f.y + (f.height || 68) / 2, C = ['#a8a29e', '#78716c', '#d6d3d1'];
+    const burst = (x, y, R, n) => { fx('explosion', x, y, R, 0.2, STYLE_OF[f.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); for (let i = 0; i < n; i++) cP(x + (Math.random() - 0.5) * R, y - Math.random() * 20, C[i % 3], 3); };
+    if ((f.zv === 'T' && e === 10) || (f.zv === 'DG' && e === 10)) burst(f.x, feet - 6, f.zv === 'T' ? 190 : 200, 6);
+    else if (f.zv === 'DA' && e === 18) burst(f.x, f.y + 76, 110, 5);
+    else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
+    else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
+}
 /** Luminent's combo hit 1 / 2: both fighters freeze for 0.5 s so the next press can continue it */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
@@ -4104,7 +4131,7 @@ function launch(attacker, defender, hb) {
         return;
     }
     if (hb.phoenix && attacker !== defender) { defender.invincibleTimer = Math.max(defender.invincibleTimer, 60); defender.ghostT = 60; }   // hit by the rockets / the last 5 frames of the dash: 1 s of invincibility
-    if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit++; }
+    if (attacker && attacker.aiMove && !attacker.aiMove.hit && attacker !== defender) { attacker.aiMove.hit = true; const e = aiStats[attacker.level] && aiStats[attacker.level][attacker.char + ':' + attacker.aiMove.slot]; if (e) e.hit += (attacker.char === 'ember' && attacker.aiMove.slot === 'S') ? 1.5 : 1; }
     if (hb.radial || hb.mirror) {                           // area hits push away from their centre / mirror to the victim's side
         hb = { ...hb };
         if (hb.radial) hb.angle = Math.atan2(defender.y - hb.y - 20, (defender.x - hb.x) || 1);

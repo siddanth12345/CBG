@@ -50,7 +50,7 @@ export const CHARS = {
     },
     terra: {
         id: 'terra', name: 'Terra', role: 'Heavy', walk: 0.806, orb: 0.8, blink: 0.75, scale: 1.2,
-        desc: 'A rock golem. The slowest walker, with huge fists and slow, crushing specials. Hits like a landslide.',
+        desc: 'A rock golem. The slowest walker, with huge fists, rocks in hand for his melees (haymaker, big spinning rock, uppercut, stomp, overhead rock slam) and slow, crushing specials. Hits like a landslide.',
         look: { suit: 0x292524, trim: 0xa8a29e, head: 'rocks', weapon: 'fist', anim: 'heavy', extra: 'rocks' },
         art: { skin: '#a8a29e', feature: 'rocks' },
     },
@@ -135,6 +135,7 @@ export const BRIEF = {
         U: ['Rubble Launch', 'Tap up F for a blast under your feet, then a slow armoured lift with a hit at the top.'],
         DG: ['Quake', 'On the ground, down F winds up (you are armoured), then a big pound. Knockback is soft.'],
         DA: ['Landslide', 'In the air, down F is one heavy drop. Knockback is soft.'],
+        M: ['Rock Melees', 'Side (ground or air): a haymaker with a rock in his fist. Running side: a body slam on the floor that launches everyone near him. Backward: a spin with a much larger rock. Up: an uppercut. Down on the ground: a stomp with a shockwave both ways. Down in the air: he turns to face the screen, holds a rock overhead, flips and slams it down onto the foe. Neutral melee still throws a rock.'],
     },
 };
 export const brief = (id) => BRIEF[id] || BRIEF.luminent;

@@ -51,12 +51,13 @@ export const MELEE = {
         DA: m(38, [s(21, 27, 120, 170, 0, 96, 7, 10, 1.1, PI / 2)]),                                                                            // air down: trident pointed down, a blue orb forms, pops and splashes foes downward
         DG: m(40, [s(8, 32, 200, 56, 0, 6, 4, 9, 1, -1.0, { radial: true })]),                                                                  // ground down: a breakdance with splashes all around
     },
-    terra: {
-        H: m(26, [s(8, 13, 64, 54, 50, -6, 10, 12, 1.25, -0.4), s(15, 19, 90, 36, 90, 4, 3, 5, 0.5, -0.3)]),                                  // boulder-fist hook, debris flies on
-        T: m(30, [s(4, 16, 90, 70, (k) => 34 + 20 * k, -2, 9, 12, 1.25, -0.35)], { leap: { vx: 11, vy: 0, g: false }, lock: [18, 18] }),       // shoulder-plow
-        K: m(26, [s(6, 9, 50, 40, 34, 30, 6, 8, 1, -0.6), s(11, 16, 90, 36, 100, 26, 4, 9, 1, -0.5)], { leap: { vx: 9, vy: -5, g: true } }),   // backward stone-stomp kicks debris at the foe
-        UG: m(26, [s(10, 18, 50, 150, 70, -20, 10, 13, 1.3, -PI / 2)]),                                                                        // a pillar rises in front of him
-        SL: m(28, [s(8, 11, 90, 50, 40, 26, 9, 10, 1.1, -1.2), s(13, 19, 120, 30, 110, 30, 4, 8, 1, -0.6)]),                                  // two-fist hammer, a ground wave runs out
+    terra: {                                                                                                                                    // Terra's rock melees (no melee moves him)
+        H: m(26, [s(9, 14, 112, 62, 64, -6, 10, 12, 1.25, -0.4)]),                                                                              // a haymaker with a rock in his fist (ground and air)
+        T: m(34, [s(10, 18, 190, 72, 0, 18, 9, 12, 1.2, -1.2, { radial: true })]),                                                              // running: a body slam on the floor (animation only) that launches everyone near him
+        K: m(32, [s(8, 17, 150, 90, 70, 0, 10, 12, 1.2, -0.4)]),                                                                                // backwards: a spin with a much larger rock
+        UG: m(26, [s(9, 16, 66, 150, 34, -30, 10, 13, 1.3, -PI / 2)]),                                                                          // an uppercut
+        DG: m(30, [s(10, 16, 200, 50, 0, 28, 9, 11, 1.1, -1.0, { radial: true })]),                                                             // ground down: a stomp, a shockwave both ways
+        DA: m(44, [s(18, 32, 84, 150, 0, 76, 9, 10, 1.1, PI / 2)]),                                                                             // air down: he turns to face the screen, lifts a rock overhead, flips and slams it down onto the foe
     },
     bulwark: {                                                                                                                                  // no running lunge: running side attacks use his normal great-sword sweep
         K: m(26, [s(8, 16, 120, 36, 95, -6, 8, 11, 1.2, -0.25)], { leap: { vx: 10, vy: 0, g: false } }),                                      // thrusts the great-sword straight out behind him
