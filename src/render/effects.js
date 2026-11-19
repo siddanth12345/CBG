@@ -141,7 +141,7 @@ export class Effects {
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
-        this.MAXP = 2600;
+        this.MAXP = 900;  // was 2600 — late-match instanced updates were a major lag source
         this.pMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXP);
@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 600; this.sCap = 600;
+        this.MAXS = 360; this.sCap = 360;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
@@ -926,6 +926,12 @@ export class Effects {
     }
 
     update(dt, models) {
+        // Cap timed VFX objects so hit-spam / multi-hit rings don't accumulate
+        if (this.timed.length > 64) {
+            const drop = this.timed.splice(0, this.timed.length - 64);
+            for (const e of drop) { try { if (e.obj && e.obj.parent) e.obj.parent.remove(e.obj); if (e.free) e.free(); } catch (_) {} }
+        }
+
         if (this._fxClear !== S.fxClear) { this._fxClear = S.fxClear; this.clearAll(); }
         const cap = Math.max(24, Math.round(140 * (S.fxLod || 1)));
         if (this.timed.length > cap) for (let i = 0; i < this.timed.length - cap; i++) this.timed[i].t = Math.max(this.timed[i].t, this.timed[i].dur - 0.05);      // too many at once: let the oldest finish now
@@ -962,14 +968,19 @@ export class Effects {
         this.pMesh.instanceMatrix.needsUpdate = true;
         if (this.pMesh.instanceColor) this.pMesh.instanceColor.needsUpdate = true;
 
-        // ---- sparks
+        // ---- sparks (compact in place — no splice thrash)
         n = 0;
-        for (let i = this.sparks_.length - 1; i >= 0; i--) {
-            const s = this.sparks_[i];
-            s.t += dt;
-            if (s.t >= s.life) { this.sparks_.splice(i, 1); continue; }
-            s.v.y -= (s.ball ? 640 : 260) * dt; s.v.multiplyScalar(1 - dt * (s.ball ? 0.6 : 2.2));
-            s.p.addScaledVector(s.v, dt);
+        {
+            let w = 0;
+            for (let i = 0; i < this.sparks_.length; i++) {
+                const s = this.sparks_[i];
+                s.t += dt;
+                if (s.t >= s.life) continue;
+                s.v.y -= (s.ball ? 640 : 260) * dt; s.v.multiplyScalar(1 - dt * (s.ball ? 0.6 : 2.2));
+                s.p.addScaledVector(s.v, dt);
+                this.sparks_[w++] = s;
+            }
+            this.sparks_.length = w;
         }
         let nb = 0;
         for (const s of this.sparks_) {

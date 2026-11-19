@@ -3372,13 +3372,18 @@ function dripBlood(x, y) {
     }
 }
 function createParticles(x, y, color, count = 10) {
+    // Cap per-spawn so big hits / multi-FX don't flood the sim in one frame
+    count = Math.min(count, 18);
     if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 60) recBuf.p.push([x, y, color, count]);
     if (S.online === 'host') {
         if (outbox.length > 400) outbox.splice(0, outbox.length - 200);
-        outbox.push({ k: 'p', e: [x, y, color, count] });
+        // rate-limit particle net messages (keep latest only when flooded)
+        const recentP = outbox.length && outbox[outbox.length - 1].k === 'p';
+        if (!recentP || outbox.filter(q => q.k === 'p').length < 40)
+            outbox.push({ k: 'p', e: [x, y, color, count] });
     }
     // hard cap so ledge thrash / KO spam can't melt the frame rate
-    const room = Math.max(0, Math.round(160 * (S.fxLod || 1)) - particles.length);
+    const room = Math.max(0, Math.round(110 * (S.fxLod || 1)) - particles.length);
     count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
         particles.push({
@@ -4075,7 +4080,9 @@ function tideMeleeFx(f, e) {
 /** every melee hit freezes only the victim for 0.3 s (18 frames); the velocity they were launched with is kept and released afterwards */
 function hitPause(def, hb, att) {
     if (!hb || !hb.type || S.kcVis > 0 || def.stocks <= 0 || def.frozenBot) return;
-    def._hp = { n: 18, vx: def.vx, vy: def.vy };
+    // If already in hit-pause, keep remaining frames (don't stack another 0.3 s — was causing stutter lag)
+    if (!def._hp) def._hp = { n: 18, vx: def.vx, vy: def.vy };
+    else { def._hp.vx = def.vx; def._hp.vy = def.vy; }
     if (att && att !== def && att.stocks > 0 && !att.frozenBot && !att._hp) att._hp = { n: 18, vx: att.vx, vy: att.vy };      // the hitter is held too (0.3 s), nobody else
 }
 function launch(attacker, defender, hb) {
@@ -4227,7 +4234,8 @@ function launch(attacker, defender, hb) {
     hitPause(defender, hb, attacker);
     const shk = Math.min(25, Math.floor(kbForce));
     audio.playHit(kbForce > 18);
-    createParticles(defender.x, defender.y, '#f59e0b', Math.floor(kbForce));
+    // visual only: same hit, fewer particles when KB is huge (was Math.floor(kbForce) which could be 40+)
+    createParticles(defender.x, defender.y, '#f59e0b', Math.min(12, Math.max(4, Math.floor(kbForce * 0.35))));
     fx('hit', defender.x, defender.y, kbForce, hb.angle);
     startKillCam(attacker, defender);
     if (!(S.kcVis > 0)) S.screenShake = shk;
