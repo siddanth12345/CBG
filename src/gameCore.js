@@ -659,7 +659,7 @@ class Fighter {
 
     update() {
         if (this._cmb) { const c = this._cmb; if (c.t-- > 0 && isAlive(c.foe) && this.stocks > 0 && !(S.kcPause > 0) && !(this.hitstun > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; } this._cmb = null; }     // Luminent's combo freeze: he hangs in place for 0.5 s with the foe
-        if (this._hp) {                                                      // hit pause: only the one who was hit is held for 0.2 s, then their launch velocity carries on unchanged
+        if (this._hp) {                                                      // hit pause: the one who was hit and the one who hit are held for 0.3 s (only on the last, knocking hit of a multi-hit move), then their launch velocity carries on unchanged
             const h = this._hp;
             if (h.n-- > 0 && this.stocks > 0 && !(S.kcPause > 0)) { this.vx = 0; this.vy = 0; this.px = this.x; this.py = this.y; return; }
             this.vx = h.vx; this.vy = h.vy; this._hp = null;
@@ -4045,9 +4045,10 @@ function tideMeleeFx(f, e) {
     else if ((f.zv === 'H' || f.zv === 'T') && e >= 8 && e <= 13) { for (const c of W) cP(f.x + mvd * (50 + (e - 8) * 12), f.y - 2, c, 1); }
 }
 /** every melee hit freezes only the victim for 0.3 s (18 frames); the velocity they were launched with is kept and released afterwards */
-function hitPause(def, hb) {
+function hitPause(def, hb, att) {
     if (!hb || !hb.type || S.kcVis > 0 || def.stocks <= 0 || def.frozenBot) return;
     def._hp = { n: 18, vx: def.vx, vy: def.vy };
+    if (att && att !== def && att.stocks > 0 && !att.frozenBot && !att._hp) att._hp = { n: 18, vx: att.vx, vy: att.vy };      // the hitter is held too (0.3 s), nobody else
 }
 function launch(attacker, defender, hb) {
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
@@ -4177,7 +4178,6 @@ function launch(attacker, defender, hb) {
         defender.vy = hb.fixed.vy;
         defender.hitstun = hb.fixed.hitstun;
         defender.grounded = false;
-        hitPause(defender, hb);
         if (hb.cmb) comboHit(attacker, defender, hb);
         if (hb.rollCarry) defender._rollCarry = attacker;   // Ember roll: stick to the roller
         S.screenShake = Math.max(S.screenShake, 5);
@@ -4196,7 +4196,7 @@ function launch(attacker, defender, hb) {
     defender.hitstun = hb.hs || 60; defender._stunAfter = hb.stunAfter || 0;
     defender.grounded = false;
 
-    hitPause(defender, hb);
+    hitPause(defender, hb, attacker);
     const shk = Math.min(25, Math.floor(kbForce));
     audio.playHit(kbForce > 18);
     createParticles(defender.x, defender.y, '#f59e0b', Math.floor(kbForce));
