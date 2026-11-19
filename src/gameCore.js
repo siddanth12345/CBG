@@ -3418,19 +3418,18 @@ function dripBlood(x, y) {
     }
 }
 function createParticles(x, y, color, count = 10) {
-    // Cap per-spawn so big hits / multi-FX don't flood the sim in one frame
-    count = Math.min(count, 18);
-    if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 60) recBuf.p.push([x, y, color, count]);
+    const lod = S.fxLod != null ? S.fxLod : 1;
+    if (lod < 0.08) return;                                    // near-zero FX budget: skip entirely
+    count = Math.ceil(Math.min(count, 12) * lod);
+    if (count < 1) return;
+    if (S.gameState === 'playing' && !S.replay && recBuf.p.length < 40) recBuf.p.push([x, y, color, count]);
     if (S.online === 'host') {
-        if (outbox.length > 400) outbox.splice(0, outbox.length - 200);
-        // rate-limit particle net messages (keep latest only when flooded)
-        const recentP = outbox.length && outbox[outbox.length - 1].k === 'p';
-        if (!recentP || outbox.filter(q => q.k === 'p').length < 40)
-            outbox.push({ k: 'p', e: [x, y, color, count] });
+        if (outbox.length > 200) outbox.splice(0, outbox.length - 100);
+        // rate-limit: at most ~20 particle messages queued (no O(n) filter each call)
+        if ((S._pOut = (S._pOut || 0) + 1) <= 20) outbox.push({ k: 'p', e: [x, y, color, count] });
     }
-    // hard cap so ledge thrash / KO spam can't melt the frame rate
-    const room = Math.max(0, Math.round(72 * (S.fxLod || 1)) - particles.length);
-    count = Math.min(count, Math.min(10, room));
+    const room = Math.max(0, Math.round(48 * lod) - particles.length);
+    count = Math.min(count, Math.min(8, room));
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
@@ -4070,6 +4069,7 @@ function startKillCam(att, def) {
 }
 /** Ember's melee visuals: red twister for the back kick, cluster sparks + fire for the air-up kick, floor sparks with smoke, the little flamethrower */
 function emberMeleeFx(f, e) {
+    if ((S.fxLod != null ? S.fxLod : 1) < 0.28) return;
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };     // Low graphics: 70% fewer particles
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d;
     if (f.zv === 'K' && e >= 2 && f._rtwS !== f.attackSerial) { f._rtwS = f.attackSerial; fx('ktwister', f.x, f.y + (f.height || 68) / 2, mvd * 74, 60, idxOf(f)); audio.playThrow(); }
@@ -4081,6 +4081,7 @@ function emberMeleeFx(f, e) {
 }
 /** Terra's rock melees: dust and debris on the body slam / stomp / rock slam, a rubble trail on the spin (70% fewer particles on Low) */
 function terraMeleeFx(f, e) {
+    if ((S.fxLod != null ? S.fxLod : 1) < 0.28) return;
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
     const mvd = f.swing && f.swing.d || f.facing || 1, feet = f.y + (f.height || 68) / 2, C = ['#a8a29e', '#78716c', '#d6d3d1'];
     const burst = (x, y, R, n) => { fx('explosion', x, y, R, 0.2, STYLE_OF[f.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); for (let i = 0; i < n; i++) cP(x + (Math.random() - 0.5) * R, y - Math.random() * 20, C[i % 3], 3); };
@@ -4102,6 +4103,7 @@ function comboHit(att, def, hb) {
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
 function luminentMeleeFx(f, e) {
+    if ((S.fxLod != null ? S.fxLod : 1) < 0.28) return;           // lag: skip melee particle trails on low FX budget
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d, col = f.color || '#ffffff', feet = f.y + (f.height || 68) / 2;
     if ((f.zv === 'UG' || f.zv === 'UA') && e === 4 || f.zv === 'DA' && e === 6) { if (f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x + mvd * 10, f.zv === 'DA' ? f.y + 10 : f.y - 6, f.zv === 'DA' ? 1 : -1, 22, col); audio.playThrow(); } }
@@ -4111,6 +4113,7 @@ function luminentMeleeFx(f, e) {
 }
 /** Tide's trident visuals: a blue orb forms on the trident, pops and splashes (up / down), a breakdance with splashes, a slice, a thrust. Low graphics: 70% fewer particles. */
 function tideMeleeFx(f, e) {
+    if ((S.fxLod != null ? S.fxLod : 1) < 0.28) return;
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d, W = ['#38bdf8', '#bae6fd', '#ffffff'], feet = f.y + (f.height || 68) / 2;
     if (f.zv === 'UG' || f.zv === 'DA') {
@@ -5556,7 +5559,7 @@ function packFighter(f) {
         if (REFS.includes(k)) { o[k] = idxOf(f[k]); continue; }
         const v = f[k];
         if (k === 'swing') o[k] = v ? SWING_NAMES.find(n => SWING[n] === v) || null : null;
-        else if (k === 'ghosts') o[k] = v.slice(-6).map(g => ({ x: r2(g.x), y: r2(g.y), alpha: r2(g.alpha), color: g.color }));
+        else if (k === 'ghosts') o[k] = v.slice(-3).map(g => ({ x: r2(g.x), y: r2(g.y), alpha: r2(g.alpha), color: g.color }));
         else if (k === 'activeHitbox') o[k] = v ? { ...v, x: r2(v.x), y: r2(v.y) } : null;
         else if (k === 'cd' && v) { const q = {}; for (const n in v) q[n] = v[n] > 0 ? Math.ceil(v[n] / 6) * 6 : 0; o[k] = q; }   // cooldowns in 0.1 s steps: far fewer changes to send
         else if (k === 'activeMove' || k === 'sx') o[k] = v ? { ...v } : v;
@@ -5944,6 +5947,7 @@ export function step() {
         }
     }
 
+    S._pOut = 0;                                                 // refresh particle net budget each sim tick
     // Compact dead particles in one pass (no per-item splice → avoids O(n²) late-match lag)
     {
         let w = 0;
