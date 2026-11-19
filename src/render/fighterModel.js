@@ -1002,7 +1002,7 @@ export class FighterModel {
             case 'terra': {                                                  // slow, heavy, planted; rocks in hand
                 o.dy -= 5 * Math.sin(Math.PI * Math.min(1, u * 1.1));
                 if (v === 'H') { o.rSx = lerp(-40, 96, sw(0.25, 0.5)); o.lSx = 30; o.rE = 20; o.lean = lerp(-10, 26, sw(0.25, 0.5)); o.twist *= 1.5; }
-                else if (v === 'T') { const dv = sw(0.05, 0.32) * (1 - sw(0.7, 1)); o.pitch = 82 * dv; o.dy = -22 * dv; o.fwd = 20 * dv; o.rSx = 150 * dv + 20; o.lSx = 150 * dv + 20; o.rE = 6; o.lE = 6; o.rK = 10; o.lK = 10; o.rHx = -30 * dv; o.lHx = -30 * dv; }      // a belly-flop slam (animation only)
+                else if (v === 'T') { const dv = sw(0.05, 0.32) * (1 - sw(0.7, 1)); o.pitch = 82 * dv; o.dy = -22 * dv; o.fwd = 50 * sw(0.02, 0.3) * (1 - sw(0.7, 1)); o.rSx = 150 * dv + 20; o.lSx = 150 * dv + 20; o.rE = 6; o.lE = 6; o.rK = 10; o.lK = 10; o.rHx = -30 * dv; o.lHx = -30 * dv; }      // a belly-flop slam (animation only)
                 else if (v === 'K') { o.rSx = 100; o.lSx = 60; o.rSz = 34; o.lSz = 20; o.rE = 14; o.lE = 40; o.pitch = 0; o.rHx = 0; return P2 * sw(0.14, 0.6); }
                 else if (v === 'UG') { const cr = sw(0, 0.3); o.dy -= 12 * cr * (1 - sw(0.3, 0.45)); o.rSx = lerp(-10, 176, sw(0.3, 0.5)); o.lSx = o.rSx; o.rK = 70 * cr; o.lK = 70 * cr; o.lean = lerp(24, -8, sw(0.3, 0.5)); }
                 else if (v === 'DG') { const lift = sw(0, 0.3) * (1 - sw(0.3, 0.42)), hit = sw(0.3, 0.45) * (1 - sw(0.7, 1)); o.rK = 8 + 112 * lift; o.rHx = 52 * lift; o.lHx = -12 * lift; o.dy = -6 * lift + 8 * hit; o.rSx = 30; o.lSx = 30; o.rSz = 30; o.lSz = 30; o.lean = -8 * lift + 14 * hit; }

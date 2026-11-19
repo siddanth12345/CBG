@@ -4033,7 +4033,8 @@ function terraMeleeFx(f, e) {
     const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
     const mvd = f.swing && f.swing.d || f.facing || 1, feet = f.y + (f.height || 68) / 2, C = ['#a8a29e', '#78716c', '#d6d3d1'];
     const burst = (x, y, R, n) => { fx('explosion', x, y, R, 0.2, STYLE_OF[f.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); for (let i = 0; i < n; i++) cP(x + (Math.random() - 0.5) * R, y - Math.random() * 20, C[i % 3], 3); };
-    if ((f.zv === 'T' && e === 10) || (f.zv === 'DG' && e === 10)) burst(f.x, feet - 6, f.zv === 'T' ? 190 : 200, 6);
+    if (f.zv === 'T' && e === 10) burst(f.x + mvd * 58, feet - 6, 70, 4);
+    else if (f.zv === 'DG' && e === 10) burst(f.x, feet - 6, 200, 6);
     else if (f.zv === 'DA' && e === 18) burst(f.x, f.y + 76, 110, 5);
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);

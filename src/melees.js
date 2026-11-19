@@ -53,7 +53,7 @@ export const MELEE = {
     },
     terra: {                                                                                                                                    // Terra's rock melees (no melee moves him)
         H: m(26, [s(9, 14, 112, 62, 64, -6, 10, 12, 1.25, -0.4)]),                                                                              // a haymaker with a rock in his fist (ground and air)
-        T: m(34, [s(10, 18, 190, 72, 0, 18, 9, 12, 1.2, -1.2, { radial: true })]),                                                              // running: a body slam on the floor (animation only) that launches everyone near him
+        T: m(34, [s(10, 18, 60, 56, 58, 16, 9, 12, 1.2, -1.2)]),                                                                                // running: he leaps forward onto his belly (animation only), the landing launches whoever is in front (area cut by 70%)
         K: m(32, [s(8, 17, 150, 90, 70, 0, 10, 12, 1.2, -0.4)]),                                                                                // backwards: a spin with a much larger rock
         UG: m(26, [s(9, 16, 66, 150, 34, -30, 10, 13, 1.3, -PI / 2)]),                                                                          // an uppercut
         DG: m(30, [s(10, 16, 200, 50, 0, 28, 9, 11, 1.1, -1.0, { radial: true })]),                                                             // ground down: a stomp, a shockwave both ways
