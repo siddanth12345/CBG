@@ -4898,7 +4898,7 @@ function updateWinds() {
     for (const f of fighters) if (f._windCd > 0) f._windCd--;
     for (let i = winds.length - 1; i >= 0; i--) {
         const w = winds[i], o = w.owner;
-        if (--w.life <= 0 || !isAlive(o)) { fx('helixend', 0, 0, 0, 0, w.id); if (o) o._windCd = 180; winds.splice(i, 1); continue; }
+        if (--w.life <= 0 || !isAlive(o)) { fx('helixend', 0, 0, 0, 0, w.id); if (o) o._windCd = 60; winds.splice(i, 1); continue; }
         const inTube = (px, py, pad) => { const rx = px - w.x, ry = py - w.y, along = rx * w.dx + ry * w.dy, perp = Math.abs(rx * w.dy - ry * w.dx); return along > -20 && along < w.len && perp < w.r + pad; };
         for (const f of fighters) {
             if (!f.active || !isAlive(f)) continue;
