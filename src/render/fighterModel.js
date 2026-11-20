@@ -807,7 +807,7 @@ export class FighterModel {
     #zephMelee(f, u) {
         const ez = smooth, Sg = (a, b) => ez(seg(u, a, b));
         // Luminent 3-hit: full body poses only (do not remap C2→H / C3→SL)
-        if (f.char === 'luminent' && (f.zv === 'H' || f.zv === 'C2')) {
+        if (f.char === 'luminent' && f.zv === 'H') {
             const o = { rSx: 20, lSx: 20, rSz: 12, lSz: 12, rE: 20, lE: 20, rHx: 0, lHx: 0, rK: 8, lK: 8, lean: 0, dy: 0, fwd: 0, torsoY: 0, twist: 0, headX: 0, pitch: 0, spin: 0 };
             this.#styleTweak(f, f.zv, u, o, Sg);
             return { w: 1, kind: 'ZM', u, o, spinYaw: 0 };
@@ -967,38 +967,28 @@ export class FighterModel {
     #styleTweak(f, v, u, o, Sg) {
         const sw = (a, b) => Sg(a, b), P2 = Math.PI * 2;
         switch (f.char) {
-            case 'luminent': {                                               // side: thrust sword in → pull out + forward kick
+            case 'luminent': {                                               // side: 1.2 s thrust → sword stays in → lean back + forward kick
                 const zv = f.zv;
-                // H: coil then drive the blade straight into the opponent, hold
                 if (zv === 'H') {
-                    const coil = sw(0, 0.22), thrust = sw(0.18, 0.5), hold = sw(0.48, 0.85) * (1 - sw(0.9, 1)), rec = sw(0.9, 1);
-                    const th = Math.max(thrust, hold * 0.85) * (1 - rec);
-                    o.rSx = lerp(lerp(25, -25, coil), 170, thrust) * (1 - rec * 0.4) + 30 * rec;
-                    o.lSx = lerp(lerp(20, 40, coil), 70, thrust);
-                    o.rE = lerp(55, 2, thrust); o.lE = 18;
-                    o.rSz = 8; o.lSz = 12;
-                    o.lean = lerp(-16 * coil, 36 * thrust, thrust > 0 ? 1 : 0) * (1 - rec);
-                    o.fwd = lerp(-10 * coil, 40 * thrust, thrust > 0 ? 1 : 0) * (1 - rec * 0.5);
-                    o.torsoY = lerp(14 * coil, -12 * thrust, thrust > 0 ? 1 : 0);
-                    o.twist = 8 * th; o.dy = -6 * coil * (1 - thrust);
-                    o.rHx = 30 * th; o.lHx = -24 * th;
-                    o.rK = 18 + 50 * coil * (1 - thrust) + 12 * th; o.lK = 18 + 40 * th;
-                    o.headX = 10 * th;
-                }
-                // C2: yank the sword back while throwing a forward thrust kick
-                else if (zv === 'C2') {
-                    const pull = sw(0.0, 0.35), kick = sw(0.28, 0.62), hold = sw(0.55, 0.75) * (1 - sw(0.85, 1)), rec = sw(0.85, 1);
-                    // arms: blade pulls back / up behind
-                    o.rSx = lerp(160, 40, pull) * (1 - rec * 0.3) + 24 * rec;
-                    o.lSx = lerp(70, 30, pull);
-                    o.rE = lerp(4, 50, pull); o.lE = 20;
-                    o.rSz = lerp(8, -40, pull); o.lSz = 10;
-                    // kick leg drives forward; body leans into the kick
-                    o.rHx = lerp(20, 100, kick) * (1 - rec); o.rK = lerp(20, 8, kick);
-                    o.lHx = lerp(-20, -45, kick) * (1 - rec); o.lK = 30 + 20 * kick;
-                    o.lean = 28 * kick * (1 - rec); o.fwd = 24 * kick * (1 - rec);
-                    o.torsoY = -10 * kick * (1 - rec); o.twist = -12 * kick * (1 - rec);
-                    o.dy = 4 * hold; o.headX = 8 * kick * (1 - rec);
+                    // timeline (u 0..1 over 1.2 s): coil → thrust in → hold blade in foe → lean back + kick → recover
+                    const coil = sw(0, 0.12), thrust = sw(0.08, 0.22), hold = sw(0.2, 0.55), kick = sw(0.52, 0.78), rec = sw(0.85, 1);
+                    // Sword stays driven forward the whole time after the thrust (never yanks out)
+                    const bladeIn = Math.max(thrust, hold, kick * 0.85) * (1 - rec * 0.7);
+                    o.rSx = lerp(lerp(30, -20, coil), 175, thrust) * (1 - rec * 0.35) + 28 * rec;
+                    o.rSx = Math.max(o.rSx, 150 * bladeIn * (1 - rec * 0.5) + 30 * rec);
+                    o.lSx = lerp(lerp(20, 45, coil), 65, thrust);
+                    o.rE = lerp(50, 2, thrust); o.lE = 16;
+                    o.rSz = 6; o.lSz = 12;
+                    // Lean FORWARD on thrust, then LEAN BACK for the kick while sword stays in
+                    o.lean = lerp(lerp(-10 * coil, 32 * thrust, thrust > 0 ? 1 : 0), -38 * kick, kick > 0 ? 1 : 0) * (1 - rec);
+                    o.fwd = lerp(lerp(-8 * coil, 36 * thrust, thrust > 0 ? 1 : 0), 28 * kick, kick > 0 ? 1 : 0) * (1 - rec * 0.5);
+                    o.torsoY = lerp(lerp(12 * coil, -10 * thrust, thrust > 0 ? 1 : 0), 18 * kick, kick > 0 ? 1 : 0) * (1 - rec);
+                    o.twist = 6 * bladeIn - 10 * kick * (1 - rec);
+                    o.dy = -4 * coil * (1 - thrust) + 6 * kick * (1 - rec);
+                    // Kick leg punches forward while standing foot plants
+                    o.rHx = lerp(20 * hold, 110 * kick, kick > 0 ? 1 : 0) * (1 - rec);
+                    o.rK = lerp(18, 6, kick); o.lHx = lerp(-16, -50, kick) * (1 - rec); o.lK = 22 + 30 * kick * (1 - rec);
+                    o.headX = 8 * bladeIn + 12 * kick * (1 - rec);
                 }
                 else if (zv === 'T') { const e = sw(0, 0.16) * (1 - 0.6 * sw(0.55, 1)); o.dy = -15 * e; o.lean = -26 * e; o.torsoX = -8 * e; o.rHx = 84 * e; o.lHx = 74 * e; o.rHz = 3 + 5 * e; o.lHz = 3 + 7 * e; o.rK = 14 * e; o.lK = 24 * e; o.rSx = 8 - 30 * e; o.lSx = 8 - 40 * e; o.rSz = 10 + 40 * e; o.lSz = 10 + 46 * e; o.rE = 18 + 10 * e; o.lE = 18 + 10 * e; o.headX = -6 * e; }      // the same skid as Ember's Side-F slide (animation only)
                 else if (zv === 'K') { o.rSx = 100; o.lSx = 100; o.rE = 20; o.lE = 20; return Math.PI * Math.sin(Math.PI * sw(0.1, 0.78)); }

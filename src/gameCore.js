@@ -684,23 +684,7 @@ class Fighter {
     }
 
     update() {
-        // Luminent 3-hit combo: window stays open until 0.3 s after the foe is fully up; queued input fires when current anim ends
-        if (this._cmb) {
-            const c = this._cmb, fo = c.foe;
-            if (!isAlive(fo) || this.stocks <= 0) this._cmb = null;
-            else if (fo.hitstun <= 0 && fo.clashStunTimer <= 0 && !fo._hp && fo.dizzyTimer <= 0) {
-                c.upT = (c.upT || 0) + 1;
-                if (c.upT > 18) this._cmb = null;           // 0.3 s after getting up → combo resets
-            } else c.upT = 0;
-            // AI continues the combo once the current swing is done
-            if (this._cmb && this.level && this.attackTimer <= 0 && !(S.kcPause > 0) && !(this.hitstun > 0) && Math.random() < (this.level === 'hard' ? 0.85 : this.level === 'medium' ? 0.55 : 0.3)) {
-                this.attack(c.d > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-            }
-        }
-        if (this._cmbQ && this.attackTimer <= 0 && this.char === 'luminent' && !(this.hitstun > 0)) {
-            const d = this._cmbQ; this._cmbQ = null;
-            this.attack(d);
-        }
+        // Luminent side is a single 1.2 s sequence now (no multi-press combo window)
         if (this._hp) {                                                      // hit / combo pause: locked in place — no gravity, no movement
             const h = this._hp;
             if (h.x != null) { this.x = h.x; this.y = h.y; }
@@ -2539,11 +2523,6 @@ class Fighter {
     attack(aimDirection, hold = false) {
         if (this.isHanging) return false;    // ledge: jump only
         if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this._swordRemain = this.spiralT; this.swordGroundCd = true; this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
-        // Queue next luminent combo step while the 0.4 s anim is still playing
-        if (this.char === 'luminent' && this.attackTimer > 0 && this.zv === 'H') {
-            this._cmbQ = aimDirection || (this.facing > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
-            return true;
-        }
         if (this.attackTimer > 0 || this.actionBlocked()) return false;
         if (this.char === 'bulwark' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.startRiposte();
         if (this.char === 'terra' && !['UP', 'DOWN', 'SIDE_LEFT', 'SIDE_RIGHT'].includes(aimDirection)) return this.throwRock();
@@ -2566,7 +2545,7 @@ class Fighter {
             else if (aimDirection === 'DOWN') zv = this.grounded ? 'DG' : 'DA';
         }
         let mv = null;                                                  // everyone else's new melees (melees.js): side / running side / opposite side / up / down
-        const cmbOn = this.char === 'luminent' && this._cmb && isAlive(this._cmb.foe);          // Luminent's combo window: continues until 0.3 s after foe gets up
+        const cmbOn = false; // Luminent side is one automatic sequence after the thrust connects
         if (this.char !== 'zephyr' && MELEE[this.char]) {
             let v = '';
             if (cmbOn) { v = 'C2'; zdir = this._cmb.d; }
@@ -4159,14 +4138,19 @@ function terraMeleeFx(f, e) {
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
 }
-/** Luminent thrust connect: both locked while the thrust holds; next press is the pull-out + kick. */
+/** Luminent side connect: one 1.2 s sequence — both locked (no gravity), attacker has i-frames, sword stays in, kick is automatic. */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
-    const n = Math.max(24, att.attackTimer | 0);          // hold through the rest of the 0.4 s swing
+    // Full remaining swing, at least 1.2 s from connect if the move just started
+    const n = Math.max(att.attackTimer | 0, 72);
+    // Snap attack length so the anim always fills the freeze window
+    if (att.atkN < 72) { att.atkN = 72; att.attackTimer = 72; }
+    else att.attackTimer = Math.max(att.attackTimer, n);
     def.hitstun = Math.max(def.hitstun, n);
-    def._hp = { n, vx: 0, vy: 0, x: def.x, y: def.y };
-    att._hp = { n, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true };   // attacker: anim ticks, body locked
-    att._cmb = { st: hb.cmb, foe: def, d: att.swing && att.swing.d || att.facing, upT: 0 };
+    def._hp = { n, vx: 0, vy: 0, x: def.x, y: def.y };                 // victim: locked, no i-frames
+    att._hp = { n, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true };  // attacker: locked + anim plays
+    att.invincibleTimer = Math.max(att.invincibleTimer | 0, n);         // i-frames for luminent only
+    att._cmb = null;                                                   // no second press needed
     fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 6); S.screenShake = Math.max(S.screenShake, 3);
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
@@ -4353,6 +4337,11 @@ function launch(attacker, defender, hb) {
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
     defender.hitstun = hb.hs || 60; defender._stunAfter = hb.stunAfter || 0;
     defender.grounded = false;
+
+    // Luminent side kick ender: release the freeze so knockback actually sends
+    if (attacker && attacker.char === 'luminent' && attacker.zv === 'H') {
+        attacker._hp = null; defender._hp = null;
+    }
 
     hitPause(defender, hb, attacker);
     const shk = Math.min(25, Math.floor(kbForce));
