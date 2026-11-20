@@ -2,8 +2,9 @@
 // drifting rocks and the dashed blast-zone frame. Collision is still the original
 // rectangle, so what you see is exactly what you stand on.
 import * as THREE from 'three';
-import { S, STAGE, BLAST_ZONES } from '../gameCore.js';
+import { S, STAGE, BLAST_ZONES, WORLD } from '../gameCore.js';
 import { buildHorizon } from './horizon.js';
+import { buildLava } from './lava.js';
 import { wx, wy } from './space.js';
 
 export const STAGE_DEPTH = 560;
@@ -30,7 +31,33 @@ function glowMat(color, intensity = 2) {
 }
 
 export function buildStage(scene) {
+    const st = buildStageBase(scene);
+    if (S.race) addRaceProps(st);
+    return st;
+}
+
+/** race: the backdrop is re-centred on the whole track; a finish gate, a start line and a checkpoint flag on every platform */
+function addRaceProps(st) {
+    const R = S.race;
+    if (st.decor) st.decor.position.x += wx(WORLD.width / 2) - wx(STAGE.x + STAGE.width / 2);
+    const g = new THREE.Group(); st.root.add(g);
+    const post = (x, y, h, col) => { const m = new THREE.Mesh(new THREE.BoxGeometry(14, h, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(col).multiplyScalar(2.2), toneMapped: false })); m.position.set(wx(x), wy(y) + h / 2, 0); g.add(m); return m; };
+    // finish gate: two tall posts and a chequered banner
+    const fx0 = R.finishX, fy = R.finishY;
+    post(fx0 - 170, fy, 420, '#fde047'); post(fx0 + 170, fy, 420, '#fde047');
+    const chk = canvasTex(256, 64, (c, w, h) => { for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) { c.fillStyle = (i + j) % 2 ? '#0b0b0f' : '#f8fafc'; c.fillRect(i * 16, j * 16, 16, 16); } });
+    const ban = new THREE.Mesh(new THREE.PlaneGeometry(340, 70), new THREE.MeshBasicMaterial({ map: chk, side: THREE.DoubleSide, toneMapped: false }));
+    ban.position.set(wx(fx0), wy(fy) + 390, 0); g.add(ban);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(6, 400, 200), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.0, 0.4), transparent: true, opacity: 0.18, toneMapped: false, depthWrite: false }));
+    beam.position.set(wx(fx0), wy(fy) + 200, 0); g.add(beam);
+    // start line + checkpoint flags
+    post(STAGE.x + STAGE.width - 120, STAGE.y, 140, '#4ade80');
+    for (const n of R.nodes.slice(1, -1)) { const cx = (n.l + n.r) / 2; post(cx, n.y, 90, '#38bdf8'); const fl = new THREE.Mesh(new THREE.PlaneGeometry(46, 26), new THREE.MeshBasicMaterial({ color: new THREE.Color('#38bdf8').multiplyScalar(2.2), side: THREE.DoubleSide, toneMapped: false })); fl.position.set(wx(cx) + 24, wy(n.y) + 76, 0); g.add(fl); }
+}
+
+function buildStageBase(scene) {
     if (S.theme === 'horizon') return buildHorizon(scene, { D: STAGE_DEPTH });
+    if (S.theme === 'lava') return buildLava(scene, { D: STAGE_DEPTH });
     const root = new THREE.Group();
     scene.add(root);
     const anim = []; // per-frame callbacks (t, dt)

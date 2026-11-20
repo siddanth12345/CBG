@@ -575,6 +575,31 @@ export class Effects {
                     if (!lowGfx()) for (let i = 0; i < 14; i++) this.sparks(new THREE.Vector3(pos.x + (Math.random() - 0.5) * w * 1.2, y + 4, (Math.random() - 0.5) * 80), '#a8a29e', 2, 140, 0.8, 'up');
                     break;
                 }
+                case 'crusher': {        // a = width, b = 0 warning strip / 1 the slam. A giant metal block drops onto the surface at pos
+                    const w = Math.max(120, e.a || 300), y0 = pos.y + 2;
+                    if (!e.b) {
+                        const strip = new THREE.Mesh(new THREE.BoxGeometry(w, 4, 120), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.35, 0.2), transparent: true, opacity: 0.8, toneMapped: false, depthWrite: false }));
+                        strip.position.set(pos.x, y0, 0); strip.renderOrder = 6; this.scene.add(strip);
+                        this.timed.push({ obj: strip, t: 0, dur: 1.2, step: (u) => { strip.material.opacity = 0.25 + 0.6 * Math.abs(Math.sin(u * 14 * (0.6 + u))); strip.scale.x = 1 + 0.06 * Math.sin(u * 30); }, free: () => { this.scene.remove(strip); strip.geometry.dispose(); strip.material.dispose(); } });
+                        break;
+                    }
+                    const H = 380, g = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(w, H, 260), new THREE.MeshStandardMaterial({ color: 0x3b3f4a, metalness: 0.8, roughness: 0.4 }));
+                    const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 14, 16, 270), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.1, 0.3), toneMapped: false }));
+                    lip.position.y = -H / 2 + 8; body.castShadow = true;
+                    g.add(body, lip);
+                    for (const sx of [-1, 1]) { const rib = new THREE.Mesh(new THREE.BoxGeometry(10, H * 0.8, 272), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.8, 0.2), toneMapped: false })); rib.position.x = sx * w * 0.3; g.add(rib); }
+                    this.scene.add(g);
+                    const hover = 1100, hold = 0.75;
+                    this.timed.push({ obj: g, t: 0, dur: 0.12 + hold + 0.5, step: (u) => {
+                        const T = 0.12 + hold + 0.5, t = u * T; let h;
+                        if (t < 0.12) { const k = t / 0.12; h = hover * (1 - k * k); } else if (t < 0.12 + hold) h = 0; else { const k = (t - 0.12 - hold) / 0.5; h = hover * k * k * (3 - 2 * k); }
+                        g.position.set(pos.x, y0 + H / 2 + h, 0);
+                    }, free: () => { this.scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } });
+                    this.ring(new THREE.Vector3(pos.x, y0, 0), 10, w * 1.6, 0.5, '#fbbf24', 'ground');
+                    if (!lowGfx()) for (let i = 0; i < 12; i++) this.sparks(new THREE.Vector3(pos.x + (Math.random() - 0.5) * w, y0 + 6, (Math.random() - 0.5) * 80), '#fb923c', 3, 320, 0.7, 'up');
+                    break;
+                }
                 case 'gust': {           // wind ring; b = 1 means it pulls inward
                     const P = pal(e.c), R = e.a || 120;
                     if (e.b) { this.ring(pos, R * 1.1, 10, 0.4, P[0], 'screen'); this.ring(pos, R * 0.7, 6, 0.32, P[1], 'screen'); }

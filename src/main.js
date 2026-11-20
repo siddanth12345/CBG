@@ -1,6 +1,7 @@
 // BUILD_STAMP 20261103ad
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
+import { tickRace } from './raceUI.js';
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay, tickReplay,
@@ -335,7 +336,7 @@ function frame(now) {
         ui.guide.tick();
         touch.tick();
         onlineGameOver();
-        renderHUD();
+        renderHUD(); tickRace();
         view.update(dt, window.__luminaryPaused ? 0 : acc / STEP);
     } catch (err) {
         console.error('frame', err);

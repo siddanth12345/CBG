@@ -108,7 +108,12 @@ class MqttTransport {
     }
     raw(d) {
         const s = JSON.stringify({ s: this.id, n: ++this.seq, d });
-        for (const c of pool) if (c.connected) { try { c.publish(this.topic, s, { qos: 0 }); } catch (e) { /* offline */ } }
+        if (d && d.t === 'snap') {
+            // snapshots are 30/s and expensive: send each one to the two brokers whose socket is emptiest, and DROP it when a socket is backed up
+            // (a late snapshot is worse than none: the next one carries the same state and the queue would make every later one later still)
+            const q = pool.filter((c) => c.connected).map((c) => { const w = c.stream && (c.stream.socket || c.stream); return { c, ba: (w && w.bufferedAmount) || 0 }; }).filter((x) => x.ba < 24000).sort((a, b) => a.ba - b.ba).slice(0, 2);
+            for (const x of q) { try { x.c.publish(this.topic, s, { qos: 0 }); } catch (e) { /* offline */ } }
+        } else for (const c of pool) if (c.connected) { try { c.publish(this.topic, s, { qos: 0 }); } catch (e) { /* offline */ } }
         if (this.sch) { try { this.sch.send({ type: 'broadcast', event: 'm', payload: { s: this.id, n: this.seq, d } }); } catch (e) { /* offline */ } }
     }
 
@@ -192,7 +197,7 @@ class MqttTransport {
         const k = msg && msg.t;
         if (this.rtcRole === 'host' && k === 'snap') {
             const s = JSON.stringify(msg); let all = this.peers.size > 0;
-            for (const p of this.peers.values()) { if (p.ru && p.ru.readyState === 'open') { try { p.ru.send(s); } catch (e) { all = false; } } else all = false; }
+            for (const p of this.peers.values()) { if (p.ru && p.ru.readyState === 'open') { if (p.ru.bufferedAmount > 64000) continue; try { p.ru.send(s); } catch (e) { all = false; } } else all = false; }
             if (all) return;                                                                                // everyone has a direct channel: no relay traffic at all
         } else if (this.rtcRole === 'guest' && (k === 'held' || k === 'act')) {
             const o = this.openPeers();

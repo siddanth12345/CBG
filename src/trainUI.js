@@ -195,6 +195,8 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.stage === 'lobby' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lobby">¥Frontier</button>
                     <button class="lm-btn lm-mini ${t.stage === 'horizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="horizon">€Horizon</button>
                     <button class="lm-btn lm-mini ${t.stage === 'bighorizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="bighorizon">¥Horizon</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'lava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lava">€Magma Forge</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'biglava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="biglava">¥Magma Forge</button>
                 </span></div>
                 <div class="lm-setrow"><span>Hazards</span><span>
                     <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>

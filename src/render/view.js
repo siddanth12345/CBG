@@ -138,6 +138,15 @@ export class View {
             r.toneMappingExposure = 0.95;
             this.bloom.strength = 0.2; this.bloom.threshold = 1.0;
             this.camera.far = 70000;
+        } else if (this.stage.theme === 'lava') {
+            scene.background = this.stage.sky;
+            scene.fog = new THREE.FogExp2(0x3a0d08, 0.00006 / sc);
+            this.hemi.color.set(0xff9a5a); this.hemi.groundColor.set(0x5a1408); this.hemi.intensity = 0.95;
+            this.key.color.set(0xffc89a); this.key.intensity = 2.2;
+            this.rim.color.set(0xff4a1a); this.rim.intensity = 2.0;
+            r.toneMappingExposure = 1.0;
+            this.bloom.strength = 0.6; this.bloom.threshold = 0.9;
+            this.camera.far = 70000;
         } else {
             scene.background = new THREE.Color(0x060913);
             scene.fog = new THREE.FogExp2(0x060913, 0.00009);
