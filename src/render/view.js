@@ -197,18 +197,18 @@ export class View {
     applyQuality() {
         const g = getGfx(), dpr = window.devicePixelRatio || 1;
         const q = g === 'high' ? 0 : g === 'medium' ? 1 : g === 'low' ? 2 : this.q;       // auto uses the frame-time ladder
-        const cap = g === 'high' ? Math.min(dpr, 2) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.5) : g === 'auto' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+        const cap = g === 'high' ? Math.min(dpr, 1.75) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.25) : g === 'auto' ? Math.min(dpr, 1.25) : Math.min(dpr, 1.5);
         const pr = q >= 4 ? 0.75 : q >= 3 ? 1 : Math.min(cap, q >= 2 ? Math.min(cap, 1.25) : cap);
         if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
         const m = this.inMatch !== false;
         this.bloom.enabled = m && q < 1;
         const ms = q < 1 ? 4 : 0;                                   // the first step down also drops the 4x MSAA on the post-processing targets (a big fill-rate saving)
         if (this._ms !== ms) { this._ms = ms; for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { if (t) { t.samples = ms; t.dispose(); } } }
-        const sh = m && q < 2;
+        const sh = m && q < 1;                              // shadows only on highest quality step (big fill-rate save)
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
         const ps = particleScale();
-        S.fxLod = ps != null ? ps : (q >= 3 ? 0.2 : q >= 2 ? 0.3 : q >= 1 ? 0.6 : 1);   // Low~12%, Med 26%, High 50%; Auto keeps the frame-time ladder
+        S.fxLod = ps != null ? ps : (q >= 3 ? 0.12 : q >= 2 ? 0.22 : q >= 1 ? 0.4 : 0.7);   // Auto ladder more aggressive to protect frame rate
         this.applyMapDetail();
     }
 
@@ -377,7 +377,7 @@ export class View {
         this.ft = this.ft ? this.ft * 0.92 + dt * 0.08 : dt;
         this.qT = (this.qT || 0) + dt; this.upT = (this.upT || 0); this.sinceUp = (this.sinceUp || 99) + dt; this.upBlock = Math.max(0, (this.upBlock || 0) - dt);
         const auto = getGfx() === 'auto' && S.gameState === 'playing';
-        if (auto && this.ft > 1 / 44 && this.q < 4 && this.qT > 1.2) {
+        if (auto && this.ft > 1 / 50 && this.q < 4 && this.qT > 0.55) {
             if (this.sinceUp < 12) this.upBlock = Math.min(240, (this.upBlock > 0 ? this.upBlock : 30) * 2);          // stepping up did not hold: wait longer before the next try
             this.q++; this.qT = 0; this.upT = 0; this.applyQuality();
         } else if (auto && this.q > 0) {                                      // smooth for a long stretch (near the screen's top speed, so 60 Hz screens count): try one step better

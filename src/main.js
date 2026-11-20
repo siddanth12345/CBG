@@ -330,8 +330,8 @@ function frame(now) {
             acc += dt;
             if (S.kcT > 0 && !S.replay) S.kcT = Math.max(0, S.kcT - dt);
             let n = 0;
-            while (acc >= STEP && n < 3) { step(); acc -= STEP; n++; }
-            if (n === 3) acc = 0;
+            while (acc >= STEP && n < 2) { step(); acc -= STEP; n++; }
+            if (n === 2) acc = 0;   // was 3: catching up 3 physics ticks/frame caused mobile lag spikes
         }
         ui.guide.tick();
         touch.tick();

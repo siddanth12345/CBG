@@ -141,7 +141,7 @@ export class Effects {
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
-        this.MAXP = 2600;
+        this.MAXP = 240;
         this.pMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXP);
@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 600; this.sCap = 600;
+        this.MAXS = 90; this.sCap = 90;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
@@ -180,7 +180,7 @@ export class Effects {
             { geo: new THREE.CapsuleGeometry(11, 24, 4, 10), mat: new THREE.Matrix4().makeTranslation(0, -8, 0) },
             { geo: new THREE.SphereGeometry(9.5, 12, 10), mat: new THREE.Matrix4().makeTranslation(0, 22, 0) },
         ]);
-        this.MAXG = 160;
+        this.MAXG = 48;
         this.gMesh = new THREE.InstancedMesh(ghostGeo, new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXG);
@@ -454,17 +454,17 @@ export class Effects {
     #consumeEvents() {
         // No Array.shift() — O(n²) drains caused late-match lag when events piled up
         const queue = fxEvents;
-        if (queue.length > 100) queue.splice(0, queue.length - 100);
-        for (let ei = 0; ei < queue.length && ei < 300; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
+        if (queue.length > 48) queue.splice(0, queue.length - 48);
+        for (let ei = 0; ei < queue.length && ei < 80; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
             const e = queue[ei];
             const pos = new THREE.Vector3(wx(e.x), wy(e.y), 0);
             switch (e.type) {
                 case 'hit': {
                     const force = e.a || 10, ang = -e.b; // sim y is flipped
-                    this.star(pos, 30 + force * 1.8, '#fde68a', 0.2);
-                    this.ring(pos, 6, 38 + force * 1.6, 0.3, '#fbbf24', 'screen');
-                    if (lowGfx()) this.sparks(pos, '#ffffff', 5, 180, 0.18);   // Low: only ~5 hit sparks
-                    else { this.spray(pos, ang, '#fcd34d', Math.min(26, 8 + Math.floor(force * 0.7)), 320 + force * 14, 0.8); this.sparks(pos, '#ffffff', 6, 200, 0.2); }
+                    this.star(pos, 24 + force * 1.2, '#fde68a', 0.16);
+                    this.ring(pos, 5, 30 + force * 1.2, 0.24, '#fbbf24', 'screen');
+                    if (lowGfx()) this.sparks(pos, '#ffffff', 3, 140, 0.14);
+                    else { this.spray(pos, ang, '#fcd34d', Math.min(12, 4 + Math.floor(force * 0.35)), 240 + force * 8, 0.55); this.sparks(pos, '#ffffff', 4, 160, 0.16); }
                     break;
                 }
                 case 'block':
@@ -951,6 +951,12 @@ export class Effects {
     }
 
     update(dt, models) {
+        // Cap timed VFX objects so hit-spam / multi-hit rings don't accumulate
+        if (this.timed.length > 24) {
+            const drop = this.timed.splice(0, this.timed.length - 24);
+            for (const e of drop) { try { if (e.obj && e.obj.parent) e.obj.parent.remove(e.obj); if (e.free) e.free(); } catch (_) {} }
+        }
+
         if (this._fxClear !== S.fxClear) { this._fxClear = S.fxClear; this.clearAll(); }
         const cap = Math.max(24, Math.round(140 * (S.fxLod || 1)));
         if (this.timed.length > cap) for (let i = 0; i < this.timed.length - cap; i++) this.timed[i].t = Math.max(this.timed[i].t, this.timed[i].dur - 0.05);      // too many at once: let the oldest finish now
@@ -983,18 +989,25 @@ export class Effects {
             this.pMesh.setColorAt(n, C);
             n++;
         }
-        this.pMesh.count = n;
-        this.pMesh.instanceMatrix.needsUpdate = true;
-        if (this.pMesh.instanceColor) this.pMesh.instanceColor.needsUpdate = true;
+        if (n !== this.pMesh.count || n > 0) {
+            this.pMesh.count = n;
+            this.pMesh.instanceMatrix.needsUpdate = true;
+            if (this.pMesh.instanceColor) this.pMesh.instanceColor.needsUpdate = true;
+        } else this.pMesh.count = 0;
 
-        // ---- sparks
+        // ---- sparks (compact in place — no splice thrash)
         n = 0;
-        for (let i = this.sparks_.length - 1; i >= 0; i--) {
-            const s = this.sparks_[i];
-            s.t += dt;
-            if (s.t >= s.life) { this.sparks_.splice(i, 1); continue; }
-            s.v.y -= (s.ball ? 640 : 260) * dt; s.v.multiplyScalar(1 - dt * (s.ball ? 0.6 : 2.2));
-            s.p.addScaledVector(s.v, dt);
+        {
+            let w = 0;
+            for (let i = 0; i < this.sparks_.length; i++) {
+                const s = this.sparks_[i];
+                s.t += dt;
+                if (s.t >= s.life) continue;
+                s.v.y -= (s.ball ? 640 : 260) * dt; s.v.multiplyScalar(1 - dt * (s.ball ? 0.6 : 2.2));
+                s.p.addScaledVector(s.v, dt);
+                this.sparks_[w++] = s;
+            }
+            this.sparks_.length = w;
         }
         let nb = 0;
         for (const s of this.sparks_) {
