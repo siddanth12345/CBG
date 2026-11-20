@@ -5737,6 +5737,7 @@ export function resetSnapshotState() { lastSent = Array.from({ length: 8 }, () =
 const guestOrbs = new Map();
 const guestItems = new Map();
 const guestFlip = (i) => i < 0 ? -1 : (S.match ? i : 1 - i);   // 1v1: host's p1 is the guest's p2 and vice versa; custom matches use absolute slots
+let snapClock = 0;
 let interpMs = 90, snapAvg = 33, snapDev = 6, lastSnapAt = 0;   // the guest shows the world this far in the past; it adapts to how steady the packets are (steady link = less delay, bursty = more)
 function trackSnapRate() {
     const now = performance.now();
@@ -5747,6 +5748,9 @@ function trackSnapRate() {
         interpMs += (want - interpMs) * 0.05;
     }
     lastSnapAt = now;
+    // de-jitter: place each snapshot on a steady timeline (low-passed arrival time) so uneven packet arrival does not show up as judder
+    const nom = snapClock + Math.max(8, Math.min(60, snapAvg));
+    snapClock = !snapClock || Math.abs(now - nom) > 120 ? now : Math.max(snapClock + 4, nom + (now - nom) * 0.2);
 }
 const ownGuestFighter = () => S.spectating ? null : S.match ? fighters[S.mySlot] : p1;
 function guestSmooth() {
@@ -5809,7 +5813,7 @@ export function applySnapshot(s) {
         }
         if (f._tx !== undefined) {
             const buf = f._buf || (f._buf = []);
-            buf.push({ t: performance.now(), x: f._tx, y: f._ty, tp: !!d._teleported });
+            buf.push({ t: snapClock || performance.now(), x: f._tx, y: f._ty, tp: !!d._teleported });
             if (buf.length > 24) buf.shift();
         }
     });
