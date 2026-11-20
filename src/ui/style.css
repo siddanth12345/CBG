@@ -430,7 +430,7 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .cbg-cap b{display:block;font:900 clamp(1.6rem,4.4vw,3.4rem)/1 system-ui,sans-serif;letter-spacing:.12em;font-style:italic;margin-top:4px}
 .cbg-cap span{display:block;font:700 12px/1.3 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase;opacity:.9}
 .cbg-cap em{display:inline-block;margin-top:8px;padding:4px 12px;border-radius:999px;font:800 11px/1.4 system-ui,sans-serif;font-style:normal;letter-spacing:.18em;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.35)}
-.cbg-cap[data-theme=horizon] b{color:#fff7df}.cbg-cap[data-theme=frontier] b{color:#7dd3fc}
+.cbg-cap[data-theme=horizon] b{color:#fff7df}.cbg-cap[data-theme=frontier] b{color:#7dd3fc}.cbg-cap[data-theme=lava] b{color:#fdba74}
 .cbg-cap.on{animation:cbgcap 4.6s cubic-bezier(.2,.8,.25,1) both .55s}
 @keyframes cbgcap{0%{opacity:0;transform:translateX(60px)}10%{opacity:1;transform:none}82%{opacity:1;transform:none}100%{opacity:0;transform:translateX(30px)}}
 @media (max-aspect-ratio:1/1){

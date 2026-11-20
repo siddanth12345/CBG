@@ -14,8 +14,9 @@ const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion:
 const MAP_INFO = {
     frontier: { title: 'FRONTIER', sub: 'Neon night arena', theme: 'frontier' }, big: { title: 'FRONTIER', sub: 'The big arena', theme: 'frontier' },
     horizon: { title: 'HORIZON', sub: 'Morning valley', theme: 'horizon' }, bighorizon: { title: 'HORIZON', sub: 'The big valley', theme: 'horizon' },
+    lava: { title: 'MAGMA FORGE', sub: 'Volcano over a lava sea', theme: 'lava' }, biglava: { title: 'MAGMA FORGE', sub: 'The big forge', theme: 'lava' },
 };
-const COLORS = { horizon: { fill: '#f8ecd2', edge: '#ffffff', glow: '#ffd98a' }, frontier: { fill: '#06101f', edge: '#22d3ee', glow: '#38bdf8' } };
+const COLORS = { horizon: { fill: '#f8ecd2', edge: '#ffffff', glow: '#ffd98a' }, frontier: { fill: '#06101f', edge: '#22d3ee', glow: '#38bdf8' }, lava: { fill: '#1b0a08', edge: '#fb923c', glow: '#ef4444' } };
 
 // ---- shots: distances are in "small arena" units and scale with the stage width
 const SHOTS = [
@@ -109,9 +110,10 @@ export class Showcase {
 
     /** pick the next map: usually the other look, sometimes the other size */
     #nextMap() {
-        const wantTheme = Math.random() < 0.85 ? (this.theme === 'horizon' ? 'frontier' : 'horizon') : this.theme;
+        const others = ['frontier', 'horizon', 'lava'].filter(t => t !== this.theme);
+        const wantTheme = Math.random() < 0.85 ? others[Math.floor(Math.random() * others.length)] : this.theme;
         const big = Math.random() < 0.4;
-        return wantTheme === 'horizon' ? (big ? 'bighorizon' : 'horizon') : (big ? 'big' : 'frontier');
+        return wantTheme === 'horizon' ? (big ? 'bighorizon' : 'horizon') : wantTheme === 'lava' ? (big ? 'biglava' : 'lava') : (big ? 'big' : 'frontier');
     }
 
     #startCut() {
