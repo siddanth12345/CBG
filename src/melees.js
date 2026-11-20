@@ -11,7 +11,7 @@ const s = (a, b, w, h, x, y, dmg, bkb, kbg, ang, o = {}) => ({ a, b, w, h, x, y,
 
 export const MELEE = {
     luminent: {                                                                                                                                 // side: one 1.2 s thrust-hold-kick (sword stays in, auto kick, no second input)
-        H: m(72, [s(5, 12, 124, 36, 82, -4, 6, 0, 0, 0, { cmb: 1 }), s(48, 62, 96, 72, 58, 12, 6, 12, 1.2, -0.55)]),                              // thrust 6 dmg → kick 6 dmg + KB
+        H: m(72, [s(8, 16, 124, 36, 86, -2, 6, 0, 0, 0, { cmb: 1 }), s(50, 64, 100, 78, 62, 14, 6, 13, 1.25, -0.5)], { ch: false }),             // 1.2s, not chargeable: thrust sticks (6) then kick (6+KB)
         T: m(30, [s(4, 14, 100, 44, (k) => 40 + 30 * k, 8, 5, 9, 1.1, -1.3)]),                                                                  // running: a slide (animation only) that knocks foes up
         K: m(30, [s(6, 11, 104, 58, 62, -4, 3, 3, 0.3, -0.3), s(17, 23, 104, 58, 62, -4, 5, 10, 1.1, -0.4)]),                                  // backwards: a mini boomerang swing, out and back
         UG: m(26, [s(5, 14, 84, 132, 24, -52, 6, 11, 1.2, -PI / 2)]),                                                                           // up: a spiralling uppercut

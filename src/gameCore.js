@@ -694,7 +694,8 @@ class Fighter {
                 // Attacker during luminent combo: keep the swing anim ticking only
                 if (h.keepAnim && this.attackTimer > 0) {
                     const sw = this.swing;
-                    if (!(this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1)) {
+                    const charging = this.zv !== 'H' && this.attackHeld && sw && sw.chargeable && this.grounded && this.atkN - this.attackTimer >= sw.a - 1;
+                    if (!charging) {
                         this.attackTimer--;
                         if (this.attackTimer === 0 && this.swing) {
                             this.swing = null; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
@@ -702,6 +703,14 @@ class Fighter {
                         }
                     }
                     this.updateSwing();
+                    // sword stays in: pin the victim on the blade until the kick sends them
+                    const fo = this._pin;
+                    if (fo && fo._hp && fo.stocks > 0) {
+                        const d = (this.swing && this.swing.d) || this.facing || 1;
+                        fo.x = fo._hp.x = this.x + d * 78;
+                        fo.y = fo._hp.y = this.y - 4;
+                        fo.vx = 0; fo.vy = 0; fo.px = fo.x; fo.py = fo.y;
+                    }
                 }
                 return;
             }
@@ -1071,6 +1080,11 @@ class Fighter {
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
             this.vx = 0;
         }
+        // Luminent side thrust: frozen in place, no gravity, i-frames for the whole 1.2 s
+        if (this.char === 'luminent' && this.zv === 'H' && this.attackTimer > 0) {
+            this.vx = 0; this.vy = 0;
+            this.invincibleTimer = Math.max(this.invincibleTimer | 0, 2);
+        }
 
         this.x += this.vx;
         this.y += this.vy;
@@ -1082,7 +1096,7 @@ class Fighter {
 
         if (this.attackTimer > 0) {
             const sw = this.swing;
-            if (this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1) {     // melees only charge on the ground
+            if (this.zv !== 'H' && this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1) {     // melees only charge on the ground (Luminent side never charges)
                 // button still held at the wind-up: the swing waits there, charging (up to 1.7 s)
                 this.actionLock = Math.max(this.actionLock, LOCK - sw.a + 1 + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0));
                 if (this.meleeCharge < MELEE_CHARGE_MAX) this.meleeCharge++;   // stays fully charged until you let go
@@ -4150,7 +4164,8 @@ function comboHit(att, def, hb) {
     def._hp = { n, vx: 0, vy: 0, x: def.x, y: def.y };                 // victim: locked, no i-frames
     att._hp = { n, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true };  // attacker: locked + anim plays
     att.invincibleTimer = Math.max(att.invincibleTimer | 0, n);         // i-frames for luminent only
-    att._cmb = null;                                                   // no second press needed
+    att._pin = def;                                                    // victim stays on the blade
+    att._cmb = null;
     fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 6); S.screenShake = Math.max(S.screenShake, 3);
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
@@ -4340,7 +4355,7 @@ function launch(attacker, defender, hb) {
 
     // Luminent side kick ender: release the freeze so knockback actually sends
     if (attacker && attacker.char === 'luminent' && attacker.zv === 'H') {
-        attacker._hp = null; defender._hp = null;
+        attacker._hp = null; defender._hp = null; attacker._pin = null;
     }
 
     hitPause(defender, hb, attacker);
