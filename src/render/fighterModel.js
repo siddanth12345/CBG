@@ -807,22 +807,16 @@ export class FighterModel {
     #zephMelee(f, u) {
         const ez = smooth, Sg = (a, b) => ez(seg(u, a, b));
         // Luminent 3-hit: full body poses only (do not remap C2→H / C3→SL)
-        if (f.char === 'luminent' && f.zv === 'H') {
-            // One 1.2 s clip: drive the sword straight out and LEAVE it there, then lean back and kick.
-            // rSx ~90 + straight elbow is a forward thrust (175 is overhead — that read as the old swipe).
-            const o = { rSx: 20, lSx: 20, rSz: 0, lSz: 8, rE: 40, lE: 20, rHx: 0, lHx: 0, rK: 12, lK: 12, lean: 0, dy: 0, fwd: 0, torsoY: 0, twist: 0, headX: 0, pitch: 0, spin: 0 };
-            const thrust = Sg(0.04, 0.16), kick = Sg(0.52, 0.74), rec = Sg(0.88, 1);
-            const out = thrust * (1 - rec);
-            o.rSx = lerp(24, 92, Math.max(thrust, 0.15) * (1 - rec * 0.85));
-            o.rE = lerp(48, 0, thrust) * (1 - rec) + 30 * rec;
-            o.rSz = 0; o.lSx = 36; o.lE = 18;
-            o.lean = lerp(8 * thrust, -78 * kick, kick > 0.02 ? 1 : 0) * (1 - rec);
-            o.torsoY = 16 * kick * (1 - rec);
-            o.fwd = 10 * out + 16 * kick * (1 - rec);
-            o.rHx = 130 * kick * (1 - rec); o.rK = lerp(14, 2, kick);
-            o.lHx = -36 * kick * (1 - rec); o.lK = 20 + 48 * kick * (1 - rec);
-            o.headX = -18 * kick * (1 - rec);
-            o.blade = 1;
+        if (f.char === 'luminent' && f.zv === 'H' && f._pin) {
+            // Only after a hit: sword stays in for 0.6 s, then he pulls it back out.
+            const o = { rSx: 92, lSx: 30, rSz: 0, lSz: 8, rE: 0, lE: 18, rHx: 0, lHx: 0, rK: 12, lK: 14, lean: 8, dy: 0, fwd: 8, torsoY: 0, twist: 0, headX: 0, pitch: 0, spin: 0, blade: 1 };
+            const pull = Sg(0.72, 0.94), rec = Sg(0.9, 1);
+            o.rSx = lerp(92, 16, pull);
+            o.rE = lerp(0, 36, pull);
+            o.rSz = lerp(0, -80, pull) * (1 - rec);
+            o.lean = lerp(10, -62, pull) * (1 - rec);
+            o.torsoY = 18 * pull * (1 - rec);
+            o.headX = -14 * pull * (1 - rec);
             return { w: 1, kind: 'ZM', u, o, spinYaw: 0 };
         }
         const v = f.zv === 'C2' ? 'H' : f.zv === 'C3' ? 'SL' : f.zv, o = {};
@@ -1121,7 +1115,7 @@ export class FighterModel {
         const base = this.#statePose(dt, alpha);
         if (base.tumbleRate) this.tumble += dt * base.tumbleRate * (f.vx >= 0 ? -1 : 1);
         else this.tumble *= Math.exp(-dt * 10);
-        const lumSide = f.char === 'luminent' && f.zv === 'H' && f.attackTimer > 0;
+        const lumSide = f.char === 'luminent' && f._pin && f.attackTimer > 0;
         const smoothK = lumSide ? 1 : (1 - Math.exp(-dt * 26));
         for (const k of POSE_KEYS) this.cur[k] += (base[k] - this.cur[k]) * smoothK;
         // smoothing must not blur cyclic spin/pitch/roll: take those straight from the state pose

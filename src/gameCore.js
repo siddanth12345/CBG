@@ -692,10 +692,21 @@ class Fighter {
             if (h.n > 0 && this.stocks > 0 && !(S.kcPause > 0)) {
                 h.n--;
                 // Attacker during luminent combo: keep the swing anim ticking only
-                if (h.keepAnim && this.attackTimer > 0) {
+                if (h.imp && this._pin) {
+                    this.invincibleTimer = Math.max(this.invincibleTimer | 0, 2);
+                    if (this.attackTimer > 0) this.attackTimer--;
+                    this._impT = this.attackTimer;
+                    const fo = this._pin;
+                    if (fo && fo.stocks > 0 && !fo.out) {
+                        const d = this.facing || 1;
+                        fo.x = this.x + d * 74; fo.y = this.y - 2;
+                        fo.vx = 0; fo.vy = 0; fo.px = fo.x; fo.py = fo.y;
+                        if (fo._hp) { fo._hp.x = fo.x; fo._hp.y = fo.y; fo._hp.n = Math.max(fo._hp.n, 4); fo._hp.vx = 0; fo._hp.vy = 0; }
+                    }
+                    if (this.attackTimer <= 0) { luminentPull(this, fo); return; }
+                } else if (h.keepAnim && this.attackTimer > 0) {
                     const sw = this.swing;
-                    const charging = this.zv !== 'H' && this.attackHeld && sw && sw.chargeable && this.grounded && this.atkN - this.attackTimer >= sw.a - 1;
-                    if (!charging) {
+                    if (!(this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1)) {
                         this.attackTimer--;
                         if (this.attackTimer === 0 && this.swing) {
                             this.swing = null; this.activeHitbox = null; this.attackHeld = false; this.meleeCharge = 0;
@@ -703,14 +714,6 @@ class Fighter {
                         }
                     }
                     this.updateSwing();
-                    // sword stays in: pin the victim on the blade until the kick sends them
-                    const fo = this._pin;
-                    if (fo && fo._hp && fo.stocks > 0) {
-                        const d = (this.swing && this.swing.d) || this.facing || 1;
-                        fo.x = fo._hp.x = this.x + d * 78;
-                        fo.y = fo._hp.y = this.y - 4;
-                        fo.vx = 0; fo.vy = 0; fo.px = fo.x; fo.py = fo.y;
-                    }
                 }
                 return;
             }
@@ -1080,11 +1083,6 @@ class Fighter {
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') {
             this.vx = 0;
         }
-        // Luminent side thrust: frozen in place, no gravity, i-frames for the whole 1.2 s
-        if (this.char === 'luminent' && this.zv === 'H' && this.attackTimer > 0) {
-            this.vx = 0; this.vy = 0;
-            this.invincibleTimer = Math.max(this.invincibleTimer | 0, 2);
-        }
 
         this.x += this.vx;
         this.y += this.vy;
@@ -1096,7 +1094,7 @@ class Fighter {
 
         if (this.attackTimer > 0) {
             const sw = this.swing;
-            if (this.zv !== 'H' && this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1) {     // melees only charge on the ground (Luminent side never charges)
+            if (this.attackHeld && sw && sw.chargeable && this.grounded && this.zv !== 'T' && this.atkN - this.attackTimer >= sw.a - 1) {     // melees only charge on the ground
                 // button still held at the wind-up: the swing waits there, charging (up to 1.7 s)
                 this.actionLock = Math.max(this.actionLock, LOCK - sw.a + 1 + (this.heldItem && this.heldItem.type === 'FIRESTICK' ? 12 : 0));
                 if (this.meleeCharge < MELEE_CHARGE_MAX) this.meleeCharge++;   // stays fully charged until you let go
@@ -4152,21 +4150,38 @@ function terraMeleeFx(f, e) {
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
 }
-/** Luminent side connect: one 1.2 s sequence — both locked (no gravity), attacker has i-frames, sword stays in, kick is automatic. */
+/** Luminent side only freezes when the swing connects. Sword stays in for 0.6 s, then he pulls it out for 5 damage. */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
-    // Full remaining swing, at least 1.2 s from connect if the move just started
-    const n = Math.max(att.attackTimer | 0, 72);
-    // Snap attack length so the anim always fills the freeze window
-    if (att.atkN < 72) { att.atkN = 72; att.attackTimer = 72; }
-    else att.attackTimer = Math.max(att.attackTimer, n);
-    def.hitstun = Math.max(def.hitstun, n);
-    def._hp = { n, vx: 0, vy: 0, x: def.x, y: def.y };                 // victim: locked, no i-frames
-    att._hp = { n, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true };  // attacker: locked + anim plays
-    att.invincibleTimer = Math.max(att.invincibleTimer | 0, n);         // i-frames for luminent only
-    att._pin = def;                                                    // victim stays on the blade
+    const n = 46;                                                              // 36 frames in (0.6 s) + 10 frames pulling the sword out
+    att.attackTimer = att.atkN = n;
+    att._impT = n;
+    att.zv = 'H';
+    def.hitstun = Math.max(def.hitstun, n + 8);
+    def._hp = { n: n + 20, vx: 0, vy: 0, x: def.x, y: def.y };
+    att._hp = { n: n + 20, vx: 0, vy: 0, x: att.x, y: att.y, keepAnim: true, imp: true };
+    att.invincibleTimer = Math.max(att.invincibleTimer | 0, n);
+    att._pin = def;
     att._cmb = null;
     fx('hit', def.x, def.y, 14, hb.angle); createParticles(def.x, def.y, att.color || '#ffffff', 6); S.screenShake = Math.max(S.screenShake, 3);
+}
+/** Pull the sword out: 5 damage and a send, then both can move again. */
+function luminentPull(att, def) {
+    att._hp = null; att._pin = null; att._impT = 0;
+    att.swing = null; att.attackTimer = 0; att.activeHitbox = null; att.zv = null; att.attackHeld = false;
+    att.invincibleTimer = 0;
+    if (!def || def.stocks <= 0 || def.out) return;
+    const d = att.facing || 1;
+    const ang = d > 0 ? -0.5 : Math.PI + 0.5;
+    if (!S.sdNoDmg) def.damage += 5;
+    def.lastHitBy = att; def.lastHitT = 0;
+    const pct = def.damage / 2;
+    const force = ((pct / 10) + (pct * 5 / 20) + 12) * charOf(def.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (def.damage > 200 ? 1.3 : 1);
+    def.vx = Math.cos(ang) * force * 0.85;
+    def.vy = Math.sin(ang) * force * 0.85;
+    def.hitstun = 40; def.grounded = false; def._hp = null;
+    fx('hit', def.x, def.y, 14, ang); createParticles(def.x, def.y, att.color || '#ffffff', 8);
+    audio.playHit(true); S.screenShake = Math.max(S.screenShake, 8);
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
 function luminentMeleeFx(f, e) {
@@ -4892,9 +4907,8 @@ function updateWinds() {
             const vd = f.vx * w.dx + f.vy * w.dy;                                  // the current carries them along the tube (toward the pip), not upward
             if (vd < 15) { f.vx += w.dx * 2.4; f.vy += w.dy * 2.4; }
             if (w.dy < -0.25) f.grounded = false;
-            if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); }       // vanishes 2 s after the first thing is pushed (the user included)
         }
-        for (const q of orbs) { if (inTube(q.x, q.y, 20)) { q.vx += w.dx * 0.9; q.vy += w.dy * 0.9; if (!w.pushed) { w.pushed = true; w.life = Math.min(w.life, 120); } } }
+        for (const q of orbs) { if (inTube(q.x, q.y, 20)) { q.vx += w.dx * 0.9; q.vy += w.dy * 0.9; } }
     }
 }
 
