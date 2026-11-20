@@ -2540,7 +2540,7 @@ class Fighter {
         if (this.isHanging) return false;    // ledge: jump only
         if (this.char === 'bulwark' && this.swordRide && this.spiralT > 0) { this._swordRemain = this.spiralT; this.swordGroundCd = true; this.spiralT = 0; this.endSpiral(); this.specialKind = null; this.specialDur = 0; this.actionLock = 18; this.vy *= 0.3; return true; }   // melee hops off the floating sword
         // Queue next luminent combo step while the 0.4 s anim is still playing
-        if (this.char === 'luminent' && this.attackTimer > 0 && (this.zv === 'H' || this.zv === 'C2')) {
+        if (this.char === 'luminent' && this.attackTimer > 0 && this.zv === 'H') {
             this._cmbQ = aimDirection || (this.facing > 0 ? 'SIDE_RIGHT' : 'SIDE_LEFT');
             return true;
         }
@@ -2569,7 +2569,7 @@ class Fighter {
         const cmbOn = this.char === 'luminent' && this._cmb && isAlive(this._cmb.foe);          // Luminent's combo window: continues until 0.3 s after foe gets up
         if (this.char !== 'zephyr' && MELEE[this.char]) {
             let v = '';
-            if (cmbOn) { v = this._cmb.st === 1 ? 'C2' : 'C3'; zdir = this._cmb.d; }
+            if (cmbOn) { v = 'C2'; zdir = this._cmb.d; }
             else if (aimDirection === 'SIDE_LEFT' || aimDirection === 'SIDE_RIGHT') {
                 zdir = aimDirection === 'SIDE_LEFT' ? -1 : 1;
                 v = zdir === -this.facing ? 'K' : (this.grounded && Math.abs(this.vx) > 3 && Math.sign(this.vx) === zdir) ? 'T' : 'H';
@@ -4148,7 +4148,7 @@ function terraMeleeFx(f, e) {
     else if (f.zv === 'K' && e >= 8 && e <= 17 && e % 3 === 0) for (const c of C) cP(f.x + mvd * (60 + (e - 8) * 6), f.y + (Math.random() - 0.5) * 40, c, 2);
     else if (f.zv === 'UG' && e >= 9 && e <= 16 && e % 3 === 0) for (const c of C) cP(f.x + mvd * 30, f.y - 20 - (e - 9) * 8, c, 1);
 }
-/** Luminent combo hit 1 / 2: both locked in place (no gravity, no movement) while the 0.4 s anim finishes. */
+/** Luminent thrust connect: both locked while the thrust holds; next press is the pull-out + kick. */
 function comboHit(att, def, hb) {
     if (att.char !== 'luminent') return;
     const n = Math.max(24, att.attackTimer | 0);          // hold through the rest of the 0.4 s swing
