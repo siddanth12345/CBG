@@ -1452,7 +1452,7 @@ export class FighterModel {
 
     // ============================================================ effects tied to the animation
     #attackFx(a, dt) {
-        const fx = this.fx; if (!fx || lowGfx() || (S.fxLod != null && S.fxLod < 0.3)) return;   // skip slash sparks on low FX budget
+        const fx = this.fx; if (!fx || lowGfx()) return;   // Low: skip extra slash sparks; Medium/High keep them
         const f = this.f;
         const u = a.u;
         const fired = this.firedAtk;

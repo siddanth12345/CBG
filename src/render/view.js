@@ -209,7 +209,7 @@ export class View {
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
         const ps = particleScale();
-        S.fxLod = ps != null ? ps : (q >= 3 ? 0.08 : q >= 2 ? 0.16 : q >= 1 ? 0.32 : 0.55);
+        S.fxLod = ps != null ? ps : (q >= 3 ? 0.2 : q >= 2 ? 0.35 : q >= 1 ? 0.55 : 1);
         this.applyMapDetail();
     }
 

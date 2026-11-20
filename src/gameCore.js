@@ -3484,8 +3484,8 @@ function createParticles(x, y, color, count = 10) {
         // rate-limit: at most ~20 particle messages queued (no O(n) filter each call)
         if ((S._pOut = (S._pOut || 0) + 1) <= 20) outbox.push({ k: 'p', e: [x, y, color, count] });
     }
-    const room = Math.max(0, Math.round(36 * lod) - particles.length);
-    count = Math.min(count, Math.min(6, room));
+    const room = Math.max(0, Math.round((lod >= 0.9 ? 120 : lod >= 0.45 ? 70 : 40) * lod) - particles.length);
+    count = Math.min(count, Math.min(lod >= 0.9 ? 14 : 8, room));
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
@@ -4125,21 +4125,32 @@ function startKillCam(att, def) {
     fx('killcam', def.x, def.y, ai, di, 1);
 }
 /** Ember's melee visuals: red twister for the back kick, cluster sparks + fire for the air-up kick, floor sparks with smoke, the little flamethrower */
+
+/** Melee VFX density by graphics setting. Signature effects (spirals, twisters) always fire; only particle counts scale. */
+function meleeFxScale() {
+    const g = getGfx();
+    if (g === 'low') return 0.28;
+    if (g === 'medium') return 0.55;
+    if (g === 'high') return 1;
+    // auto: floor so signature melee FX still show
+    return Math.max(0.4, S.fxLod != null ? S.fxLod : 0.55);
+}
 function emberMeleeFx(f, e) {
-    if ((S.fxLod != null ? S.fxLod : 1) < 0.35) return;
-    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };     // Low graphics: 70% fewer particles
+    const sc = meleeFxScale();
+    const cP = (x, y, c, n) => { n = Math.floor(n * sc) + (Math.random() < (n * sc) % 1 ? 1 : 0); if (n > 0) createParticles(x, y, c, n); };
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d;
+    // Back kick: red tilted twister — always spawn (signature)
     if (f.zv === 'K' && e >= 2 && f._rtwS !== f.attackSerial) { f._rtwS = f.attackSerial; fx('ktwister', f.x, f.y + (f.height || 68) / 2, mvd * 74, 60, idxOf(f)); audio.playThrow(); }
     else if (f.zv === 'UA' && e >= 6 && e <= 20) { const a = (e - 6) / 14 * Math.PI * 2; for (const c of ['#fb923c', '#fde047', '#ef4444']) cP(f.x + Math.cos(a) * 62, f.y + Math.sin(a) * 52, c, 2); }
     else if (f.zv === 'DG' && e >= 8 && e <= 22) { const g = f.y + (f.height || 68) / 2, W = f.width || 44, H = f.height || 68; for (const sd of [-1, 1]) { const x = f.x + sd * W * 1.5 + (Math.random() - 0.5) * W; const u = (e - 8) / 14; cP(x, g - 4, '#fb923c', 3); cP(x, g - H * u, '#fde047', 2); cP(x, g - H - 6 - u * 30, '#94a3b8', 2); } }
     else if (f.zv === 'UG' && e >= 5 && e <= 27 && e % 2 === 0) { for (let i = 0; i < 3; i++) cP(f.x + mvd * (24 + i * 26), f.y - 20 - i * 26, i % 2 ? '#fde047' : '#fb923c', 2); }
     else if (f.zv === 'DA' && e >= 6 && e <= 20) { cP(f.x + mvd * 10, f.y + 48 + (e - 6) * 2, '#fb923c', 2); cP(f.x + mvd * 10, f.y + 30, '#fde047', 1); }
-    else if (f.zv === 'H' && e >= 8 && e <= 18) { cP(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
+    else if ((f.zv === 'H' || f.zv === 'T') && e >= 8 && e <= 18) { cP(f.x + mvd * (20 + (e - 8) * 8), f.y - 6, '#fb923c', 2); }
 }
 /** Terra's rock melees: dust and debris on the body slam / stomp / rock slam, a rubble trail on the spin (70% fewer particles on Low) */
 function terraMeleeFx(f, e) {
-    if ((S.fxLod != null ? S.fxLod : 1) < 0.35) return;
-    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const sc = meleeFxScale();
+    const cP = (x, y, c, n) => { n = Math.floor(n * sc) + (Math.random() < (n * sc) % 1 ? 1 : 0); if (n > 0) createParticles(x, y, c, n); };
     const mvd = f.swing && f.swing.d || f.facing || 1, feet = f.y + (f.height || 68) / 2, C = ['#a8a29e', '#78716c', '#d6d3d1'];
     const burst = (x, y, R, n) => { fx('explosion', x, y, R, 0.2, STYLE_OF[f.char]); S.screenShake = Math.max(S.screenShake, 6); audio.playHit(false); for (let i = 0; i < n; i++) cP(x + (Math.random() - 0.5) * R, y - Math.random() * 20, C[i % 3], 3); };
     if (f.zv === 'T' && e === 10) burst(f.x + mvd * 58, feet - 6, 70, 4);
@@ -4160,18 +4171,22 @@ function comboHit(att, def, hb) {
 }
 /** Luminent's visuals: a glowing spiral in his colour around the uppercut and the downward kick, a slide spray, the spin and boomerang trails (70% fewer particles on Low) */
 function luminentMeleeFx(f, e) {
-    if ((S.fxLod != null ? S.fxLod : 1) < 0.35) return;           // lag: skip melee particle trails on low FX budget
-    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const sc = meleeFxScale();
+    const cP = (x, y, c, n) => { n = Math.floor(n * sc) + (Math.random() < (n * sc) % 1 ? 1 : 0); if (n > 0) createParticles(x, y, c, n); };
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d, col = f.color || '#ffffff', feet = f.y + (f.height || 68) / 2;
-    if ((f.zv === 'UG' || f.zv === 'UA') && e === 4 || f.zv === 'DA' && e === 6) { if (f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x + mvd * 10, f.zv === 'DA' ? f.y + 10 : f.y - 6, f.zv === 'DA' ? 1 : -1, 22, col); audio.playThrow(); } }
-    else if (f.zv === 'T' && e >= 4 && e <= 16) cP(f.x - mvd * 20, feet - 4, col, 2);
-    else if (f.zv === 'DG' && e >= 5 && e <= 14) { const a = (e - 5) / 9 * Math.PI * 2 * mvd; cP(f.x + Math.cos(a) * 90, f.y + Math.sin(a) * 24, col, 2); if (e === 5 && f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x, f.y, 0, 14, col); } }
-    else if (f.zv === 'K' && (e >= 6 && e <= 11 || e >= 17 && e <= 23) && e % 2 === 0) cP(f.x + mvd * (40 + (e % 12) * 6), f.y - 4, col, 2);
+    // Signature spirals always fire once per swing
+    if ((f.zv === 'UG' || f.zv === 'UA') && e === 4 || f.zv === 'DA' && e === 6) {
+        if (f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x + mvd * 10, f.zv === 'DA' ? f.y + 10 : f.y - 6, f.zv === 'DA' ? 1 : -1, 22, col); audio.playThrow(); }
+    } else if (f.zv === 'T' && e >= 4 && e <= 16) cP(f.x - mvd * 20, feet - 4, col, 2);
+    else if (f.zv === 'DG' && e >= 5 && e <= 14) {
+        const a = (e - 5) / 9 * Math.PI * 2 * mvd; cP(f.x + Math.cos(a) * 90, f.y + Math.sin(a) * 24, col, 2);
+        if (e === 5 && f._lsS !== f.attackSerial) { f._lsS = f.attackSerial; fx('lspiral', f.x, f.y, 0, 14, col); }
+    } else if (f.zv === 'K' && (e >= 6 && e <= 11 || e >= 17 && e <= 23) && e % 2 === 0) cP(f.x + mvd * (40 + (e % 12) * 6), f.y - 4, col, 2);
+    else if ((f.zv === 'H' || f.zv === 'C2') && e >= 4 && e <= 18 && e % 2 === 0) cP(f.x + mvd * (30 + e * 3), f.y - 4, col, 1);
 }
-/** Tide's trident visuals: a blue orb forms on the trident, pops and splashes (up / down), a breakdance with splashes, a slice, a thrust. Low graphics: 70% fewer particles. */
 function tideMeleeFx(f, e) {
-    if ((S.fxLod != null ? S.fxLod : 1) < 0.35) return;
-    const cP = (x, y, c, n) => { if (lowGfx()) { n *= 0.3; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0); } if (n > 0) createParticles(x, y, c, n); };
+    const sc = meleeFxScale();
+    const cP = (x, y, c, n) => { n = Math.floor(n * sc) + (Math.random() < (n * sc) % 1 ? 1 : 0); if (n > 0) createParticles(x, y, c, n); };
     const d = f.facing || 1, mvd = f.swing && f.swing.d || d, W = ['#38bdf8', '#bae6fd', '#ffffff'], feet = f.y + (f.height || 68) / 2;
     if (f.zv === 'UG' || f.zv === 'DA') {
         const sg = f.zv === 'UG' ? -1 : 1, tx = f.x, ty = f.y + sg * 84;

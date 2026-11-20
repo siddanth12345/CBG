@@ -141,7 +141,7 @@ export class Effects {
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
-        this.MAXP = 160;
+        this.MAXP = 280;
         this.pMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXP);
@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 56; this.sCap = 56;
+        this.MAXS = 100; this.sCap = 100;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
