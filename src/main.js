@@ -1,7 +1,10 @@
 // BUILD_STAMP 20261103ad
 // Entry point: input, UI wiring and the fixed-timestep loop. Behaviour of every control is
 // carried over 1:1 from the original single-file game.
-import { tickRace } from './raceUI.js';
+import { CHAR_IDS } from './characters.js';
+import { displayName } from './account.js';
+import { MAP_IDS } from './gameCore.js';
+import { tickRace, initRace } from './raceUI.js';
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay, tickReplay,
@@ -30,7 +33,7 @@ import { isBorg, isSelf, getRequests, onBorgs } from './friends.js';
 import { touchMode } from './layout.js';
 
 const $ = (id) => document.getElementById(id);
-const view = new View($('gameCanvas'));
+const view = new View($('gameCanvas')); window.__cbgView = view;
 const ui = new UI({ $, closeMenu: () => $('menuDropdown').classList.add('hidden') });
 const touch = new TouchControls({
     root: $('luminary-root'), doAction: (a) => doAction(a), releaseAction: (a) => releaseAction(a),
@@ -289,7 +292,7 @@ function backToMenu() {
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
-initKills();
+initKills(); initRace();
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else startMatchSequence(S.gameMode); });
 
 const trainMenuBtn = $('trainMenuBtn');
@@ -298,6 +301,16 @@ if (trainMenuBtn) trainMenuBtn.addEventListener('click', () => trainUI.open());
 
 for (const [id, mode] of [['easyModeBtn', 'easy'], ['mediumModeBtn', 'medium'], ['hardModeBtn', 'hard'], ['trainingModeBtn', 'training']]) {
     $(id).addEventListener('click', () => { audio.init(); S.ranked = false; S.freeBot = false; S.rankBot = null; startMatchSequence(mode); });
+}
+{
+    const rb = $('raceModeBtn');
+    if (rb) rb.addEventListener('click', () => {
+        audio.init(); S.ranked = false; S.freeBot = false; S.rankBot = null;
+        const ids = CHAR_IDS, ch = ids[Math.floor(Math.random() * ids.length)], map = MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)];
+        const me = displayName() || 'You';
+        startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 3, map, race: true, hazards: true, items: { on: false, types: [] },
+            players: [{ slot: 0, name: me, team: 'a', char: ch, bot: null }, ...[1, 2, 3].map(i => ({ slot: i, name: 'Racer ' + i, team: 'a', char: ch, bot: 'hard' }))] });
+    });
 }
 for (const [id, bot] of [['expertModeBtn', 'expert'], ['masterModeBtn', 'master'], ['apexModeBtn', 'apex']]) {
     const el = $(id); if (!el) continue;

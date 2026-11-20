@@ -1074,8 +1074,27 @@ export class FighterModel {
     }
 
     // ============================================================ per-frame update
+    /** level of detail: with many fighters or on a slow device the tiny parts (radius < 4.5) move to a layer the camera does not draw, which cuts ~45 draw calls per fighter */
+    #lod(lo) {
+        if (!this._small || this._smallRoot !== this.root) {
+            this._small = []; this._smallRoot = this.root; this._lodOn = false;
+            const sc = new THREE.Vector3();
+            this.root.updateMatrixWorld(true);
+            this.root.traverse((o) => {
+                if (!o.isMesh || o.userData.keepLod) return;
+                if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+                o.getWorldScale(sc);
+                if (o.geometry.boundingSphere.radius * Math.max(sc.x, sc.y, sc.z) < 4.5) this._small.push(o);
+            });
+        }
+        if (lo === this._lodOn) return;
+        this._lodOn = lo;
+        for (const o of this._small) o.layers.set(lo ? 1 : 0);
+    }
+
     update(dt, alpha, nowSec) {
         const f = this.f;
+        this.#lod(!!S.detailLo);
         this.t += dt;
         this.flipT += dt;
 

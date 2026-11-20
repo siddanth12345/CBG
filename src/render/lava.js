@@ -135,7 +135,7 @@ export function buildLava(scene, { D }) {
     for (let i = 0; i < spikes; i++) {
         const u = (i + 0.5) / spikes, hh = 160 + R() * 420 * (1 - Math.abs(u - 0.5) * 1.1), rr = 90 + R() * 90;
         const sp = new THREE.Mesh(new THREE.ConeGeometry(rr, hh, 6), i % 2 ? basalt : basaltLight);
-        sp.rotation.x = Math.PI; sp.position.set((u - 0.5) * W * 0.96, topY - STAGE.height - hh / 2 + 20, (R() - 0.5) * D * 0.5); sp.rotation.z = (R() - 0.5) * 0.25; sp.castShadow = true; stage.add(sp);
+        sp.rotation.x = Math.PI; sp.position.set((u - 0.5) * W * 0.96, topY - STAGE.height - hh / 2 + 20, (R() - 0.5) * D * 0.5); sp.rotation.z = (R() - 0.5) * 0.25; stage.add(sp);
         if (R() < 0.45) { const drip = new THREE.Mesh(new THREE.SphereGeometry(10, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.2, 0.3), toneMapped: false })); drip.position.set(sp.position.x, sp.position.y - hh / 2 - 12, sp.position.z); stage.add(drip); const ph = R() * 6; anim.push((t) => { drip.position.y = sp.position.y - hh / 2 - 12 - ((t * 0.5 + ph) % 1) * 220; drip.scale.setScalar(1 - ((t * 0.5 + ph) % 1) * 0.7); }); }
     }
 
@@ -143,7 +143,7 @@ export function buildLava(scene, { D }) {
     const platG = [];
     for (const p of STAGE.platforms || []) {
         const g = new THREE.Group();
-        const s2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 26, D * 0.55), basalt); s2.position.y = -13; s2.castShadow = true; s2.receiveShadow = true;
+        const s2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 26, D * 0.55), basalt); s2.position.y = -13; s2.receiveShadow = true;
         const e2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 5, 8), emis('#ff7a1a', 2.6)); e2.position.set(0, 1, D * 0.275);
         const keel = new THREE.Mesh(new THREE.ConeGeometry(Math.min(70, p.w * 0.22), 90, 5), basaltLight); keel.rotation.x = Math.PI; keel.position.y = -70;
         g.add(s2, e2, keel);
@@ -162,8 +162,7 @@ export function buildLava(scene, { D }) {
     }
 
     // lighting accents: a red-orange glow from the lava below
-    const glowL = new THREE.PointLight(0xff5a14, 6e5 * sc, 7000 * sc, 1.6); glowL.position.set(cx, wy(STAGE.y + 700 * sc), 500); root.add(glowL);
-    anim.push((t) => { glowL.intensity = (5.5e5 + Math.sin(t * 3.1) * 7e4) * sc; });
+    // (no point light: every extra light is paid per pixel on every fighter, the lava glow comes from the unlit materials + bloom)
 
     // ------------------------------------------------------------ the dashed blast-zone frame
     const bz = BLAST_ZONES, K = sc;
