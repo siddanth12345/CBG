@@ -9,9 +9,9 @@ export const lowGfx = () => getGfx() === 'low';
 /** Decorative particle density. Low uses structural cuts + ~0; Medium 26%; High 50%; Auto leaves null so view.js ladder decides. */
 export const particleScale = () => {
     const g = getGfx();
-    if (g === 'low') return 0.08;
-    if (g === 'medium') return 0.18;
-    if (g === 'high') return 0.35;
+    if (g === 'low') return 0.06;
+    if (g === 'medium') return 0.14;
+    if (g === 'high') return 0.28;
     return null;
 };
 
