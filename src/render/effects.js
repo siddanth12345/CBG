@@ -141,7 +141,7 @@ export class Effects {
         this.ringGeo = new THREE.RingGeometry(0.86, 1, 56);
 
         // ---- core particles (instanced)
-        this.MAXP = 240;
+        this.MAXP = 160;
         this.pMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXP);
@@ -153,7 +153,7 @@ export class Effects {
         scene.add(this.pMesh);
 
         // ---- sparks (stretched streaks)
-        this.MAXS = 90; this.sCap = 90;
+        this.MAXS = 56; this.sCap = 56;
         this.sparks_ = [];
         this.sMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
@@ -180,7 +180,7 @@ export class Effects {
             { geo: new THREE.CapsuleGeometry(11, 24, 4, 10), mat: new THREE.Matrix4().makeTranslation(0, -8, 0) },
             { geo: new THREE.SphereGeometry(9.5, 12, 10), mat: new THREE.Matrix4().makeTranslation(0, 22, 0) },
         ]);
-        this.MAXG = 48;
+        this.MAXG = 32;
         this.gMesh = new THREE.InstancedMesh(ghostGeo, new THREE.MeshBasicMaterial({
             transparent: true, blending: ADD, depthWrite: false, toneMapped: false,
         }), this.MAXG);
@@ -454,8 +454,8 @@ export class Effects {
     #consumeEvents() {
         // No Array.shift() — O(n²) drains caused late-match lag when events piled up
         const queue = fxEvents;
-        if (queue.length > 48) queue.splice(0, queue.length - 48);
-        for (let ei = 0; ei < queue.length && ei < 80; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
+        if (queue.length > 28) queue.splice(0, queue.length - 28);
+        for (let ei = 0; ei < queue.length && ei < 40; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
             const e = queue[ei];
             const pos = new THREE.Vector3(wx(e.x), wy(e.y), 0);
             switch (e.type) {
@@ -952,8 +952,8 @@ export class Effects {
 
     update(dt, models) {
         // Cap timed VFX objects so hit-spam / multi-hit rings don't accumulate
-        if (this.timed.length > 24) {
-            const drop = this.timed.splice(0, this.timed.length - 24);
+        if (this.timed.length > 16) {
+            const drop = this.timed.splice(0, this.timed.length - 16);
             for (const e of drop) { try { if (e.obj && e.obj.parent) e.obj.parent.remove(e.obj); if (e.free) e.free(); } catch (_) {} }
         }
 

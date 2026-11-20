@@ -26,7 +26,7 @@ export class View {
         r.localClippingEnabled = true;            // the Horizon stage splits into clipped pieces
         this.pr = Math.min(window.devicePixelRatio || 1, 2);
         r.setPixelRatio(this.pr);
-        this.q = (window.matchMedia && matchMedia('(pointer:coarse)').matches) ? 1 : 0; this.ft = 0; this.inMatch = undefined;
+        this.q = (window.matchMedia && matchMedia('(pointer:coarse)').matches) ? 2 : 1;  // start a step down; auto can climb if smooth this.ft = 0; this.inMatch = undefined;
         r.outputColorSpace = THREE.SRGBColorSpace;
         r.toneMapping = THREE.ACESFilmicToneMapping;
         r.toneMappingExposure = 1.05;
@@ -197,7 +197,7 @@ export class View {
     applyQuality() {
         const g = getGfx(), dpr = window.devicePixelRatio || 1;
         const q = g === 'high' ? 0 : g === 'medium' ? 1 : g === 'low' ? 2 : this.q;       // auto uses the frame-time ladder
-        const cap = g === 'high' ? Math.min(dpr, 1.75) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.25) : g === 'auto' ? Math.min(dpr, 1.25) : Math.min(dpr, 1.5);
+        const cap = g === 'high' ? Math.min(dpr, 1.5) : g === 'low' ? 1 : g === 'medium' ? Math.min(dpr, 1.15) : g === 'auto' ? Math.min(dpr, 1.15) : Math.min(dpr, 1.25);
         const pr = q >= 4 ? 0.75 : q >= 3 ? 1 : Math.min(cap, q >= 2 ? Math.min(cap, 1.25) : cap);
         if (pr !== this.pr) { this.pr = pr; this.renderer.setPixelRatio(pr); this.resize(); }
         const m = this.inMatch !== false;
@@ -208,7 +208,7 @@ export class View {
         if (this.renderer.shadowMap.enabled !== sh) { this.renderer.shadowMap.enabled = sh; this.key.castShadow = sh; this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; }); }
         this.stage.stars.visible = q < 3;
         const ps = particleScale();
-        S.fxLod = ps != null ? ps : (q >= 3 ? 0.12 : q >= 2 ? 0.22 : q >= 1 ? 0.4 : 0.7);   // Auto ladder more aggressive to protect frame rate
+        S.fxLod = ps != null ? ps : (q >= 3 ? 0.08 : q >= 2 ? 0.16 : q >= 1 ? 0.32 : 0.55);
         this.applyMapDetail();
     }
 
@@ -377,7 +377,7 @@ export class View {
         this.ft = this.ft ? this.ft * 0.92 + dt * 0.08 : dt;
         this.qT = (this.qT || 0) + dt; this.upT = (this.upT || 0); this.sinceUp = (this.sinceUp || 99) + dt; this.upBlock = Math.max(0, (this.upBlock || 0) - dt);
         const auto = getGfx() === 'auto' && S.gameState === 'playing';
-        if (auto && this.ft > 1 / 50 && this.q < 4 && this.qT > 0.55) {
+        if (auto && this.ft > 1 / 48 && this.q < 4 && this.qT > 0.4) {
             if (this.sinceUp < 12) this.upBlock = Math.min(240, (this.upBlock > 0 ? this.upBlock : 30) * 2);          // stepping up did not hold: wait longer before the next try
             this.q++; this.qT = 0; this.upT = 0; this.applyQuality();
         } else if (auto && this.q > 0) {                                      // smooth for a long stretch (near the screen's top speed, so 60 Hz screens count): try one step better

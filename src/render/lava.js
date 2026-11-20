@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { STAGE, BLAST_ZONES, WORLD } from '../gameCore.js';
 import { wx, wy } from './space.js';
+import { getGfx, lowGfx } from '../gfx.js';
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function ctex(w, h, draw, srgb = true) {
@@ -72,7 +73,8 @@ export function buildLava(scene, { D }) {
         }
         g.position.set(x, BASEY, z); decor.add(g);
         if (erupt) {                                                                    // smoke + sparks climbing out of the crater
-            const N = 90, geo = new THREE.BufferGeometry(), pos = new Float32Array(N * 3), seed = [];
+            const N = lowGfx() ? 18 : (getGfx() === 'medium' ? 36 : 48);
+            const geo = new THREE.BufferGeometry(), pos = new Float32Array(N * 3), seed = [];
             for (let i = 0; i < N; i++) seed.push({ a: R() * 6.28, sp: 0.4 + R() * 0.8, ph: R() });
             geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
             const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xff8a2a, size: 70, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
@@ -97,12 +99,17 @@ export function buildLava(scene, { D }) {
     volcano(-800, -6500, 5200, 3000, false);
 
     // ------------------------------------------------------------ falling embers (also the "stars" the menu / quality code toggles)
-    const EN = 420, egeo = new THREE.BufferGeometry(), epos = new Float32Array(EN * 3), eseed = [];
+    // Was 420 points rewritten every frame — a major lava-map lag source. Scale with graphics setting.
+    const EN = lowGfx() ? 48 : (getGfx() === 'medium' ? 110 : 160);
+    const egeo = new THREE.BufferGeometry(), epos = new Float32Array(EN * 3), eseed = [];
     for (let i = 0; i < EN; i++) eseed.push({ x: (R() - 0.5) * 9000, z: -2500 + R() * 2600, sp: 0.5 + R() * 1.2, ph: R() });
     egeo.setAttribute('position', new THREE.BufferAttribute(epos, 3));
     const stars = new THREE.Points(egeo, new THREE.PointsMaterial({ color: 0xffa040, size: 16, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    stars.frustumCulled = false; root.add(stars);
+    stars.frustumCulled = false; stars.userData.fullCount = EN; root.add(stars);
+    let _emberTick = 0;
     anim.push((t) => {
+        // low/medium: update every other frame (half the CPU, still looks continuous)
+        if ((lowGfx() || getGfx() === 'medium') && (++_emberTick & 1)) return;
         const y0 = wy(STAGE.y + 1000 * sc), top = topY + 2600 * sc;
         for (let i = 0; i < EN; i++) {
             const s = eseed[i], u = (t * 0.06 * s.sp + s.ph) % 1;
