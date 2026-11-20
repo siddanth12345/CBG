@@ -1,5 +1,5 @@
 // Training menu: Configure / Characters / Bots, with saved preferences (up to 10).
-import { S, p1, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, spawnTrainItem } from './gameCore.js';
+import { S, p1, startMatchSequence, MAP_IDS, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, spawnTrainItem } from './gameCore.js';
 import { ITEM_TYPES, ITEM_INFO } from './items.js';
 import { CHAR_IDS, CHARS, charOf, getMyChar, setMyChar } from './characters.js';
 import { Party } from './net/party.js';
@@ -108,6 +108,14 @@ export class TrainUI {
         if (b.dataset.tab) { this.tab = b.dataset.tab; this.render(); return; }
         const a = b.dataset.a;
         if (a === 'item') { spawnTrainItem(b.dataset.id); return; }
+        if (a === 'race') {                                // practice race on the chosen stage: your character vs the training bot (same character for everyone)
+            const t = snap(), map = { normal: 'frontier', lobby: 'big' }[t.stage] || t.stage, ch = t.char;
+            const lvl = ['static', 'frozen'].includes(t.botType) ? 'medium' : t.botType;
+            this.close(); S.ranked = false; S.freeBot = false; S.rankBot = null;
+            startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 3, map, race: true, hazards: true, items: { on: false, types: [] },
+                players: [{ slot: 0, name: 'You', team: 'a', char: ch, bot: null }, ...[1, 2, 3].map(i => ({ slot: i, name: 'Racer ' + i, team: 'a', char: ch, bot: lvl }))] });
+            return;
+        }
         if (a === 'reset') {
             const cur = snap();
             Object.assign(ensureTrain(), { ...DEFAULT_TRAIN, char: cur.char, botChar: cur.botChar, botType: 'static' });
@@ -216,6 +224,7 @@ export class TrainUI {
                 <div class="lm-setrow"><span>Air F specials</span><input data-k="airF" type="number" min="0" max="6" value="${t.airF}"></div>
                 <div class="lm-setrow"><span>Walk speed (×)</span><input data-k="walk" type="number" min="0.4" max="2" step="0.05" value="${t.walk}"></div>
                 <div class="lm-setrow" style="flex-wrap:wrap;gap:6px"><span>Spawn an item</span>${ITEM_TYPES.map(i => `<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="${i}" title="${esc(ITEM_INFO[i].name)}">${ITEM_INFO[i].icon} ${esc(ITEM_INFO[i].name)}</button>`).join('')}<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="CLEAR">Clear items</button></div>
+                <div class="lm-setrow"><span>Race <small>(practice race on this stage vs 3 bots of the chosen Bot level)</small></span><span><button class="lm-btn lm-mini" data-a="race">Start race</button></span></div>
                 <p class="lm-note">30 frames ≈ 0.5 s. Default lock is 36 (~0.6 s).</p>
                 <div class="lm-foot2" style="margin-top:10px">
                     <button class="lm-btn lm-btn-ghost" data-a="reset">Reset to default</button>
