@@ -5,7 +5,7 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
-import { raceTrack } from './raceTracks.js';
+import { raceTrack, spinAngle, shotPos, plusSolid } from './raceTracks.js';
 import { BW_KEYS, bwEval } from './bwSword.js';
 import { MELEE, buildMelee } from './melees.js';
 import { tickExtras, notify, showReward } from './hudExtras.js';
@@ -191,8 +191,8 @@ export function setRaceArena(m) {
     const base = String(m).replace(/H$/, ''), t = raceTrack(base);
     setArena('lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
-    WORLD.width = 8200; BLAST_ZONES.left = -600; BLAST_ZONES.right = 8800; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
-    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0 };
+    WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
+    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0 })) } };
     resetHazards();
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -811,7 +811,7 @@ class Fighter {
         if (this.gravT > 0) this.gravT--;
         if (this.dropT > 0) this.dropT--;
         if (S.sdNoDmg) this.damage = 200;          // sudden death: percent is locked, moves cannot change it
-        else if (S.race && S.match && S.match.race) this.damage = 0;      // race: percent never changes
+        else if (S.race && S.match && S.match.race && this.damage > 220) this.damage = 220;      // race: percent builds up and launches harder, but never KOs (a fall off the track is the only way out)
         if (this.damage >= 250) {
             this.takeKO();
             return;
@@ -2984,7 +2984,7 @@ class AIBot extends Fighter {
     raceDrive(target) {
         this.isShielding = false; this.shieldHold = 0; this.actionTimer++;
         if (this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.freezeTimer > 0) return;
-        const R = S.race, N = R.nodes, hh = this.height / 2, feet = this.y + hh, cap = 8.2 * charOf(this.char).walk * (0.8 + 0.06 * Math.min(5, this.skill));
+        const R = S.race, N = R.nodes, hh = this.height / 2, feet = this.y + hh, cap = 8.2 * Math.max(0.93, charOf(this.char).walk) * (0.8 + 0.06 * Math.min(5, this.skill));
         if (this.x >= R.finishX) return;
         let cur = -1;
         for (let i = 0; i < N.length; i++) if (this.x > N[i].l - 20 && this.x < N[i].r + 20 && feet < N[i].y + 40) cur = i;       // the platform we are over (or just left)
@@ -4176,7 +4176,7 @@ function luminentPull(att, def) {
     if (!S.sdNoDmg) def.damage += 5;
     def.lastHitBy = att; def.lastHitT = 0;
     const pct = def.damage / 2;
-    const force = ((pct / 10) + (pct * 5 / 20) + 12) * charOf(def.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (def.damage > 200 ? 1.3 : 1);
+    const force = ((pct / 10) + (pct * 5 / 20) + 12) * charOf(def.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (S.race && S.match && S.match.race ? 1.5 : 1) * (def.damage > 200 ? 1.3 : 1);
     def.vx = Math.cos(ang) * force * 0.85;
     def.vy = Math.sin(ang) * force * 0.85;
     def.hitstun = 40; def.grounded = false; def._hp = null;
@@ -4361,7 +4361,7 @@ function launch(attacker, defender, hb) {
 
     const effectiveDamage = defender.damage / 2;
     const percentFactor = (effectiveDamage / 10) + (effectiveDamage * hb.damage / 20);
-    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (defender.damage > 200 ? 1.3 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
+    const kbForce = ((percentFactor * hb.kbg) + hb.bkb) * charOf(defender.char).kb * (S.instantBlow ? 7 : 1) * (S.sudden ? 2 : 1) * (S.race && S.match && S.match.race ? 1.5 : 1) * (defender.damage > 200 ? 1.3 : 1);      // sudden death: 2x knockback; Instant Final Blow practice: 7x
 
     defender.vx = Math.cos(hb.angle) * kbForce * 0.85;
     defender.vy = Math.sin(hb.angle) * kbForce * 0.85;
@@ -4682,8 +4682,8 @@ function applySplit(carry = true) {
     if (!SPL.cuts.length) return;
     const race = !!S.race;                                                // race: only the platforms split, the start island stays whole
     if (!SPL.base) SPL.base = race ? { x: STAGE.x, w: S.race.finishX + 500 - STAGE.x, race: true } : { x: STAGE.x, w: STAGE.width };
-    const X0 = SPL.base.x, W0 = SPL.base.w, fr = [0, ...SPL.cuts, 1], n = fr.length - 1, G = W0 * (race ? 0.022 : 0.085) * splitAmt(SPL.t);
-    const offs = []; for (let k = 0; k < n; k++) offs.push(n === 2 ? (k === 0 ? -G : G) : (k - 1) * G);
+    const X0 = SPL.base.x, W0 = SPL.base.w, fr = [0, ...SPL.cuts, 1], n = fr.length - 1, G = (race ? 220 : W0 * 0.085) * splitAmt(SPL.t);
+    const offs = []; for (let k = 0; k < n; k++) offs.push(race ? (k - (n - 1) / 2) * G : n === 2 ? (k === 0 ? -G : G) : (k - 1) * G);
     const prev = SPL.off.length === n ? SPL.off : new Array(n).fill(0);
     const pieceOf = (bx) => { for (let k = 0; k < n; k++) if (bx < X0 + fr[k + 1] * W0) return k; return n - 1; };
     if (carry) {
@@ -4737,22 +4737,25 @@ function updateHazards() {
         }
         if (h.t >= h.warn + 8) HAZ.list.splice(i, 1);
     }
-    // giant crusher: a huge block slams down on a stage / platform (a red strip warns where, 1.2 s ahead); it launches whoever is under it
-    if (HAZ.t > 240 && HAZ.t % ev(170) === 0) {
+    // giant crusher (Magma Forge only): a solid block slams down on a stage / platform (a red strip warns where first); whoever it hits is thrown in a random direction
+    const bigLava = S.arena === 'lobby';
+    if (S.theme === 'lava' && HAZ.t > 240 && HAZ.t % ev(170) === 0) {
         const alive = fighters.filter(isAlive), ss = hazSurfaces(), f0 = alive.length && Math.random() < (RC ? 0.2 : 0.6) ? alive[Math.floor(Math.random() * alive.length)] : null;
         let q = f0 ? ss.filter(z => f0.x > z.x0 - 40 && f0.x < z.x1 + 40 && z.y >= f0.y - 40).sort((a, b) => a.y - b.y)[0] : null;
         if (!q) q = pickSurface(ss);
-        const w = Math.min(Math.max(480, (q.x1 - q.x0) * 0.6), 840), x = f0 && f0.x > q.x0 && f0.x < q.x1 ? f0.x : q.x0 + Math.random() * (q.x1 - q.x0);
-        const c = { x, y: q.y, w, t: 0, warn: 36, hit: new Set() }; HAZ.cr.push(c); fx('crusher', x, q.y, w, 0);
+        const k = bigLava ? 1 : 0.5;                                          // the small map's crusher is half the size
+        const w = Math.min(Math.max(480, (q.x1 - q.x0) * 0.6), 840) * k, x = f0 && f0.x > q.x0 && f0.x < q.x1 ? f0.x : q.x0 + Math.random() * (q.x1 - q.x0);
+        const c = { x, y: q.y, w, h: 760 * k, t: 0, warn: bigLava ? 66 : 36, hit: new Set() }; HAZ.cr.push(c); fx('crusher', x, q.y, w, 0, c.h);   // the big one waits half a second longer
     }
     for (let i = HAZ.cr.length - 1; i >= 0; i--) {
         const c = HAZ.cr[i]; c.t++;
-        if (c.t === c.warn) { fx('crusher', c.x, c.y, c.w, 1); S.screenShake = Math.max(S.screenShake, 16); audio.playHit(true); createParticles(c.x, c.y - 6, '#a8a29e', 18); }
-        if (c.t >= c.warn && c.t < c.warn + 6) for (const f of fighters) {
-            if (!isAlive(f) || c.hit.has(f) || f.invincibleTimer > 0) continue;
-            if (Math.abs(f.x - c.x) < c.w / 2 + f.width / 2 && f.y < c.y + 30 && f.y > c.y - 760) {
+        if (c.t === c.warn) { fx('crusher', c.x, c.y, c.w, 1, c.h); S.screenShake = Math.max(S.screenShake, 16); audio.playHit(true); createParticles(c.x, c.y - 6, '#a8a29e', 18); }
+        if (c.t >= c.warn && c.t < c.warn + 40) for (const f of fighters) {
+            if (!isAlive(f) || c.hit.has(f) || (f.invincibleTimer > 0 && !RC)) continue;
+            if (Math.abs(f.x - c.x) < c.w / 2 + f.width / 2 && f.y < c.y + 30 && f.y > c.y - c.h) {
                 c.hit.add(f); f.interrupt && f.interrupt(); if (!S.sdNoDmg) f.damage += 18; f.grounded = false;
-                f.vx = (f.x - c.x) * 0.08; f.vy = -17 - Math.min(8, f.damage * 0.03); f.hitstun = Math.max(f.hitstun, 34); fx('hit', f.x, f.y, 30, -1.4); audio.playHit(true);
+                const ang = Math.random() * Math.PI * 2, sp = 18 + Math.random() * 8 + Math.min(8, f.damage * 0.03);      // crushed: thrown in a random direction
+                f.vx = Math.cos(ang) * sp; f.vy = Math.sin(ang) * sp; f.hitstun = Math.max(f.hitstun, 34); fx('hit', f.x, f.y, 30, ang); audio.playHit(true);
             }
         }
         if (c.t > c.warn + 45) HAZ.cr.splice(i, 1);
@@ -4772,7 +4775,8 @@ function updateHazards() {
         const c = SPL.t % SPL_CYCLE;
         if (c === 300) {
             SPL.off = [];
-            SPL.cuts = Math.random() < 0.5 ? [0.3 + Math.random() * 0.4] : [0.2 + Math.random() * 0.2, 0.6 + Math.random() * 0.2];
+            if (S.race) { const n = 5 + Math.floor(Math.random() * 4), cs = []; for (let i = 0; i < n; i++) cs.push((i + 0.25 + Math.random() * 0.5) / n); SPL.cuts = cs; }     // race: many cuts at random places along the whole track
+            else SPL.cuts = Math.random() < 0.5 ? [0.3 + Math.random() * 0.4] : [0.2 + Math.random() * 0.2, 0.6 + Math.random() * 0.2];
             SPL.cuts = SPL.cuts.map(v => Math.round(v * 1000) / 1000);
         }
         if (c >= 300 && c < 360 && c % 6 === 0) S.screenShake = Math.max(S.screenShake, 2 + 3 * (c - 300) / 60);
@@ -5260,7 +5264,7 @@ function renderHUD() {
     renderRoster();
     hudText('p1Damage', S.instantBlow ? '∞' : String(Math.floor(me.damage)));
     hudClass('p1Damage', dmgClass(me.damage));
-    hudPips('p1Stocks', Math.max(0, me.stocks), 'w-3.5 h-3.5 rounded-full bg-cyan-400 border border-cyan-200 shadow-md shadow-cyan-500/50');
+    hudPips('p1Stocks', S.race && S.match && S.match.race ? 0 : Math.max(0, me.stocks), 'w-3.5 h-3.5 rounded-full bg-cyan-400 border border-cyan-200 shadow-md shadow-cyan-500/50');
 
     // F-special status: charge meter while charging, otherwise how many air F moves are left
     const fAnchor = document.querySelector('#p1DashBadge, #p1FAnchor');
@@ -5289,7 +5293,7 @@ function renderHUD() {
     hudText('p2Damage', S.instantBlow ? '∞' : String(Math.floor(p2.damage)));
     tickExtras(S, fighters, me);
     hudClass('p2Damage', dmgClass(p2.damage));
-    hudPips('p2Stocks', Math.max(0, S.gameMode === 'training' ? 3 : p2.stocks), 'w-3.5 h-3.5 rounded-full bg-rose-500 border border-rose-300 shadow-md shadow-rose-500/50');
+    hudPips('p2Stocks', S.race && S.match && S.match.race ? 0 : Math.max(0, S.gameMode === 'training' ? 3 : p2.stocks), 'w-3.5 h-3.5 rounded-full bg-rose-500 border border-rose-300 shadow-md shadow-rose-500/50');
 }
 
 function triggerDramaticZoom(winnerCharacter) {
@@ -5478,6 +5482,7 @@ function startMatchSequence(mode, cfg) {
     }
 
     S.gameState = 'countdown';
+    const runCountdown = () => {
     const countdownScreen = document.getElementById('countdownScreen');
     const countdownText = document.getElementById('countdownText');
     countdownScreen.classList.remove('hidden');
@@ -5497,7 +5502,13 @@ function startMatchSequence(mode, cfg) {
             S.gameState = 'playing';
         }
     }, 1000);
+    };
+    // offline matches open with a presentation of every player (character, name, K/D), then the countdown
+    if (presentHook && !S.online && !S.demo) { const list = fighters.filter(f => f.active).map(f => ({ slot: f.slot, name: f.name, char: f.char, color: f.color, bot: !!f.isAI, human: f.slot === (S.mySlot || 0) })); if (list.length > 1) { presentHook(list, runCountdown); return; } }
+    runCountdown();
 }
+let presentHook = null;
+export const setPresentHook = (fn) => { presentHook = fn; };
 
 /** Apply S.train to arena, p1/p2 characters, bot type */
 /** party training: a friend takes over the training dummy (p2) through the online room, and gives it back when they leave */
@@ -5582,22 +5593,82 @@ function raceRespawn(f) {
     fx('ko', f.x, f.y + 40); fx('hit', f.x, f.y, 14, -1.5);
 }
 const RACE_GRACE = 120;      // 2 s at the start with nobody able to hurt anyone. The race is over when everybody has finished (or the timer runs out)
+const killAt = (R, x) => { let m = -1e9; for (const n of R.nodes) if (!n.dyn && n.r > x - 1500 && n.l < x + 1500 && n.y > m) m = n.y; return m < -1e8 ? R.killY : m + 760; };      // the kill barrier sits a fixed drop under the nearest real platforms
+function obsHit(f, ux, uy, kb, dmg, stun) {
+    f.interrupt && f.interrupt(); if (!S.sdNoDmg) f.damage += dmg; f.grounded = false;
+    const k = kb * (1 + Math.min(220, f.damage) * 0.006);
+    f.vx = ux * k; f.vy = uy * k - 4; f.hitstun = Math.max(f.hitstun, stun); f._oc = 45;
+    fx('hit', f.x, f.y, 22, Math.atan2(uy, ux)); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 6);
+}
+/** the race obstacles: spinning plus signs, projectile lanes, trap platforms (exploding stars / falling slabs) and slow-fall clouds */
+function updateRaceObs(R) {
+    const O = R.obs, t = R.t; if (!O) return;
+    const act = fighters.filter(f => f.active && !f.out);
+    for (const f of act) if (f._oc > 0) f._oc--;
+    for (const d of O.dyn) {                                         // trap platforms
+        const p = d.p;
+        if (d.st === 0) {
+            for (const f of act) if (f.grounded && Math.abs(f.y + f.height / 2 - p.y) < 6 && f.x > p.x - 6 && f.x < p.x + p.w + 6) { d.st = 1; d.tm = 0; break; }
+        } else if (d.st === 1) {
+            d.tm++;
+            if (d.kind === 'star' && d.tm >= 60) {                    // a star blows up a second after it is touched
+                const cx = p.x + p.w / 2, cy = p.y - 30;
+                fx('explosion', cx, cy, 150, 0.4, 'fire'); createParticles(cx, cy, '#fde047', 14); S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
+                for (const f of act) { const dx = f.x - cx, dy = f.y - cy, dd = Math.hypot(dx, dy); if (dd < 330 && f.invincibleTimer <= 0) obsHit(f, dx / (dd || 1), dy / (dd || 1) - 0.3, 17, 14, 30); }
+                p.y = 1e6; d.st = 2; d.tm = 0;
+            } else if (d.kind === 'fall' && d.tm >= 36) { d.st = 3; d.vy = 1.5; }
+        } else if (d.st === 3) {
+            d.vy += 0.45; p.y += d.vy;
+            if (p.y > p.by + 1500) { p.y = 1e6; d.st = 2; d.tm = 0; }
+        } else if (d.st === 2) { if (++d.tm > 300) { p.y = p.by; d.st = 0; d.tm = 0; d.vy = 0; } }
+    }
+    for (const f of act) {
+        if (f._finT) continue;
+        const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
+        for (const o of O.spin) {                                    // spinning plus signs
+            const dx = f.x - o.x, dy = f.y - o.y;
+            if (!hurtable || Math.abs(dx) > o.r + 70 || Math.abs(dy) > o.r + 70) continue;
+            const a = spinAngle(o, t), c = Math.cos(a), sn = Math.sin(a);
+            for (const [ax, ay] of [[c, sn], [-sn, c]]) {
+                const pr = Math.max(-o.r, Math.min(o.r, dx * ax + dy * ay)), qx = dx - ax * pr, qy = dy - ay * pr;
+                if (Math.hypot(qx, qy) < 24 + f.width * 0.45) { const dd = Math.hypot(dx, dy) || 1; obsHit(f, dx / dd, dy / dd - 0.2, 14, 10, 26); break; }
+            }
+        }
+        for (const o of O.shot) {                                    // projectile lanes
+            if (!hurtable) break;
+            if (f.x < o.x0 - 60 || f.x > o.x1 + 60 || Math.abs(f.y - o.y) > 120) continue;
+            for (let k = 0; k < o.n; k++) { const sx = shotPos(o, k, t); if (Math.abs(f.x - sx) < f.width / 2 + 24 && Math.abs(f.y - o.y) < f.height / 2 + 24) { obsHit(f, o.dir, -0.3, 12, 8, 22); break; } }
+        }
+        for (const z of O.cloud) if (f.x > z.x0 && f.x < z.x1 && f.y > z.y0 && f.y < z.y1) {       // clouds: no jumping, and you sink slowly
+            if (f.vy > 2.4) f.vy = 2.4; f.jumpsLeft = 0; f._cloudT = 6;
+        }
+    }
+}
 function updateRace() {
-    const R = S.race; if (!R || !S.match || !S.match.race || S.online === 'guest' || S.gameState !== 'playing') return;
+    const R = S.race; if (!R || !S.match || !S.match.race || S.gameState !== 'playing') return;
     R.t++;
+    if (R.obs && R.obs.plus) for (const o of R.obs.plus) o.p.y = plusSolid(o, R.t) ? o.by : 1e6;      // plus-sign platforms: level arm = solid, diagonal = gone
+    if (S.online === 'guest') return;                                // guests get the obstacle state in the snapshots
     const grace = R.t < RACE_GRACE;
     for (const f of fighters) {
-        if (!isAlive(f)) continue;
+        if (!f.active || f.out) continue;
         if (grace) f.invincibleTimer = Math.max(f.invincibleTimer, 2);
         if (f._finT) continue;
-        if (f.grounded) for (const n of R.nodes) if (f.x > n.l && f.x < n.r && Math.abs(f.y + f.height / 2 - n.y) < 8 && n.l >= ((f._cp && f._cp.l) || 0) - 1) { f._cp = { x: (n.l + n.r) / 2, y: n.y, l: n.l }; break; }
+        if (f.grounded) for (const n of R.nodes) if (!n.dyn && f.x > n.l && f.x < n.r && Math.abs(f.y + f.height / 2 - n.y) < 8 && n.l >= ((f._cp && f._cp.l) || 0) - 1) { f._cp = { x: (n.l + n.r) / 2, y: n.y, l: n.l }; break; }
         f._rp = raceProg(f);
-        if (f.y > R.killY) raceRespawn(f);
-        else if (f.x >= R.finishX && f.y < R.finishY + 200) { f._finT = R.t; if (!R.first) R.first = f; f.invincibleTimer = 99999; fx('pickup', f.x, f.y); }
+        if (f.y > killAt(R, f.x)) raceRespawn(f);                    // the kill barrier always takes you, whatever the knockback or settings
+        else if (f.x >= R.finishX) {                                 // over the line: you finish, despawn, and can watch the others
+            f._finT = R.t; f._finI = (S.rec || []).length; if (!R.first) R.first = f;
+            fx('pickup', f.x, f.y); createParticles(f.x, f.y, '#fde047', 14); audio.playKO && audio.playKO();
+            f.out = true; f.vx = f.vy = 0; f.isShielding = false; f.interrupt && f.interrupt();
+        }
     }
-    const act = fighters.filter(f => f.active && !f.out);
-    if (R.first && act.every(f => f._finT)) endRace();
+    updateRaceObs(R);
+    const all = fighters.filter(f => f.active);
+    if (R.first && all.every(f => f._finT)) endRace();
 }
+/** a finished racer ends the race early for everybody (the others are ranked by how far they got) */
+export function endRaceNow() { if (S.race && S.match && S.match.race && S.gameState === 'playing' && S.online !== 'guest') endRace(); }
 /** final standings: finishers by time, then everybody else by how far they got */
 export function raceResults() {
     const R = S.race; if (!R) return [];
@@ -5761,6 +5832,7 @@ export function snapshot() {
         o: !orbs.length ? undefined : orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0, sw: o.sword ? 1 : 0 })),
         it: !items.length ? undefined : items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
+        rb: S.race && S.race.obs && S.match && S.match.race ? [S.race.t, ...S.race.obs.dyn.map(d => d.p.y > 1e5 ? 99999 : Math.round(d.p.y - d.p.by)), ...fighters.map(f => f._finT || 0)] : undefined,
         sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0, sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
         ev: ev.length ? ev : undefined,
     };
@@ -5878,6 +5950,7 @@ export function applySnapshot(s) {
     for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
     if (s.tl) S.timeLeft = s.tl;
     if (s.sp) { SPL.t = s.sp[0]; SPL.cuts = s.sp.slice(1); applySplit(false); }
+    if (s.rb && S.race && S.race.obs) { const O = S.race.obs; S.race.t = s.rb[0]; O.dyn.forEach((d, i) => { const v = s.rb[1 + i]; d.p.y = v === 99999 ? 1e6 : d.p.by + v; }); fighters.forEach((f, i) => { f._finT = s.rb[1 + O.dyn.length + i] || 0; }); }
     if (s.sd) {
         S.sudden = true;
         S.sdT = s.sdt || 0;
@@ -5944,14 +6017,33 @@ function pumpClips(fr) {
 function finishClip(c) { const L = S.clips || (S.clips = []); L.push(c); while (L.length > 16) L.shift(); }
 const EMPTY_REC = [];
 const REC_FRAMES = 900;                                  // the replay is the last 5 s of the match, with every effect and the kill-cam camera
+const raceRb = () => S.race && S.race.obs && S.match && S.match.race ? [S.race.t, ...S.race.obs.dyn.map(d => d.p.y > 1e5 ? 99999 : Math.round(d.p.y - d.p.by)), ...fighters.map(f => f._finT || 0)] : undefined;
+const applyRb = (rb) => { if (!rb || !S.race || !S.race.obs) return; const O = S.race.obs; S.race.t = rb[0]; O.dyn.forEach((d, i) => { const v = rb[1 + i]; d.p.y = v === 99999 ? 1e6 : d.p.by + v; }); fighters.forEach((f, i) => { f._finT = rb[1 + O.dyn.length + i] || 0; }); };
+/** one recorded fighter list. Races last minutes, so there only what changed since the last frame is stored (with a full key frame every 90) */
+let recLast = [];
+function recF(race, kf) {
+    const full = (f) => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; };
+    if (!race) return fighters.map(full);
+    return fighters.map((f, i) => {
+        const cur = full(f); if (!cur) return null;
+        const last = kf || !recLast[i] ? null : recLast[i], out = {}, ls = {};
+        for (const k in cur) { const v = cur[k], j = (v !== null && typeof v === 'object') ? JSON.stringify(v) : v; ls[k] = j; if (!last || last[k] !== j) out[k] = v; }
+        recLast[i] = ls; return out;
+    });
+}
 function recordFrame() {
+    const race = !!(S.race && S.match && S.match.race);
+    if (race && (S.recSkip = !S.recSkip)) return;                  // races are recorded at 30 frames a second
+    const kf = race && (S.recN || 0) % 90 === 0;
+    if (race && !S.recN) recLast = [];
     const rec = S.rec || (S.rec = []);
-    rec.push({ it: items.length ? items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })) : 0, f: fighters.map(f => { if (!f.active) return null; const d = packFighter(f); d._slowK = f._slowK || 1; d._teleported = f._teleported; return d; }), o: !orbs.length ? EMPTY_REC : orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.length ? recBuf.fx.splice(0) : 0, pt: recBuf.p.length ? recBuf.p.splice(0) : 0, kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt, S.kcVx, S.kcVy] : null, snd: recBuf.snd.length ? recBuf.snd.splice(0) : 0, bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
-    if (rec.length > REC_FRAMES + 90) rec.splice(0, rec.length - REC_FRAMES);      // trimmed in batches: shift() on a 900-long array every frame was a steady cost
+    rec.push({ dl: race ? (kf ? 0 : 1) : undefined, rb: race ? raceRb() : undefined, it: items.length ? items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })) : 0, f: recF(race, kf), o: !orbs.length ? EMPTY_REC : orbs.slice(0, 24).map(o => ({ id: o.id, vx: o.vx, vy: o.vy, x: o.x, y: o.y, r: o.r, c: o.charge, own: idxOf(o.owner), k: o.kind || 0, col: o.color })), sh: S.screenShake, fx: recBuf.fx.length ? recBuf.fx.splice(0) : 0, pt: recBuf.p.length ? recBuf.p.splice(0) : 0, kc: S.kcT > 0 ? [S.kcT, S.kcFull ? 1 : 0, S.kcDef, S.kcAtt, S.kcVx, S.kcVy] : null, snd: recBuf.snd.length ? recBuf.snd.splice(0) : 0, bz: [BLAST_ZONES.left, BLAST_ZONES.right, BLAST_ZONES.top, BLAST_ZONES.bottom].map(Math.round), sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0 });
+    if (!race && rec.length > REC_FRAMES + 90) rec.splice(0, rec.length - REC_FRAMES);      // trimmed in batches: shift() on a 900-long array every frame was a steady cost
     S.recN = (S.recN || 0) + 1;
     pumpClips(rec[rec.length - 1]);
 }
 function applyReplayFrame(fr) {
+    applyRb(fr.rb);
     fr.f.forEach((d, i) => {
         const f = fighters[i]; if (!d || !f) return;
         for (const k in d) {
@@ -5984,24 +6076,38 @@ function applyReplayFrame(fr) {
     if (fr.kc) { S.kcT = fr.kc[0]; S.kcFull = !!fr.kc[1]; S.kcDef = fr.kc[2]; if (fr.kc[3] !== undefined) S.kcAtt = fr.kc[3]; S.kcVx = fr.kc[4] || 0; S.kcVy = fr.kc[5] || 0; S.kcDur = KC_DUR; S.kcImpT = fr.kc[0]; } else { S.kcT = 0; S.kcImpT = 0; }
 }
 /** replay of the last 5 s (offline matches). onDone is called when it ends */
-export function startReplay(onDone, clip) {
-    const src = clip ? clip.frames : S.rec;
-    if (!src || src.length < 30) return false;
+export function startReplay(onDone, clip, opts) {
+    const src0 = clip ? clip.frames : S.rec;
+    if (!src0 || src0.length < 30) return false;
+    const src = opts && opts.to ? src0.slice(0, Math.max(30, opts.to)) : src0;
+    const live = opts && opts.live ? { f: fighters.map(f => f.active ? packFighter(f) : null), items: items.slice(), orbs: orbs.slice(), rb: raceRb() } : null;      // a replay in the middle of a race: the live race is put back afterwards
     items.length = 0; guestItems.clear();                    // the replay draws its own copies of the items
     S.fxClear++; whirlpools.length = 0; tornadoes.length = 0; winds.length = 0; pillars.length = 0; zapTrails.length = 0; particles.length = 0;       // nothing from the live match is left on screen
     dramaticZoom.active = false;
-    S.replay = { fresh: true, frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT } };
+    S.replay = { fresh: true, frames: src.slice(), i: 0, n: -1, clip: clip || null, done: onDone || null, rate: src[0] && src[0].dl !== undefined ? 0.5 : 1, paused: false, saved: { bz: { ...BLAST_ZONES }, sudden: S.sudden, sdT: S.sdT, live } };
     return true;
 }
-export function stopReplay() { S.kcImpT = 0; if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; } S.replay = null; S.kcT = 0; if (d) d(); } }
+function restoreLive(L) {
+    L.f.forEach((d, i) => { const f = fighters[i]; if (!d || !f) return; for (const k in d) { const v = d[k]; if (k === 'swing') f.swing = v ? SWING[v] : null; else if (REFS.includes(k)) f[k] = v < 0 ? null : fighters[v]; else f[k] = v; } f.px = f.x; f.py = f.y; });
+    items.length = 0; guestItems.clear(); for (const i of L.items) items.push(i); orbs.length = 0; for (const o of L.orbs) orbs.push(o); applyRb(L.rb);
+}
+export const seekReplay = (secs) => { const R = S.replay; if (!R) return; R.i = Math.max(0, Math.min(R.frames.length - 2, R.i + secs * 60 * (R.rate || 1))); R.n = -1; R.ended = false; };
+export const toggleReplayPause = () => { const R = S.replay; if (R) R.paused = !R.paused; return !!(R && R.paused); };
+export const replayClock = () => { const R = S.replay; return R ? { t: R.i / (60 * (R.rate || 1)), total: R.frames.length / (60 * (R.rate || 1)), paused: !!R.paused } : null; };
+export function stopReplay() { S.kcImpT = 0; if (S.replay) { S.fxClear++; particles.length = 0; orbs.length = 0; const d = S.replay.done, sv = S.replay.saved; if (sv) { Object.assign(BLAST_ZONES, sv.bz); S.sudden = sv.sudden; S.sdT = sv.sdT; if (sv.live) restoreLive(sv.live); } S.replay = null; S.kcT = 0; if (d) d(); } }
 export function tickReplay(adv = 1) {                       // adv = recorded frames to move on (the main loop passes real elapsed time x 60, so a replay runs at true speed however slow the screen is)
     const R = S.replay, c = R.clip;
     if (R.fresh) { R.fresh = false; adv = 0; }                  // the first frame after it starts carries whatever time the switch took
-    R.i += adv * (c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1);           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
+    R.i += R.paused ? 0 : adv * (R.rate || 1) * (c && !c.final && R.i > c.hit - 8 && R.i < c.hit + 26 ? 0.25 : 1);           // kill clips: the last hit the victim died to plays in slow motion (replays only, never in the match)
     if (c && R.i >= R.frames.length - 1) { R.i = R.frames.length - 1; R.ended = true; }      // a kill clip stops on its last frame: the viewer moves on by hand
     const n = Math.floor(R.i);
     if (n >= R.frames.length) { stopReplay(); return; }
     if (n !== R.n) {
+        if (R.frames[n] && R.frames[n].dl !== undefined) {              // a race recording only holds what changed: bring the fighters up to date first (after a skip, from the last key frame)
+            const ap = (fr) => fr.f.forEach((d, i) => { const f = fighters[i]; if (!d || !f) return; for (const k in d) { const v = d[k]; if (k === 'swing') f.swing = v ? SWING[v] : null; else if (REFS.includes(k)) f[k] = v < 0 ? null : fighters[v]; else f[k] = v; } });
+            if (R.n < 0 || n < R.n || n - R.n > 90) { let k = n; while (k > 0 && R.frames[k].dl) k--; for (; k < n; k++) ap(R.frames[k]); }
+            else for (let k = R.n + 1; k < n; k++) ap(R.frames[k]);
+        }
         if (R.n >= 0 && n > R.n + 1 && n - R.n <= 12) for (let k = R.n + 1; k < n; k++) {        // the screen was slow and skipped recorded frames: still play their effects and sounds
             const fr = R.frames[k]; if (!fr) continue;
             for (const e of fr.fx || []) fxEvents.push({ type: e[0], x: e[1], y: e[2], a: e[3], b: e[4], c: e[5] || 0 });

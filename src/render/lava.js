@@ -149,6 +149,7 @@ export function buildLava(scene, { D }) {
     // ------------------------------------------------------------ soft platforms: floating basalt slabs with a glowing lip and a rock keel
     const platG = [];
     for (const p of STAGE.platforms || []) {
+        if (p.dyn || p.plus) continue;
         const g = new THREE.Group();
         const s2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 26, D * 0.55), basalt); s2.position.y = -13; s2.receiveShadow = true;
         const e2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 5, 8), emis('#ff7a1a', 2.6)); e2.position.set(0, 1, D * 0.275);

@@ -385,7 +385,7 @@ export class Effects {
 
     /** radial spark streaks. dir: undefined = all around, 'up' / 'down' bias */
     sparks(pos, color, count, speed, life = 0.3, dir) {
-        count = Math.ceil(count * (S.fxLod || 1));
+        count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
@@ -401,7 +401,7 @@ export class Effects {
     }
 
     balls(pos, color, count, speed, life = 0.75) {
-        count = Math.ceil(count * (S.fxLod || 1));
+        count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
@@ -417,7 +417,7 @@ export class Effects {
 
     /** directional spark spray (used for hits) */
     spray(pos, angle, color, count, speed, spread = 0.9, life = 0.32) {
-        count = Math.ceil(count * (S.fxLod || 1));
+        count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
             if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
@@ -583,11 +583,11 @@ export class Effects {
                         this.timed.push({ obj: strip, t: 0, dur: 1.2, step: (u) => { strip.material.opacity = 0.25 + 0.6 * Math.abs(Math.sin(u * 14 * (0.6 + u))); strip.scale.x = 1 + 0.06 * Math.sin(u * 30); }, free: () => { this.scene.remove(strip); strip.geometry.dispose(); strip.material.dispose(); } });
                         break;
                     }
-                    const H = 760, g = new THREE.Group();                         // cheap: unlit materials, no shadows, three meshes
-                    const body = new THREE.Mesh(new THREE.BoxGeometry(w, H, 200), new THREE.MeshBasicMaterial({ color: 0x4b5060, transparent: true, opacity: 0.62, depthWrite: false }));
-                    const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 24, 32, 210), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.1, 0.3), toneMapped: false, transparent: true, opacity: 0.9 }));
+                    const H = e.c || 760, g = new THREE.Group();                         // cheap: unlit materials, no shadows, three meshes
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(w, H, 200), new THREE.MeshBasicMaterial({ color: 0x4b5060 }));
+                    const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 24, 32, 210), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.1, 0.3), toneMapped: false }));
                     lip.position.y = -H / 2 + 16;
-                    const rib = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, H * 0.8, 206), new THREE.MeshBasicMaterial({ color: 0x2c303b, transparent: true, opacity: 0.55, depthWrite: false }));
+                    const rib = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, H * 0.8, 206), new THREE.MeshBasicMaterial({ color: 0x2c303b }));
                     g.add(body, rib, lip);
                     this.scene.add(g);
                     const hover = 2200, hold = 0.75;

@@ -6,6 +6,7 @@ import { S, STAGE, BLAST_ZONES, WORLD } from '../gameCore.js';
 import { buildHorizon } from './horizon.js';
 import { buildLava } from './lava.js';
 import { wx, wy } from './space.js';
+import { buildRaceObs } from './raceObs.js';
 
 export const STAGE_DEPTH = 560;
 
@@ -32,7 +33,10 @@ function glowMat(color, intensity = 2) {
 
 export function buildStage(scene) {
     const st = buildStageBase(scene);
-    if (S.race) addRaceProps(st);
+    if (S.race) {
+        addRaceProps(st);
+        if (S.race.obs) { const ro = buildRaceObs(st.root), u0 = st.update; st.update = (t, dt) => { u0(t, dt); ro.update(); }; }
+    }
     return st;
 }
 
@@ -272,6 +276,7 @@ function buildStageBase(scene) {
 
     // ------------------------------------------------------------ soft platforms (Big Battlefield)
     for (const p of STAGE.platforms || []) {
+        if (p.dyn || p.plus) continue;                                   // race trap platforms are drawn by raceObs
         const py = wy(p.y), g = new THREE.Group();
         const slab2 = new THREE.Mesh(new THREE.BoxGeometry(p.w, 26, D * 0.55), bodyMat);
         slab2.position.y = -13; slab2.castShadow = true; slab2.receiveShadow = true;

@@ -146,6 +146,7 @@ export const isDone = (id) => doneToday().includes(id);
 export function reportMatch(st, cx) {
     const mult = 1 + perkStat(perksFor(cx.char), 'coins') + (cx.online ? 0 : 0);
     let gain = 10 + (cx.won ? 15 : 0) + Math.min(25, Math.floor(st.dealt / 20)) + Math.min(10, st.kills * 3);
+    M.kills = (M.kills || 0) + (st.kills || 0); M.deaths = (M.deaths || 0) + (st.deaths || 0);      // lifetime K/D (shown in the pre-match presentation)
     const done = [];
     for (const ch of todaysChallenges()) {
         if (isDone(ch.id) || !ch.check(st, cx)) continue;

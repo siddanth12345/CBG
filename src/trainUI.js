@@ -112,7 +112,7 @@ export class TrainUI {
             const t = snap(), map = { normal: 'frontier', lobby: 'big' }[t.stage] || t.stage, ch = t.char;
             const lvl = ['static', 'frozen'].includes(t.botType) ? 'medium' : t.botType;
             this.close(); S.ranked = false; S.freeBot = false; S.rankBot = null;
-            startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 3, map, race: true, hazards: true, items: { on: false, types: [] },
+            startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 5, map, race: true, hazards: true, items: { on: false, types: [] },
                 players: [{ slot: 0, name: 'You', team: 'a', char: ch, bot: null }, ...[1, 2, 3].map(i => ({ slot: i, name: 'Racer ' + i, team: 'a', char: ch, bot: lvl }))] });
             return;
         }

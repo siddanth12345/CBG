@@ -13,7 +13,10 @@ function ensure() {
     bar.appendChild(fin); box.append(info, bar); document.body.appendChild(box);
 }
 const ord = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const clk = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 export function tickRace() {
+    if (rbar && S.replay) { const c = replayClock(), el = rbar.querySelector('[data-clock]'); if (c && el) { const v = clk(c.t) + ' / ' + clk(c.total); if (el.textContent !== v) el.textContent = v; } }
+    spectate();
     const on = !!(S.race && S.match && S.match.race && S.gameState === 'playing');
     if (!on) { if (box) box.style.display = 'none'; return; }
     ensure(); box.style.display = 'block';
@@ -28,7 +31,7 @@ export function tickRace() {
 }
 
 // ---------------------------------------------------------------- race results: leaderboard (place, finish time, every fall) + replay of the finish with a fighter switcher
-import { raceResults, startReplay, stopReplay, setRaceEndHook, gameOverModal } from './gameCore.js';
+import { raceResults, startReplay, stopReplay, setRaceEndHook, gameOverModal, seekReplay, toggleReplayPause, replayClock, endRaceNow, fighters } from './gameCore.js';
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (fr) => { const s = fr / 60, m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`; };
 let panel = null, rbar = null, doneCb = null;
@@ -55,18 +58,37 @@ function drawResults() {
 <table><tr><th>#</th><th>Racer</th><th>Finish time</th><th>Falls (time · how far)</th></tr>${rows}</table>
 <div class="rc-btns"><button class="pri" data-rc="replay">▶ Watch replay</button><button data-rc="done">Continue</button></div></div>`;
 }
-function showRaceResults(done) {
-    css(); if (!panel) {
-        panel = document.createElement('div'); panel.className = 'rc-panel'; document.body.appendChild(panel);
-        rbar = document.createElement('div'); rbar.className = 'rc-bar'; document.body.appendChild(rbar);
-        panel.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-rc]'); if (!b) return; if (b.dataset.rc === 'done') { panel.style.display = 'none'; const f = doneCb; doneCb = null; f && f(); } else watch(); });
-        rbar.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (!b) return; if (b.dataset.cam !== undefined) { S.raceCam = +b.dataset.cam; drawBar(); } else if (b.dataset.rb === 'back') stopReplay(); else if (b.dataset.rb === 'again') { stopReplay(); setTimeout(watch, 30); } });
-    }
-    doneCb = done; drawResults(); panel.style.display = 'flex';
+function ensureBars() {
+    css(); if (panel) return;
+    panel = document.createElement('div'); panel.className = 'rc-panel'; document.body.appendChild(panel);
+    rbar = document.createElement('div'); rbar.className = 'rc-bar'; document.body.appendChild(rbar);
+    panel.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-rc]'); if (!b) return; if (b.dataset.rc === 'done') { panel.style.display = 'none'; const f = doneCb; doneCb = null; f && f(); } else watch(); });
+    rbar.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('button'); if (!b) return;
+        if (b.dataset.cam !== undefined) { S.raceCam = +b.dataset.cam; drawBar(); }
+        else if (b.dataset.rb === 'back') stopReplay();
+        else if (b.dataset.rb === 'again') { const mid = !!(S.replay && S.replay.saved && S.replay.saved.live); stopReplay(); setTimeout(mid ? myReplay : watch, 30); }
+        else if (b.dataset.rb === 'm10') seekReplay(-10); else if (b.dataset.rb === 'p10') seekReplay(10);
+        else if (b.dataset.rb === 'pause') { toggleReplayPause(); drawBar(); }
+    });
+    sbar = document.createElement('div'); sbar.className = 'rc-bar'; sbar.style.zIndex = 45; document.body.appendChild(sbar);
+    sbar.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('button'); if (!b) return;
+        if (b.dataset.sp !== undefined) { S.raceCam = +b.dataset.sp; sKey = ''; } else if (b.dataset.sx === 'replay') myReplay(); else if (b.dataset.sx === 'skip') endRaceNow();
+    });
+}
+let sbar = null, sKey = '';
+function showRaceResults(done) { ensureBars(); doneCb = done; drawResults(); panel.style.display = 'flex'; }
+/** the replay of your own run, from the start line to where you finished (the live race waits while you watch) */
+function myReplay() {
+    const me = fighters[S.mySlot || 0]; if (!me || !me._finI) return;
+    S.raceCam = me.slot;
+    const ok = startReplay(() => { rbar.style.display = 'none'; sKey = ''; }, null, { to: me._finI, live: true });
+    if (!ok) return; drawBar(); rbar.style.display = 'flex'; sbar.style.display = 'none';
 }
 function drawBar() {
-    const R = raceResults();
-    rbar.innerHTML = `<span>Following:</span>${R.map((r) => `<button data-cam="${r.slot}" class="${S.raceCam === r.slot ? 'on' : ''}" style="border-left:6px solid ${esc(r.color)}">${esc(r.name)}</button>`).join('')}<button data-rb="again">↻ Restart</button><button data-rb="back">✕ Back</button>`;
+    const R = raceResults(), paused = !!(S.replay && S.replay.paused);
+    rbar.innerHTML = `<button data-rb="m10">⏪ 10s</button><button data-rb="pause">${paused ? '▶ Play' : '⏸ Pause'}</button><button data-rb="p10">10s ⏩</button><span data-clock style="min-width:84px;text-align:center"></span><span>Following:</span>${R.map((r) => `<button data-cam="${r.slot}" class="${S.raceCam === r.slot ? 'on' : ''}" style="border-left:6px solid ${esc(r.color)}">${esc(r.name)}</button>`).join('')}<button data-rb="again">↻ Restart</button><button data-rb="back">✕ ${S.replay && S.replay.saved && S.replay.saved.live ? 'Close' : 'Back'}</button>`;
 }
 function watch() {
     const w = raceResults()[0]; S.raceCam = w ? w.slot : 0;
@@ -76,3 +98,18 @@ function watch() {
     drawBar(); rbar.style.display = 'flex';
 }
 export function initRace() { setRaceEndHook(showRaceResults); }
+
+// after you cross the line you despawn: watch the others live (switch between them), replay your run, or skip to the results
+function spectate() {
+    const me = S.race && S.match && S.match.race && S.gameState === 'playing' && !S.replay ? fighters[S.mySlot || 0] : null;
+    if (!me || !me._finT || !me.out) { if (sbar && sbar.style.display !== 'none') { sbar.style.display = 'none'; sKey = ''; } return; }
+    ensureBars();
+    const live = fighters.filter(f => f.active && !f._finT);
+    if (!live.some(f => f.slot === S.raceCam) && live.length) S.raceCam = live[0].slot;
+    const key = live.map(f => f.slot).join(',') + '|' + S.raceCam;
+    if (key !== sKey) {
+        sKey = key;
+        sbar.innerHTML = `<span>🏁 You finished!${me._finT ? ' ' + fmt(me._finT) : ''} Spectating:</span>${live.map((f) => `<button data-sp="${f.slot}" class="${S.raceCam === f.slot ? 'on' : ''}" style="border-left:6px solid ${esc(f.color)}">${esc(f.name)}</button>`).join('')}<button data-sx="replay">▶ Replay my run</button><button data-sx="skip">⏭ Results now</button>`;
+    }
+    sbar.style.display = 'flex';
+}

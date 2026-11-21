@@ -275,8 +275,8 @@ export class View {
             if (kf) pts.push([wx(kf.x), wy(kf.y)]);
             mx = 420; my = 320;
         } else if (S.race && S.match && S.match.race && S.gameState !== 'start') {       // race: the camera only follows your own fighter, twice as far out (while watching a replay: whoever you picked)
-            const fo = (S.replay && fighters[S.raceCam]) || (alive(me) ? me : (fighters.filter(alive).sort((a, b) => b.x - a.x)[0] || me));
-            pts = [[wx(fo.x), wy(fo.y)]]; mx = 1040; my = 760;
+            const sf = fighters[S.raceCam], fo = (S.replay && sf) || (alive(me) ? me : ((sf && alive(sf) && sf.active ? sf : null) || fighters.filter(alive).sort((a, b) => b.x - a.x)[0] || me));      // finished (despawned) racers follow whoever they picked
+            pts = [[wx(fo.x), wy(fo.y)]]; mx = 416; my = 304;
         } else if (mode === 'stage' && !spectate) {
             const top = Math.min(STAGE.y - 380, ...(STAGE.platforms || []).map(p => p.y - 120));
             pts = [[wx(STAGE.x), wy(top)], [wx(STAGE.x + STAGE.width), wy(STAGE.y + STAGE.height + 140)]];
@@ -298,7 +298,8 @@ export class View {
         const ax = Math.min(...xs), bx = Math.max(...xs), ay = Math.min(...ys), by = Math.max(...ys);
         const halfW = (bx - ax) / 2 + mx, halfH = (by - ay) / 2 + my;
         let dist = Math.max(halfH / t, halfW / (t * this.camera.aspect));
-        dist = Math.min(d0, Math.max(d0 / 2.7 / (big > 1 ? 1.6 : 1) * (S.race && S.match && S.match.race ? 2 : 1), dist));
+        const raceCam = !!(S.race && S.match && S.match.race);      // race: a fixed close-up (2.5x tighter than before), however long the track is
+        dist = Math.min(d0, Math.max(raceCam ? 469 / t : d0 / 2.7 / (big > 1 ? 1.6 : 1), dist));
         out.set(lim((ax + bx) / 2, WORLD.width / 2), lim((ay + by) / 2, WORLD.height / 2), 0);
         return dist;
     }
