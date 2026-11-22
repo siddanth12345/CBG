@@ -3,6 +3,7 @@
 // carried over 1:1 from the original single-file game.
 import { CHAR_IDS } from './characters.js';
 import { initPresent, showRoulette } from './presentUI.js';
+import { initProgress } from './progress.js';
 import { displayName } from './account.js';
 import { MAP_IDS } from './gameCore.js';
 import { tickRace, initRace } from './raceUI.js';
@@ -294,7 +295,7 @@ function backToMenu() {
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
-initKills(); initRace(); initPresent();
+initKills(); initRace(); initPresent(); initProgress();
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else if (S.matchCfg && S.match) { const c = S.matchCfg; if (c.race) { const pl = c.players, ch = CHAR_IDS[Math.floor(Math.random() * CHAR_IDS.length)]; pl.forEach(p => { p.char = ch; }); document.getElementById('gameOverModal').classList.add('hidden'); showRoulette(ch, () => startMatchSequence('lobby', c)); } else startMatchSequence('lobby', c); } else startMatchSequence(S.gameMode); });      // a rematch replays the same custom match / race (a race gets a new shared character)
 
 const trainMenuBtn = $('trainMenuBtn');

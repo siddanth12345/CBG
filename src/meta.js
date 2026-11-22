@@ -106,11 +106,14 @@ export function mergeMeta(g) {
     M.wins += g.wins || 0; M.losses += g.losses || 0; M.hist = [...(M.hist || []), ...(g.hist || [])].slice(-40);
     for (const c in (g.slots || {})) if (!(M.slots[c] || []).some(Boolean)) M.slots[c] = g.slots[c];
     if ((g.rating || 0) > M.rating) M.rating = g.rating;
+    if (g.prog) { const P = M.prog || (M.prog = { xp: 0, ach: {} }); P.xp = (P.xp || 0) + (g.prog.xp || 0); P.ach = { ...(g.prog.ach || {}), ...(P.ach || {}) }; for (const k of ['matches', 'wins', 'kills', 'deaths', 'flawless', 'items', 'playSec', 'raceFinish', 'racePodium', 'raceWins', 'chaos']) P[k] = (P[k] || 0) + (g.prog[k] || 0); for (const k of ['bestCombo', 'bestDealt']) P[k] = Math.max(P[k] || 0, g.prog[k] || 0); P.charsWon = [...new Set([...(P.charsWon || []), ...(g.prog.charsWon || [])])]; }
     changed();
 }
 const listeners = new Set();
 export const onMetaChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const changed = () => { save(); for (const fn of listeners) fn(M); };
+/** other modules (progress.js) change the saved object in place, then call this */
+export const touchMeta = () => changed();
 
 export const getMeta = () => M;
 export const coins = () => M.coins;

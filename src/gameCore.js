@@ -10,6 +10,7 @@ import { BW_KEYS, bwEval } from './bwSword.js';
 import { MELEE, buildMelee } from './melees.js';
 import { tickExtras, notify, showReward } from './hudExtras.js';
 import { perksFor, reportMatch, perkStat, BOT_NAMES, MOD_NAMES } from './meta.js';
+import { awardMatch } from './progress.js';
 import { AI_PRIOR } from './aiPrior.js';
 import { charOf, getMyChar, DEFAULT_CHAR } from './characters.js';
 import { displayName } from './account.js';
@@ -5414,7 +5415,7 @@ function startMatchSequence(mode, cfg) {
     S.trainRace = !!(mode === 'lobby' && cfg && cfg.trainRace);
     { const tb = document.getElementById('trainMenuBtn'); if (tb) tb.classList.toggle('hidden', !S.trainRace); }
     S.chaos = null; chaosMods();
-    window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; S.progShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
@@ -5621,6 +5622,14 @@ export function setRaceEndHook(f) { raceEndHook = f; }
 function endGame(winnerText, winnerRole = null) {
     if (S.sdBase) { Object.assign(BLAST_ZONES, S.sdBase); S.sdBase = null; }
     S.sudden = false; S.sdT = 0; S.cdN = -1;
+    if (S.gameState === 'playing' && !S.progShown && !S.demo && S.gameMode !== 'training') {                         // level / achievements: every real match counts (bots, custom, races, online)
+        S.progShown = true;
+        try {
+            const v = viewerFighter(), st0 = S.stats || newStats(); st0.deaths = v ? v.deaths : st0.deaths; st0.kills = v ? v.kills : st0.kills;
+            let race = null; if (S.race && S.match && S.match.race) { const rr = raceResults(), me = rr.find(r => r.slot === (v ? v.slot : 0)); if (me) race = { place: me.place, time: me.time, falls: me.falls.length }; }
+            awardMatch({ st: st0, won: race ? !!race.time && race.place === 1 : /YOU WIN|PLAYER 1 WINS/.test(winnerText), char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, chaos: !!S.chaos, race, secs: race ? Math.max(1, (S.race.t || 0) / 60) : st0.frames / 60 });
+        } catch (e) { /* progress is optional */ }
+    }
     const customMatch = !!S.match && !S.viaQueue && !S.ranked && !S.rankedQ;           // custom matches (lobby or private room) give no coins, challenges or rating
     if (customMatch && S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') { S.rewardShown = true; try { notify('Custom match: no coins or rating'); } catch (e) { /* hud */ } }
     else if (S.gameState === 'playing' && !S.rewardShown && !S.demo && S.gameMode !== 'training') {
@@ -6314,7 +6323,10 @@ function chaosTick() {
     if (S.gameState !== 'playing' || S.online === 'guest') { if (C.act.length && S.gameState !== 'playing') endChaos(); return; }
     const live = fighters.filter(f => f.active && !f.out && f.stocks > 0);
     if (!C.nextEv) C.nextEv = chaosPick(C);
-    if (--C.next <= 0) {                                              // a twist lands
+    chaosMods();
+    C.held = C.next <= 1 && C.act.length >= 3;                     // at most 3 twists at once: a 4th waits until one ends
+    if (C.held) C.next = 1;
+    else if (--C.next <= 0) {                                              // a twist lands
         const ev = C.nextEv; C.last = ev; C.n++; C.shown = { ev, t: 110, n: C.n };
         C.act.push({ ev, left: CHAOS_INSTANT.has(ev) ? 100 : 420, total: CHAOS_INSTANT.has(ev) ? 100 : 420, dir: Math.random() < 0.5 ? -1 : 1 });
         if (ev === 'spike') for (const f of live) f.damage = Math.min(999, f.damage + 40);
