@@ -22,36 +22,43 @@ const rng = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(
 const themeOf = (m) => m === 'horizon' || m === 'bighorizon' ? 'horizon' : m === 'lava' || m === 'biglava' ? 'lava' : 'frontier';
 export function raceTrack(map) {
     const base = CH[map] || CH.big, th = themeOf(map), R = rng(hash(map));
-    const hops = [];                                              // {gap, rise, w, dyn?, rest?}
-    const add = (gap, rise, w, o) => hops.push(Object.assign({ gap, rise, w }, o));
-    const chain = base.slice(0, -1);
-    // act 1: the hand-made chain
-    chain.forEach(([g, r, w]) => add(g, r, w));
-    add(230, 0, 1000, { rest: 1 });
-    add(1100, 0, 520, { plus: 1 });                                  // a plus-sign platform floats in the big gap
-    // act 2: the same chain mirrored (so the course comes back to its starting height), every 5th stone is a trap platform, wide descents get clouds on Horizon
-    chain.forEach(([g, r, w], i) => add(Math.round(g * 1.1), -r, Math.round(w * 0.92), th !== 'horizon' && i % 5 === 3 ? { dyn: th === 'frontier' ? 'star' : 'fall' } : null));
-    // a big gap: stepping stones (stars / falling slabs) or one huge cloud drop
-    const bigGap = () => {
-        if (th === 'horizon') { add(640, 260, 420, { cloud: 1 }); add(230, -260, 420); return; }
-        const kind = th === 'frontier' ? 'star' : 'fall';
-        add(170, -20, 150, { dyn: kind }); add(170, 30, 150, { dyn: kind }); add(170, -20, 150, { dyn: kind }); add(200, 10, 360);
+    const hops = [];                                              // {gap, rise, w, dyn?, rest?, plus?, cloud?, fin?}
+    const SC = 0.6, sc = (v) => Math.round(v * SC);              // every course is 0.6x of the old size
+    let plain = 0;
+    const add = (gap, rise, w, o) => {
+        hops.push(Object.assign({ gap, rise, w }, o));
+        if (!o || !(o.dyn || o.plus || o.rest || o.cloud || o.fin)) { if (++plain % 3 === 0) hops.push({ gap: sc(230) + Math.round(R() * 40), rise: 0, w: sc(900) + Math.round(R() * 160), rest: 1, stage: 1 }); }      // a small-stage platform after every 3 platforms
     };
-    add(230, 0, 1100, { rest: 1 }); bigGap();
-    add(230, 0, 1000, { rest: 1 });
-    // act 3: a long flat run, wide platforms mixed with narrow ones, then another big gap and the finish island
-    for (let i = 0; i < 11; i++) {
-        if (i === 4 || i === 8) add(1100, 0, 560, { plus: 1 }); const wide = i % 3 === 2; add(Math.round(180 + R() * 120), Math.round((R() - 0.5) * 90), wide ? Math.round(620 + R() * 300) : Math.round(150 + R() * 120), !wide && i % 4 === 1 && th !== 'horizon' ? { dyn: th === 'frontier' ? 'star' : 'fall' } : null); }
-    add(230, 0, 1200, { rest: 1 }); bigGap();
-    add(1100, 0, 700, { plus: 1 });
-    add(230, 0, 1500, { rest: 1, fin: 1 });
+    const trap = th === 'frontier' ? 'star' : th === 'lava' ? 'fall' : null;
+    // act 1: the hand-made chain of the map (scaled), then the first plus gap
+    base.slice(0, -1).forEach(([g, r, w]) => add(sc(g), sc(r), sc(w)));
+    // the creative middle: three-platform figures, picked at random for every course, each ending on a stage
+    const FIG = {
+        stairsUp: [[140, -70, 150], [150, -70, 150], [150, -70, 170]], stairsDown: [[140, 60, 160], [150, 70, 150], [150, 60, 170]],
+        zig: [[150, -60, 140], [170, 80, 120], [150, -60, 140]], tiny: [[125, -20, 90], [135, 35, 90], [135, -35, 90]],
+        longhop: [[190, 0, 260], [170, -40, 110], [200, 30, 260]], tower: [[130, -85, 110], [130, -85, 110], [130, 90, 120]],
+        pits: [[160, 0, 300], [175, 0, 90], [175, 0, 300]], wave: [[150, -50, 140], [150, 0, 140], [150, 50, 140]],
+    };
+    const names = Object.keys(FIG);
+    const fig = (name) => FIG[name].forEach(([g, r, w], i) => add(g + Math.round((R() - 0.5) * 30), r + Math.round((R() - 0.5) * 24), w + Math.round((R() - 0.5) * 30), (i === 1 && trap && R() < 0.4) ? { dyn: trap } : null));
+    const plusGap = () => add(sc(1100), 0, sc(560), { plus: 1 });
+    const bigGap = () => {
+        if (th === 'horizon') { add(sc(640), sc(260), sc(440), { cloud: 1 }); add(sc(230), -sc(260), sc(440)); return; }
+        add(sc(170), -12, sc(160), { dyn: trap }); add(sc(170), 18, sc(160), { dyn: trap }); add(sc(170), -12, sc(160), { dyn: trap }); add(sc(200), 6, sc(380));
+    };
+    plusGap();
+    const order = []; for (let i = 0; i < 3; i++) order.push(names.splice(Math.floor(R() * names.length), 1)[0]);
+    order.forEach((n, i) => { fig(n); if (i === 0) plusGap(); if (i === 1) bigGap(); });
+    bigGap();
+    add(sc(1100), 0, sc(700), { plus: 1 });
+    add(sc(230), 0, sc(1500), { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
     const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
     let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
-            const r = 450, cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.011, ph: R() * 1.5 };
-            const pp = { x: cx - r, y: prev.y, w: r * 2, plus: o }; o.p = pp; platforms.push(pp); nodes.push({ l: pp.x, r: pp.x + pp.w, y: prev.y, dyn: 2 }); obs.plus.push(o);
+            const r = Math.round(450 * 0.6), cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.011, ph: R() * 1.5 };
+            const pp = { x: cx - r, y: prev.y, w: r * 2, plus: o }; o.p = pp; nodes.push({ l: pp.x, r: pp.x + pp.w, y: prev.y, dyn: 2 }); obs.plus.push(o);
         }
         x += h.gap; y += h.rise;
         const p = { x, y, w: h.w }; if (h.dyn) { p.dyn = h.dyn; p.by = y; }

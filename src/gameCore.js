@@ -1329,9 +1329,10 @@ class Fighter {
                     // only one whirlpool — if one is live, animation only (no second pool)
                     if (whirlpools.length === 0) {
                         // no activeHitbox: zero damage, zero stun — pure pull zone
-                        const pid = ++poolSerial, gy = surfaceBelow(cx, feet);        // the pool sits on the platform he is over (not always the main stage)
-                        const pf = STAGE.platforms.find(q => cx >= q.x && cx <= q.x + q.w && Math.abs(q.y - gy) < 3);      // the platform it sits on (a plus turns it, a split / falling platform carries it)
-                        whirlpools.push({ id: pid, x: cx, y: gy, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0, pf, pfx: pf ? pf.x : 0, rel: pf ? cx - (pf.x + pf.w / 2) : 0, a0: pf && pf.plus && S.race ? spinAngle(pf.plus, S.race.t) : 0 });
+                        const pid = ++poolSerial; let gy = surfaceBelow(cx, feet);        // the pool sits on the platform he is over (not always the main stage)
+                        const op = S.race && this._onPlus ? this._onPlus : null; if (op) gy = this.y + this.height / 2;
+                        const pf = op ? null : STAGE.platforms.find(q => cx >= q.x && cx <= q.x + q.w && Math.abs(q.y - gy) < 3);      // the platform it sits on (a plus turns it, a split / falling platform carries it)
+                        whirlpools.push({ id: pid, x: cx, y: gy, r: R, life: sp.life || 180, max: sp.life || 180, owner: this, pull: sp.pull || 2, dmg: 0, pl: op, prx: op ? cx - (op.p.x + op.p.w / 2) : 0, pry: op ? gy - (op.by + 20) : 0, pa0: op ? spinAngle(op, S.race.t) : 0, pf, pfx: pf ? pf.x : 0, rel: pf ? cx - (pf.x + pf.w / 2) : 0, a0: pf && pf.plus && S.race ? spinAngle(pf.plus, S.race.t) : 0 });
                         fx('pool', cx, gy, R, 600, pid);
                         S.screenShake = Math.max(S.screenShake, 8);
                         createParticles(cx, gy - 10, '#38bdf8', 16);
@@ -4228,6 +4229,7 @@ function hitPause(def, hb, att) {
     if (att && att !== def && att.stocks > 0 && !att.frozenBot && !att._hp) att._hp = { n: 18, vx: att.vx, vy: att.vy };      // the hitter is held too (0.3 s), nobody else
 }
 function launch(attacker, defender, hb) {
+    if (S.chaos && S.chaos.ev === 'kb' && attacker && attacker !== defender && hb.bkb !== undefined) hb = { ...hb, bkb: (hb.bkb || 0) * 1.9 };
     if (attacker && attacker !== defender && attacker.ghostT > 0) return;           // ghosted by Ember's Phoenix Dash or Tide's bubble release: attacks do nothing
     if (defender && defender !== attacker && defender.invincibleTimer > 0) return; // protected fighters cannot take damage
     if (S.sdNoDmg) hb = { ...hb, damage: 0 };                       // timer sudden death: hits do not add percent
@@ -4712,7 +4714,7 @@ function applySplit(carry = true) {
     STAGE.x = STAGE.segs[0].l; STAGE.width = STAGE.segs[n - 1].r - STAGE.segs[0].l;
 }
 function updateHazards() {
-    if (!S.hazards || S.gameState !== 'playing') return;
+    if ((!S.hazards && !(S.chaos && S.chaos.ev === 'meteors')) || S.gameState !== 'playing') return;
     const horizon = S.theme === 'horizon';
     if (S.online === 'guest') { if (horizon && SPL.cuts.length) { SPL.t++; applySplit(false); } return; }
     HAZ.t++;
@@ -4761,7 +4763,7 @@ function updateHazards() {
             if (Math.abs(f.x - c.x) < c.w / 2 + f.width / 2 && f.y < c.y + 30 && f.y > c.y - c.h) {
                 c.hit.add(f); f.interrupt && f.interrupt(); if (!S.sdNoDmg) f.damage += 18; f.grounded = false;
                 const rc = S.race && S.match && S.match.race, ang = rc ? Math.PI + 0.5 + Math.random() * 0.4 : Math.random() * Math.PI * 2, sp = (18 + Math.random() * 8 + Math.min(8, f.damage * 0.03)) * (rc && f.damage >= 70 ? 2 : 1);      // crushed: thrown in a random direction
-                f.vx = Math.cos(ang) * sp; f.vy = Math.sin(ang) * sp; f.hitstun = Math.max(f.hitstun, rc ? (f.damage >= 70 ? 120 : 60) : 34); fx('hit', f.x, f.y, 30, ang); audio.playHit(true);
+                f.vx = Math.cos(ang) * sp; f.vy = Math.sin(ang) * sp; f.hitstun = Math.max(f.hitstun, rc ? (f.damage >= 70 ? 60 : 30) : 34); fx('hit', f.x, f.y, 30, ang); audio.playHit(true);
             }
         }
         if (c.t > c.warn + 45) HAZ.cr.splice(i, 1);
@@ -4858,7 +4860,8 @@ function popOut(w, t) {
 function updateWhirlpools() {
     for (let i = whirlpools.length - 1; i >= 0; i--) {
         const w = whirlpools[i];
-        if (w.pf && !w.rider) {                              // it rides its platform: a plus-sign platform turns it around, split / falling platforms carry it
+        if (w.pl && S.race) { const da = spinAngle(w.pl, S.race.t) - w.pa0, c = Math.cos(da), sn = Math.sin(da); w.x = w.pl.p.x + w.pl.p.w / 2 + w.prx * c - w.pry * sn; w.y = w.pl.by + 20 + w.prx * sn + w.pry * c; }
+        else if (w.pf && !w.rider) {                              // it rides its platform: a plus-sign platform turns it around, split / falling platforms carry it
             const pf = w.pf;
             if (pf.y > 1e5) w.life = Math.min(w.life, 1);
             else if (pf.plus && S.race) w.x = pf.x + pf.w / 2 + w.rel * Math.cos(spinAngle(pf.plus, S.race.t) - w.a0);
@@ -5368,6 +5371,9 @@ export function startDemo(map, chars) {
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
 function startMatchSequence(mode, cfg) {
+    S.trainRace = !!(mode === 'lobby' && cfg && cfg.trainRace);
+    { const tb = document.getElementById('trainMenuBtn'); if (tb) tb.classList.toggle('hidden', !S.trainRace); }
+    S.chaos = null; WORLD.gravity = G0; S.chaosSpeed = 1;
     window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
@@ -5383,8 +5389,9 @@ function startMatchSequence(mode, cfg) {
         S.itemTimer = Math.round(S.match.items.interval * 30);
         S.mySlot = cfg.mySlot || 0;
         S.instantBlow = !!cfg.instantBlow && !raceM;
+        S.chaos = cfg.chaos && !raceM ? { next: 360, ev: null, left: 0 } : null;
         S.matchCfg = cfg;
-        S.hazards = !!cfg.hazards || raceM;
+        S.hazards = (!!cfg.hazards || raceM) && !cfg.trainRace;      // a practice race in training runs without the map hazards
         cfg.map = setArenaByMap(cfg.map);                     // a random pick is resolved here (the host's choice is sent to guests already resolved)
         if (raceM) { setRaceArena(cfg.map); S.match.race = true; S.match.startDamage = 0; S.match.stocks = 99; S.sudden = false; }
     } else {
@@ -5544,8 +5551,12 @@ export function applyTrainPrefs() {
     const t = ensureTrain();
     const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
     const kind = (stg === 'lobby' || stg === 'bighorizon' || stg === 'biglava') ? 'lobby' : 'normal', theme = (stg === 'horizon' || stg === 'bighorizon') ? 'horizon' : (stg === 'lava' || stg === 'biglava') ? 'lava' : 'frontier';
-    if (String(stg).startsWith('race_')) { const rm = stg.slice(5); if (!S.race || S.race.map !== rm) { setRaceArena(rm); placeDuel(true); } }      // race track practice: just the map, no start / finish line rules
-    else if (S.arena !== kind || S.theme !== theme || S.race) { setArena(kind, theme); placeDuel(true); }
+    if (S.trainRace) {                                              // a practice race is running: the menu only tunes your own fighter (arena, hazards and bots stay as the race set them)
+        if (t.char) p1.char = charOf(t.char).id; else p1.char = getMyChar();
+        p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps; S.instantBlow = false;
+        return;
+    }
+    if (S.arena !== kind || S.theme !== theme || S.race) { setArena(kind, theme); placeDuel(true); }
     if (!!S.hazards !== !!t.hazards) { S.hazards = !!t.hazards; resetHazards(); S.fxClear++; }
     if (t.char) { p1.char = charOf(t.char).id; }
     else p1.char = getMyChar();
@@ -5602,7 +5613,7 @@ function raceRespawn(f) {
     const cp = f._cp ? { x: f._cp.n ? (f._cp.n.l + f._cp.n.r) / 2 : f._cp.x, y: f._cp.y } : { x: STAGE.x + 220, y: STAGE.y };
     f.interrupt && f.interrupt(); audio.playKO(); createParticles(f.x, Math.min(f.y, S.race ? S.race.killY : f.y), '#fb923c', 14);
     f.x = cp.x; f.y = cp.y - f.height / 2 - 6; f.px = f.x; f.py = f.y; f.vx = f.vy = 0; f.hitstun = 0; f.grounded = false; f.isHanging = false; f.jumpsLeft = f.maxJumps;
-    f.invincibleTimer = Math.max(f.invincibleTimer, 80); f.lastHitBy = null; f.lastHitT = 9999; f.deaths++; f._bzCool = 40;
+    f.invincibleTimer = Math.max(f.invincibleTimer, 80); f.lastHitBy = null; f.lastHitT = 9999; f.deaths++; f.damage = 0; f._bzCool = 40;
     if (S.raceDeaths) S.raceDeaths.push({ slot: f.slot, t: S.race ? S.race.t : 0, p: Math.round(Math.max(0, Math.min(1, (raceProg(f) - STAGE.x) / (S.race.finishX - STAGE.x))) * 100) });
     fx('ko', f.x, f.y + 40); fx('hit', f.x, f.y, 14, -1.5);
 }
@@ -5613,7 +5624,7 @@ function obsHit(f, ux, uy, kb, dmg, stun) {
     const hi = f.damage >= 70;                                       // from 70% every race hazard throws twice as far and stuns twice as long
     const k = kb * (1 + Math.min(220, f.damage) * 0.006) * (hi ? 2 : 1);
     ux = -Math.max(0.55, Math.abs(ux));                              // race hazards only ever knock you back towards the start
-    f.vx = ux * k; f.vy = uy * k - 4; f.hitstun = Math.max(f.hitstun, hi ? 120 : 60); f._oc = 45;
+    f.vx = ux * k; f.vy = uy * k - 4; f.hitstun = Math.max(f.hitstun, hi ? 60 : 30); f._oc = 45;
     fx('hit', f.x, f.y, 22, Math.atan2(uy, ux)); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 6);
 }
 /** the race obstacles: spinning plus signs, projectile lanes, trap platforms (exploding stars / falling slabs) and slow-fall clouds */
@@ -5644,7 +5655,7 @@ function updateRaceObs(R) {
     if (t > RACE_GRACE + 60 && live.length && (R.nextShot = (R.nextShot || 0) - 1) <= 0) {
         R.nextShot = 28 + Math.floor(Math.random() * 40);
         if (sh.length < 14) {
-            const tg = live[Math.floor(Math.random() * live.length)], r = Math.random(), k = r < 0.34 ? 2 : r < 0.67 ? 1 : 0;
+            const tg = live[Math.floor(Math.random() * live.length)], r = Math.random(), k = r < 0.5 ? 1 : 0;
             sh.push({ x: tg.x + 1100 + Math.random() * 500, y: tg.y + (Math.random() - 0.5) * 220, vx: k === 1 ? -19 - Math.random() * 4 : -8 - Math.random() * 3, vy: 0, k, life: 420 });
         }
     }
@@ -5694,10 +5705,36 @@ function raceSplit(R) {
     }
     for (const n of R.nodes) if (n.p) { n.l = n.p.x; n.r = n.p.x + n.p.w; }
 }
+/** the spinning plus signs are solid: stand on the upper face of whichever arm is within 60 degrees of level, and be carried round with it */
+function plusCollide(R) {
+    for (const o of R.obs.plus) {
+        const cx = o.p.x + o.p.w / 2, cy = o.by + 20, a = spinAngle(o, R.t);
+        for (const f of fighters) {
+            if (!f.active || f.out || f._finT) { if (f._onPlus === o) f._onPlus = null; continue; }
+            const h = f.height / 2;
+            if (f._onPlus === o) {                                           // carried round by the turn of this frame
+                const da = o.sp, c = Math.cos(da), s = Math.sin(da), rx = f.x - cx, ry = f.y + h - cy;
+                f.x = cx + rx * c - ry * s; f.y = cy + rx * s + ry * c - h;
+            }
+            if (Math.abs(f.x - cx) > o.r + 40 || Math.abs(f.y - cy) > o.r + 200) { if (f._onPlus === o) f._onPlus = null; continue; }
+            const rx = f.x - cx, feet = f.y + h; let best = null;
+            for (let k = 0; k < 2; k++) {
+                let th = a + k * Math.PI / 2; if (Math.cos(th) < 0) th += Math.PI;
+                th = Math.atan2(Math.sin(th), Math.cos(th));
+                const cs = Math.cos(th); if (cs < 0.34 || Math.abs(rx) > o.r * cs + 10) continue;
+                const top = cy + rx * Math.tan(th) - 20 / cs;
+                // a rider whose arm turns too steep is swept up onto the other arm
+                const stick = f._onPlus === o ? 125 : 0; if (feet >= top - 8 - stick && (feet <= top + 26 + stick || (f.py !== undefined && f.py + h <= top + 10)) && f.vy >= -0.5 && (best === null || top < best)) best = top;
+            }
+            if (best !== null && !f.isHanging) { f.y = best - h; f.vy = 0; f.grounded = true; f.jumpsLeft = f.maxJumps !== undefined ? f.maxJumps : f.jumpsLeft; f._onPlus = o; }
+            else if (f._onPlus === o) f._onPlus = null;
+        }
+    }
+}
 function updateRace() {
     const R = S.race; if (!R || !S.match || !S.match.race || S.gameState !== 'playing') return;
     R.t++;
-    if (R.obs && R.obs.plus) for (const o of R.obs.plus) o.p.y = plusSolid(o, R.t) ? o.by : 1e6;      // plus-sign platforms: level arm = solid, diagonal = gone
+    if (R.obs && R.obs.plus && R.obs.plus.length) plusCollide(R);
     if (S.online === 'guest') return;                                // guests get the obstacle state in the snapshots
     const grace = R.t < RACE_GRACE;
     for (const f of fighters) {
@@ -5779,7 +5816,7 @@ function drive(f, h) {
         const swinging = f.attackTimer > 0 && f.swing;                // the side you swing toward stays the side you swing toward
         if (f.sx && f.sx.k === 'roll' && f.sx.ph === 'roll') { if (h.left) f.sx.d = -1; else if (h.right) f.sx.d = 1; }      // the roll is steered with left / right
         if (!f.diving && !meleeCharging && !f.sx) {
-            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (f.slowT > 0 ? 0.5 : 1) * (1 + perkOf(f, 'walk'));   // training walk mult for p1; bleeding slows movement by 70%
+            const spd = (f.fActive ? 6.75 : (f.spiralT > 0 ? 4.5 : 8.5)) * charOf(f.char).walk * (f === p1 ? trainWalk() : 1) * (f.bleedT > 0 ? 0.3 : 1) * (f._shadowT > 0 ? 1.7 : 1) * (f.soakT > 0 ? 0.75 : 1) * (f.slowT > 0 ? 0.5 : 1) * (S.chaosSpeed || 1) * (1 + perkOf(f, 'walk'));   // training walk mult for p1; bleeding slows movement by 70%
             if (f.glide && !f.grounded) {                       // Tide's glide: same way keeps the speed, the opposite way slows it, up / down nudge it a little (gravity still applies)
                 const dr = h.left ? -1 : h.right ? 1 : 0;
                 if (dr) { if (f.vx * dr > 0) { if (Math.abs(f.vx) < spd) f.vx = dr * spd; } else f.vx *= 0.92; }
@@ -6209,8 +6246,31 @@ export function matchStatsData() {
     const rows = fighters.map((f, i) => ({ i, name: dispName(f, i), char: f.char, color: f.color, active: f.active !== false, team: f.team, kos: (S.klog || []).filter(k => k.att === i).length, falls: (S.klog || []).filter(k => k.def === i).length, stocks: Math.max(0, f.stocks || 0), ...msOf(i) })).filter(r => r.active);
     return { rows, kills: (S.klog || []).slice(), secs: S.stats ? S.stats.frames / 60 : 0, clips: (S.clips || []).length };
 }
+// ---------------------------------------------------------------- CHAOS MODE: every ~8 s a random twist hits the whole arena for 7 s
+export const CHAOS_EVENTS = {
+    lowgrav: 'MOON GRAVITY', highgrav: 'HEAVY GRAVITY', kb: 'DOUBLE KNOCKBACK', meteors: 'METEOR RAIN', items: 'ITEM STORM', speed: 'TURBO',
+};
+const G0 = WORLD.gravity;
+function endChaos() { const C = S.chaos; WORLD.gravity = G0; S.chaosSpeed = 1; if (C) { C.ev = null; C.left = 0; } }
+function chaosTick() {
+    const C = S.chaos;
+    if (!C) { if (WORLD.gravity !== G0) WORLD.gravity = G0; return; }
+    if (S.gameState !== 'playing' || S.online === 'guest') { if (C.ev && S.gameState !== 'playing') endChaos(); return; }
+    if (C.ev) {
+        if (C.ev === 'meteors' && C.left % 24 === 0) spawnMeteor();
+        if (C.ev === 'items' && C.left % 45 === 0) spawnItem(ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)], true);
+        if (--C.left <= 0) { endChaos(); C.next = 420 + Math.floor(Math.random() * 240); }
+        return;
+    }
+    if (--C.next <= 0) {
+        const keys = Object.keys(CHAOS_EVENTS).filter(k => k !== C.last); C.ev = C.last = keys[Math.floor(Math.random() * keys.length)]; C.left = 420; C.total = 420; C.n = (C.n || 0) + 1;
+        if (C.ev === 'lowgrav') WORLD.gravity = G0 * 0.4; else if (C.ev === 'highgrav') WORLD.gravity = G0 * 1.7; else if (C.ev === 'speed') S.chaosSpeed = 1.45;
+        S.screenShake = Math.max(S.screenShake || 0, 6);
+    }
+}
 export function step() {
     if (S.replay) { tickReplay(); return; }
+    chaosTick();
     if (S.kcVis > 0) { S.kcVis--; S.screenShake = 0; }                                  // the final blow itself never shakes the screen
     if (S.kcPause > 0 && --S.kcPause === 0 && S.kcHold) { const h = S.kcHold; Object.assign(h.f, { x: h.x, y: h.y, vx: h.vx, vy: h.vy, hitstun: h.hitstun, px: h.x, py: h.y, ffT: 100 }); S.kcHold = null; }
     const held = S.kcPause > 0 ? [fighters[S.kcAtt], fighters[S.kcDef]] : null;          // frozen for the freeze: just these two

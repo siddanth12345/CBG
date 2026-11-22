@@ -29,7 +29,7 @@ export function buildRaceObs(root) {
     ups.push(() => {
         const L = (S.race && S.race.shots) || [];
         while (shots.length < L.length) { const m = new THREE.Mesh(shotGeo, glow(shotCol, 2.6)); const tl = new THREE.Mesh(tailGeo, glow(shotCol, 1.4)); tl.rotation.z = -Math.PI / 2; tl.position.x = 52; m.add(tl); g.add(m); shots.push(m); }
-        shots.forEach((m, i) => { const q = L[i]; m.visible = !!q; if (q) { m.position.set(wx(q.x), wy(q.y), 0); const sc = q.k === 1 ? 1.25 : q.k === 2 ? 0.9 : 1; m.scale.set(sc, sc, sc); m.material.color.set(q.k === 2 ? '#a78bfa' : q.k === 1 ? '#fde047' : shotCol).multiplyScalar(2.6); } });
+        shots.forEach((m, i) => { const q = L[i]; m.visible = !!q; if (q) { m.position.set(wx(q.x), wy(q.y), 0); const sc = q.k === 1 ? 1.25 : q.k === 2 ? 0.9 : 1; m.scale.set(sc, sc, sc); m.material.color.set(q.k === 2 ? '#7c3aed' : q.k === 1 ? '#fde047' : shotCol).multiplyScalar(2.6); } });
     });
     // ---- checkpoint flags (every 10th platform; they ride their platform when it slides)
     const flags = (S.race.nodes || []).filter(n => n.cp).map(n => {

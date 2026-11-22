@@ -1,5 +1,5 @@
 // Training menu: Configure / Characters / Bots, with saved preferences (up to 10).
-import { S, p1, startMatchSequence, MAP_IDS, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, spawnTrainItem } from './gameCore.js';
+import { S, p1, startMatchSequence, MAP_IDS, ensureTrain, DEFAULT_TRAIN, applyTrainPrefs, spawnTrainItem, endRaceNow } from './gameCore.js';
 import { ITEM_TYPES, ITEM_INFO } from './items.js';
 import { CHAR_IDS, CHARS, charOf, getMyChar, setMyChar } from './characters.js';
 import { Party } from './net/party.js';
@@ -53,7 +53,7 @@ function applySnap(s, live = true) {
         botChar: s.botChar || s.char || getMyChar(),
     });
     if (t.char) setMyChar(t.char);
-    if (live && S.gameMode === 'training' && S.gameState === 'playing') applyTrainPrefs();
+    if (live && (S.gameMode === 'training' || S.trainRace) && S.gameState === 'playing') applyTrainPrefs();
 }
 
 export class TrainUI {
@@ -91,7 +91,7 @@ export class TrainUI {
     }
 
     open() {
-        if (S.gameMode !== 'training') return;
+        if (S.gameMode !== 'training' && !S.trainRace) return;
         ensureTrain();
         this.msg = '';
         this.el.classList.remove('lm-hidden');
@@ -108,11 +108,12 @@ export class TrainUI {
         if (b.dataset.tab) { this.tab = b.dataset.tab; this.render(); return; }
         const a = b.dataset.a;
         if (a === 'item') { spawnTrainItem(b.dataset.id); return; }
+        if (a === 'endrace') { this.close(); endRaceNow(); return; }
         if (a === 'race') {                                // practice race on the chosen stage: your character vs the training bot (same character for everyone)
             const t = snap(), map = { normal: 'frontier', lobby: 'big' }[t.stage] || String(t.stage).replace(/^race_/, ''), ch = t.char;
             const lvl = ['static', 'frozen'].includes(t.botType) ? 'medium' : t.botType;
             this.close(); S.ranked = false; S.freeBot = false; S.rankBot = null;
-            startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 5, map, race: true, hazards: true, items: { on: false, types: [] },
+            startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 5, map, race: true, hazards: false, trainRace: true, items: { on: false, types: [] },
                 players: [{ slot: 0, name: 'You', team: 'a', char: ch, bot: null }, ...[1, 2, 3].map(i => ({ slot: i, name: 'Racer ' + i, team: 'a', char: ch, bot: lvl }))] });
             return;
         }
@@ -185,7 +186,7 @@ export class TrainUI {
         if (k === 'stun' || k === 'lock' || k === 'airF') v = Math.max(0, Math.min(k === 'stun' ? 120 : k === 'lock' ? 120 : 6, +v || 0));
         t[k] = v;
         if (k === 'stage') applySnap(snap(), true);
-        else if (S.gameMode === 'training' && S.gameState === 'playing') {
+        else if ((S.gameMode === 'training' || S.trainRace) && S.gameState === 'playing') {
             if (k === 'char' || k === 'botType' || k === 'botChar') applyTrainPrefs();
             // stun/lock/walk/jumps/airF read live via helpers
             if (k === 'jumps') { p1.maxJumps = (t.jumps != null ? t.jumps : charOf(p1.char).jumps); p1.jumpsLeft = p1.maxJumps; }
@@ -205,9 +206,6 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.stage === 'bighorizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="bighorizon">¥Horizon</button>
                     <button class="lm-btn lm-mini ${t.stage === 'lava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lava">€Magma Forge</button>
                     <button class="lm-btn lm-mini ${t.stage === 'biglava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="biglava">¥Magma Forge</button>
-                    <button class="lm-btn lm-mini ${t.stage === 'race_frontier' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_frontier">Race track: Frontier</button>
-                    <button class="lm-btn lm-mini ${t.stage === 'race_horizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_horizon">Race track: Horizon</button>
-                    <button class="lm-btn lm-mini ${t.stage === 'race_lava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_lava">Race track: Magma</button>
                 </span></div>
                 <div class="lm-setrow"><span>Hazards</span><span>
                     <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>
@@ -227,7 +225,7 @@ export class TrainUI {
                 <div class="lm-setrow"><span>Air F specials</span><input data-k="airF" type="number" min="0" max="6" value="${t.airF}"></div>
                 <div class="lm-setrow"><span>Walk speed (×)</span><input data-k="walk" type="number" min="0.4" max="2" step="0.05" value="${t.walk}"></div>
                 <div class="lm-setrow" style="flex-wrap:wrap;gap:6px"><span>Spawn an item</span>${ITEM_TYPES.map(i => `<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="${i}" title="${esc(ITEM_INFO[i].name)}">${ITEM_INFO[i].icon} ${esc(ITEM_INFO[i].name)}</button>`).join('')}<button class="lm-btn lm-mini lm-btn-ghost" data-a="item" data-id="CLEAR">Clear items</button></div>
-                <div class="lm-setrow"><span>Race <small>(practice race on this stage vs 3 bots of the chosen Bot level)</small></span><span><button class="lm-btn lm-mini" data-a="race">Start race</button></span></div>
+                <div class="lm-setrow"><span>Race <small>(practice race on this stage vs 3 bots of the chosen Bot level)</small></span><span>${S.trainRace ? '<button class="lm-btn lm-mini" data-a="endrace">End race</button>' : '<button class="lm-btn lm-mini" data-a="race">Start race</button>'}</span></div>
                 <p class="lm-note">30 frames ≈ 0.5 s. Default lock is 36 (~0.6 s).</p>
                 <div class="lm-foot2" style="margin-top:10px">
                     <button class="lm-btn lm-btn-ghost" data-a="reset">Reset to default</button>

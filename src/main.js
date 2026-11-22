@@ -6,6 +6,7 @@ import { initPresent, showRoulette } from './presentUI.js';
 import { displayName } from './account.js';
 import { MAP_IDS } from './gameCore.js';
 import { tickRace, initRace } from './raceUI.js';
+import { tickChaos } from './chaosUI.js';
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay, tickReplay,
@@ -350,7 +351,7 @@ function frame(now) {
         ui.guide.tick();
         touch.tick();
         onlineGameOver();
-        renderHUD(); tickRace();
+        renderHUD(); tickRace(); tickChaos();
         view.update(dt, window.__luminaryPaused ? 0 : acc / STEP);
     } catch (err) {
         console.error('frame', err);

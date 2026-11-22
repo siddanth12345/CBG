@@ -7,7 +7,7 @@ import { ITEM_TYPES, ITEM_INFO, ITEM_INTERVAL_MIN, ITEM_INTERVAL_MAX } from '../
 
 // ---- saved custom settings (up to 10, stored on this device)
 const PKEY = 'luminary.presets.v1', MAX_PRESETS = 10;
-const SKEYS = ['teams', 'startDamage', 'stocks', 'mode', 'timeLimit', 'items', 'map', 'hazards', 'instantBlow'];
+const SKEYS = ['teams', 'startDamage', 'stocks', 'mode', 'timeLimit', 'items', 'map', 'hazards', 'instantBlow', 'chaos'];
 const loadPresets = () => { try { const a = JSON.parse(localStorage.getItem(PKEY) || '[]'); return Array.isArray(a) ? a.slice(0, MAX_PRESETS) : []; } catch (e) { return []; } };
 const savePresets = (a) => { try { localStorage.setItem(PKEY, JSON.stringify(a)); } catch (e) { /* storage blocked */ } };
 const pickSettings = (st) => JSON.parse(JSON.stringify(Object.fromEntries(SKEYS.map(k => [k, st[k]]))));
@@ -91,6 +91,7 @@ export class CustomUI {
         else if (a === 'smode') setLobbySetting('mode', b.dataset.v);
         else if (a === 'map') setLobbySetting('map', b.dataset.v);
         else if (a === 'haz') setLobbySetting('hazards', b.dataset.v === '1');
+        else if (a === 'chaos') setLobbySetting('chaos', b.dataset.v === '1');
                 else if (a === 'ib') setLobbySetting('instantBlow', b.dataset.v === '1');
         else if (a === 'itemson') this.setItems({ on: !this.items().on });
         else if (a === 'itemall') { const it = this.items(); this.setItems({ types: it.types.length === ITEM_TYPES.length ? [] : ITEM_TYPES.slice() }); }
@@ -150,6 +151,7 @@ export class CustomUI {
               <div class="lm-setrow"><span>Win by</span><span><button class="lm-btn ${!timer && !sudden ? '' : 'lm-btn-ghost'} lm-mini" data-a="smode" data-v="stock">Stocks</button> <button class="lm-btn ${st.mode === 'timer' ? '' : 'lm-btn-ghost'} lm-mini" data-a="smode" data-v="timer">Timer</button> <button class="lm-btn ${sudden ? '' : 'lm-btn-ghost'} lm-mini" data-a="smode" data-v="sudden">Sudden death</button> <button class="lm-btn ${race ? '' : 'lm-btn-ghost'} lm-mini" data-a="smode" data-v="race">Race</button></span></div>
               <div class="lm-setrow"><span>Map</span><span class="lm-maps"><button class="lm-btn ${st.map === 'frontier' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="frontier">€Frontier</button> <button class="lm-btn ${st.map === 'big' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="big">¥Frontier</button> <button class="lm-btn ${st.map === 'horizon' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="horizon">€Horizon</button> <button class="lm-btn ${st.map === 'bighorizon' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="bighorizon">¥Horizon</button> <button class="lm-btn ${st.map === 'lava' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="lava">€Magma Forge</button> <button class="lm-btn ${st.map === 'biglava' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="biglava">¥Magma Forge</button> <button class="lm-btn ${st.map === 'randS' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="randS">Random €</button> <button class="lm-btn ${st.map === 'randB' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="randB">Random ¥</button> <button class="lm-btn ${st.map === 'rand' ? '' : 'lm-btn-ghost'} lm-mini" data-a="map" data-v="rand">Random (all)</button></span></div>
               <div class="lm-setrow"><span>Hazards</span><span><button class="lm-btn ${st.hazards ? '' : 'lm-btn-ghost'} lm-mini" data-a="haz" data-v="1">On</button> <button class="lm-btn ${st.hazards ? 'lm-btn-ghost' : ''} lm-mini" data-a="haz" data-v="0">Off</button></span></div>
+              ${race ? '' : `<div class="lm-setrow"><span>Chaos mode <small>(a random arena twist every ~8 s)</small></span><span><button class="lm-btn ${st.chaos ? '' : 'lm-btn-ghost'} lm-mini" data-a="chaos" data-v="1">On</button> <button class="lm-btn ${st.chaos ? 'lm-btn-ghost' : ''} lm-mini" data-a="chaos" data-v="0">Off</button></span></div>`}
               ${race ? '' : `<div class="lm-setrow"><span>Instant final blow <small>(shows ∞, really 200%, 7x knockback)</small></span><span><button class="lm-btn ${st.instantBlow ? '' : 'lm-btn-ghost'} lm-mini" data-a="ib" data-v="1">On</button> <button class="lm-btn ${st.instantBlow ? 'lm-btn-ghost' : ''} lm-mini" data-a="ib" data-v="0">Off</button></span></div>`}
               ${race ? `<div class="lm-setrow"><span>Race rules</span><b>same random fighter • items only • no damage % • hazards on</b></div>` : sudden
                 ? `<div class="lm-setrow"><span>Starting damage %</span><b>200 locked</b></div><div class="lm-setrow"><span>Stocks</span><b>1 locked</b></div>`
