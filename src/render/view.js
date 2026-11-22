@@ -305,7 +305,54 @@ export class View {
     }
 
     /** Position the camera for this frame (without shake). */
+    /** pre-match cinematic (S.intro, driven by presentUI): orbit the map, then zoom to each spawn where a portal opens and the fighter steps out */
+    introCam(dt) {
+        const I = S.intro, t = Math.tan(FOV * Math.PI / 360);
+        const smooth01 = (x) => x * x * (3 - 2 * x);
+        if (!this._portal) {
+            const g = new THREE.Group(), mk = (r, tube, c) => new THREE.Mesh(new THREE.TorusGeometry(r, tube, 12, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2.4), toneMapped: false }));
+            g.userData.r1 = mk(78, 7, '#ffffff'); g.userData.r2 = mk(54, 5, '#ffffff');
+            g.userData.disc = new THREE.Mesh(new THREE.CircleGeometry(76, 40), new THREE.MeshBasicMaterial({ color: 0x05070d, transparent: true, opacity: 1, depthWrite: true }));
+            g.add(g.userData.disc, g.userData.r1, g.userData.r2); g.visible = false; this.scene.add(g); this._portal = g;
+        }
+        const span = Math.min(STAGE.width + 700, 4600), cxm = wx(STAGE.x + STAGE.width / 2), cym = wy(STAGE.y);
+        let pos, look;
+        const pg = this._portal; pg.visible = false;
+        for (let i = 0; i < this.models.length; i++) { const f = fighters[i], m = this.models[i]; if (!m) continue; m.root.visible = !!(f && f.active && I.rev && I.rev.includes(f.slot)); }
+        if (I.phase === 'orbit') {
+            const a = -0.9 + I.p * 2.4, R = span * 0.95, hgt = span * 0.42;
+            pos = new THREE.Vector3(cxm + Math.sin(a) * R * 0.75, cym + hgt * (1.15 - 0.45 * I.p), Math.cos(a) * R);
+            look = new THREE.Vector3(cxm, cym - 120, 0);
+        } else {
+            const f = fighters.find(q => q.slot === I.slot) || p1, m = this.models[fighters.indexOf(f)], p = I.p, e = smooth01(Math.min(1, p / 0.45));
+            const fx0 = wx(f.x), fy0 = wy(f.y), side = (I.i % 2 ? -1 : 1);
+            look = new THREE.Vector3(fx0, fy0 + 20 * e, 0);
+            pos = new THREE.Vector3(fx0 + side * (260 - 160 * e), fy0 + 120 + 40 * (1 - e) + 30 * p, 760 - 330 * e);
+            pg.position.set(fx0, fy0 + 6, -30); pg.rotation.y = 0;
+            const open = smooth01(Math.min(1, p / 0.22)) * (1 - smooth01(Math.max(0, (p - 0.72) / 0.28)));
+            pg.visible = open > 0.01; pg.scale.setScalar(Math.max(0.01, open) * 1.1);
+            pg.userData.r1.material.color.set(f.color || '#38bdf8').multiplyScalar(2.4); pg.userData.r2.material.color.set(f.color || '#38bdf8').multiplyScalar(2.4);
+            pg.userData.r1.rotation.z = p * 9; pg.userData.r2.rotation.z = -p * 12;
+            pg.userData.disc.material.opacity = 1 - smooth01(Math.min(1, Math.max(0, (p - 0.35) / 0.2)));
+            if (m && p > 0.26) { m.root.visible = true; const w = smooth01(Math.min(1, (p - 0.26) / 0.3)); m.root.position.z = -90 + 110 * w; m.root.scale.setScalar(0.4 + 0.6 * Math.min(1, w * 1.4)); }
+            if (m && p <= 0.26) m.root.visible = false;
+        }
+        if (!this._iPos) { this._iPos = pos.clone(); this._iLook = look.clone(); }
+        const k = 1 - Math.exp(-dt * (I.phase === 'orbit' ? 12 : 4.5));
+        this._iPos.lerp(pos, k); this._iLook.lerp(look, k);
+        this.zoomDist = this._iPos.distanceTo(this._iLook); this.basePos.copy(this._iPos);
+        this.camera.position.copy(this._iPos); this.camera.lookAt(this._iLook); this.camera.updateMatrixWorld(true);
+        this._introOn = true;
+    }
+    introEnd() {
+        this._introOn = false; this._iPos = null; this._iLook = null; if (this._portal) this._portal.visible = false;
+        for (const m of this.models) { m.root.visible = true; m.root.scale.setScalar(1); m.root.position.z = 0; }
+        this.camDist = 0;
+    }
+
     placeCamera(dt = 0.016) {
+        if (S.intro) { this.introCam(dt); return; }
+        if (this._introOn) this.introEnd();
         const d0 = this.fitDistance();
         const following = S.gameState === 'playing' || S.gameState === 'countdown' || !!S.replay;
         let goalDist = d0;

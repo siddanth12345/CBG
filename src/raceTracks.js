@@ -47,7 +47,7 @@ export function raceTrack(map) {
     add(230, 0, 1500, { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
     const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
-    let prev = { l: START.x, r: START.x + START.w, y: START.y };
+    let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
             const r = 450, cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.011, ph: R() * 1.5 };
@@ -56,9 +56,8 @@ export function raceTrack(map) {
         x += h.gap; y += h.rise;
         const p = { x, y, w: h.w }; if (h.dyn) { p.dyn = h.dyn; p.by = y; }
         const n = { l: x, r: x + h.w, y, dyn: h.dyn || 0 };
-        platforms.push(p); nodes.push(n);
+        platforms.push(p); nodes.push(n); n.p = p; if (!h.dyn) { nrm++; if (nrm % 10 === 0) n.cp = 1; }  // a checkpoint on every 10th ordinary platform (trap / plus platforms are skipped, the next normal one takes it)
         if (h.cloud) obs.cloud.push({ x0: prev.r - 10, x1: x + 10, y0: Math.min(prev.y, y) - 340, y1: y + 30 });
-        if (i > 12 && i % 3 === 0 && !h.fin) { const a = prev.r - 500, b = x + 500, dir = i % 2 ? 1 : -1; obs.shot.push({ x0: a, x1: b, y: Math.min(prev.y, y) - 70 - R() * 60, dir, sp: 7 + R() * 3, n: 2, off: Math.round(R() * 400) }); }      // projectile lanes across the gaps
         x += h.w; prev = n;
     });
     const last = platforms[platforms.length - 1];
@@ -74,4 +73,4 @@ export const spinAngle = (o, t) => o.ph + o.sp * t;
 export const shotPos = (o, k, t) => { const span = o.x1 - o.x0, pos = (t * o.sp + o.off + k * span / o.n) % span; return o.dir > 0 ? o.x0 + pos : o.x1 - pos; };
 
 /** a plus-sign platform is solid while one of its arms is within 30 degrees of level, and gone while it turns through the diagonal */
-export const plusSolid = (o, t) => { const m = (((spinAngle(o, t) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.52; };
+export const plusSolid = (o, t) => true; const _plusSolidOld = (o, t) => { const m = (((spinAngle(o, t) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.52; };

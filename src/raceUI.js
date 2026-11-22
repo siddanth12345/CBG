@@ -5,7 +5,7 @@ let box = null, bar = null, info = null;
 const dots = new Map();
 function ensure() {
     if (box) return;
-    box = document.createElement('div');
+    box = document.createElement('div'); box.id = 'raceProgBox';
     box.style.cssText = 'position:fixed;left:50%;top:124px;transform:translateX(-50%);width:min(560px,70vw);z-index:40;pointer-events:none;font:600 13px system-ui,sans-serif;color:#e2e8f0;text-align:center;display:none';
     info = document.createElement('div'); info.style.cssText = 'text-shadow:0 1px 4px #000;margin-bottom:6px;letter-spacing:.08em';
     bar = document.createElement('div'); bar.style.cssText = 'position:relative;height:10px;border-radius:6px;background:rgba(15,23,42,.75);border:1px solid rgba(148,163,184,.4)';

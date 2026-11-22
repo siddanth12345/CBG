@@ -1336,7 +1336,7 @@ export class FighterModel {
                 this.lblName.material.map.needsUpdate = true;
                 this.lblName.scale.set(270, 45, 1);        // always the canvas's own 6:1 shape, so the text is never stretched
             }
-            this.lblName.visible = show && !!name;
+            this.lblName.visible = show && !!name && !S.intro;
             // hang/stun labels sit above the bigger name plate
             this.lblHang.position.y = show && name ? 96 : 52;
             this.lblStun.position.y = show && name ? 96 : 52;

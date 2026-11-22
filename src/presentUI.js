@@ -1,5 +1,5 @@
 // Pre-match: the character roulette wheel (races) and the player presentation (portal, walk-in, zoom, K/D).
-import { setPresentHook } from './gameCore.js';
+import { setPresentHook, S } from './gameCore.js';
 import { CHAR_IDS, CHARS } from './characters.js';
 import { getMeta } from './meta.js';
 
@@ -40,7 +40,11 @@ function css() {
 .pp-char{font-size:clamp(18px,3.6vmin,30px);font-weight:800;margin-top:6px}
 .pp-role{color:#94a3b8;font-weight:600;font-size:clamp(13px,2.4vmin,18px)}
 .pp-kd{margin-top:12px;display:inline-block;padding:6px 16px;border-radius:12px;background:#0f172a;border:2px solid var(--c);font-weight:900;font-size:clamp(16px,3vmin,24px)}
-.pp-count{position:absolute;left:18px;top:14px;color:#64748b;font-weight:800;letter-spacing:.14em}`;
+.pp-count{position:absolute;left:18px;top:14px;color:#cbd5e1;font-weight:800;letter-spacing:.14em;z-index:2;text-shadow:0 0 8px #000}
+.pz-3d{background:none;pointer-events:none;align-items:flex-end;justify-content:flex-start}
+.cbg-intro #gameHud,.cbg-intro #aimMatrixHud,.cbg-intro #inGameMenuContainer,.cbg-intro #raceProgBox{visibility:hidden}
+.pp-bar{position:absolute;left:0;right:0;height:11vh;background:#000}.pp-bar.t{top:0}.pp-bar.b{bottom:0}
+.pp-card3{position:absolute;left:6%;bottom:15vh;opacity:0;transform:translateY(14px);transition:all .45s;text-shadow:0 2px 12px #000}.pp-card3.on{opacity:1;transform:none}`;
     document.head.appendChild(st);
 }
 const overlay = () => { css(); const o = document.createElement('div'); o.className = 'pz'; document.body.appendChild(o); return o; };
@@ -49,11 +53,10 @@ const overlay = () => { css(); const o = document.createElement('div'); o.classN
 export function showRoulette(chosen, done, title = 'RACE CHARACTER') {
     const o = overlay(), ids = CHAR_IDS, n = ids.length, seg = 360 / n, idx = Math.max(0, ids.indexOf(chosen));
     const stops = ids.map((id, i) => `${i % 2 ? '#111a2e' : '#1b2740'} ${i * seg}deg ${(i + 1) * seg}deg`).join(',');
-    o.innerHTML = `<div class="rl-wrap"><div class="rl-title">${esc(title)}</div><div class="rl-box"><div class="rl-ptr"></div><div class="rl-hub"></div><div class="rl-wheel" style="background:conic-gradient(from 0deg,${stops})">${ids.map((id, i) => `<div style="position:absolute;left:50%;top:50%;width:0;height:0;transform:rotate(${i * seg + seg / 2 - 90}deg)"><div class="rl-lbl" style="left:70px;top:-0.6em;color:${colOf(id)};${(i * seg + seg / 2) > 180 ? 'transform:rotate(180deg);transform-origin:50% 50%' : ''}">${esc(CHARS[id].name.toUpperCase())}</div></div>`).join('')}</div></div><div class="rl-res">&nbsp;</div><button class="pz-skip">Skip ▶</button></div>`;
+    o.innerHTML = `<div class="rl-wrap"><div class="rl-title">${esc(title)}</div><div class="rl-box"><div class="rl-ptr"></div><div class="rl-hub"></div><div class="rl-wheel" style="background:conic-gradient(from 0deg,${stops})">${ids.map((id, i) => `<div style="position:absolute;left:50%;top:50%;width:0;height:0;transform:rotate(${i * seg + seg / 2 - 90}deg)"><div class="rl-lbl" style="left:70px;top:-0.6em;color:${colOf(id)};${(i * seg + seg / 2) > 180 ? 'transform:rotate(180deg);transform-origin:50% 50%' : ''}">${esc(CHARS[id].name.toUpperCase())}</div></div>`).join('')}</div></div><div class="rl-res">&nbsp;</div></div>`;
     const wheel = o.querySelector('.rl-wheel'), res = o.querySelector('.rl-res');
     let finished = false;
     const end = () => { if (finished) return; finished = true; o.remove(); done && done(); };
-    o.querySelector('.pz-skip').addEventListener('click', end);
     // the pointer is at the top (0deg): bring segment idx's centre there after a few full turns
     const target = 360 * 6 - (idx * seg + seg / 2) + (Math.random() - 0.5) * seg * 0.6;
     requestAnimationFrame(() => requestAnimationFrame(() => { wheel.style.transform = `rotate(${target}deg)`; }));
@@ -61,27 +64,35 @@ export function showRoulette(chosen, done, title = 'RACE CHARACTER') {
     setTimeout(end, 6900);
 }
 
-/** each player in turn: a portal opens, they walk in, the view zooms to a card with name, character and K/D */
+/** 3D pre-match cinematic (no skip): the camera orbits the arena, then visits every spawn: a portal opens, the fighter steps out, and a card shows name, character and K/D for 2 s */
 export function present(list, done) {
-    const o = overlay(), per = list.length > 4 ? 1250 : 1750, m = getMeta();
+    css();
+    const o = document.createElement('div'); o.className = 'pz pz-3d'; document.body.appendChild(o);
+    const m = getMeta(), ORBIT = 3200, PER = 2000, T0 = performance.now();
     const kd = (p) => p.bot ? 'K/D n/a' : 'K/D ' + ((m.kills || 0) + ' / ' + (m.deaths || 0)) + ((m.deaths || 0) ? '  (' + ((m.kills || 0) / m.deaths).toFixed(2) + ')' : '');
-    let i = 0, finished = false, timers = [];
-    const end = () => { if (finished) return; finished = true; timers.forEach(clearTimeout); o.remove(); window.removeEventListener('keydown', onKey, true); done(); };
-    const onKey = (e) => { if (['Enter', 'Space', 'Escape'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); end(); } };
-    window.addEventListener('keydown', onKey, true);
-    const later = (fn, ms) => timers.push(setTimeout(fn, ms));
-    const show = () => {
-        if (finished) return; if (i >= list.length) { end(); return; }
-        const p = list[i], c = p.color || '#38bdf8', ch = CHARS[p.char] || CHARS.luminent;
-        o.innerHTML = `<div class="pp-count">PLAYER ${i + 1} / ${list.length}</div><div class="pp-stage" style="--c:${esc(c)};--sk:${colOf(p.char)}"><div class="pp-portal"><i></i><i></i><i></i><b></b></div><div class="pp-fig"><div class="h"></div><div class="b"></div><div class="l"></div><div class="r"></div></div><div class="pp-card"><div class="pp-name" style="color:${esc(c)}">${esc(p.name || 'Player')}</div><div class="pp-char" style="color:${colOf(p.char)}">${esc(ch.name)}</div><div class="pp-role">${esc(ch.role)}</div><div class="pp-kd">${esc(kd(p))}</div></div></div><button class="pz-skip">Skip ▶</button>`;
-        o.querySelector('.pz-skip').addEventListener('click', end);
-        const portal = o.querySelector('.pp-portal'), fig = o.querySelector('.pp-fig'), card = o.querySelector('.pp-card'), stage = o.querySelector('.pp-stage');
-        const k = per / 1750;
-        later(() => { portal.style.transform = 'scale(1)'; }, 40);
-        later(() => { fig.style.transform = `translateX(${Math.round(stage.clientWidth * 0.70)}px)`; }, 260 * k);
-        later(() => { fig.style.opacity = 0; stage.style.transform = 'scale(1.18)'; card.classList.add('on'); }, 1050 * k);
-        later(() => { i++; show(); }, per);
+    document.body.classList.add('cbg-intro');
+    o.innerHTML = '<div class="pp-bar t"></div><div class="pp-bar b"></div><div class="pp-count"></div><div class="pp-card3"></div>';
+    const cnt = o.querySelector('.pp-count'), card = o.querySelector('.pp-card3');
+    let shown = -2, raf = 0, ended = false;
+    const end = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); S.intro = null; document.body.classList.remove('cbg-intro'); o.remove(); done(); };
+    const tick = () => {
+        if (ended) return;
+        const el = performance.now() - T0;
+        if (el < ORBIT) { S.intro = { phase: 'orbit', p: el / ORBIT, rev: [] }; if (shown !== -1) { shown = -1; cnt.textContent = 'THE ARENA'; card.classList.remove('on'); } }
+        else {
+            const k = Math.floor((el - ORBIT) / PER);
+            if (k >= list.length) { end(); return; }
+            const p = list[k], rev = list.slice(0, k).map(q => q.slot);
+            S.intro = { phase: 'focus', slot: p.slot, i: k, p: ((el - ORBIT) % PER) / PER, rev };
+            if (shown !== k) {
+                shown = k; const c = p.color || '#38bdf8', ch = CHARS[p.char] || CHARS.luminent;
+                cnt.textContent = 'PLAYER ' + (k + 1) + ' / ' + list.length; card.classList.remove('on');
+                card.innerHTML = `<div class="pp-name" style="color:${esc(c)};--c:${esc(c)}">${esc(p.name || 'Player')}</div><div class="pp-char" style="color:${colOf(p.char)}">${esc(ch.name)}</div><div class="pp-role">${esc(ch.role)}</div><div class="pp-kd" style="--c:${esc(c)}">${esc(kd(p))}</div>`;
+                setTimeout(() => { if (shown === k) card.classList.add('on'); }, 500);
+            }
+        }
+        raf = requestAnimationFrame(tick);
     };
-    show();
+    tick();
 }
 export function initPresent() { setPresentHook(present); }

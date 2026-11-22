@@ -25,9 +25,20 @@ export function buildRaceObs(root) {
     ups.push((t) => { for (const s of plus) { const p = s.o.p; s.grp.position.set(wx(p.x + p.w / 2), wy(s.o.by) - 20, 0); s.grp.rotation.z = -spinAngle(s.o, t); } });
     // ---- projectile lanes
     const shotGeo = new THREE.SphereGeometry(24, 12, 10), shotCol = theme === 'lava' ? '#ff5a1a' : theme === 'horizon' ? '#7dd3fc' : '#f472b6';
-    const shots = [];
-    for (const o of O.shot) for (let k = 0; k < o.n; k++) { const m = new THREE.Mesh(shotGeo, glow(shotCol, 2.6)); const tail = new THREE.Mesh(new THREE.ConeGeometry(18, 80, 8), glow(shotCol, 1.4)); tail.rotation.z = o.dir > 0 ? Math.PI / 2 : -Math.PI / 2; tail.position.x = -o.dir * 52; m.add(tail); g.add(m); shots.push({ o, k, m }); }
-    ups.push((t) => { for (const s of shots) s.m.position.set(wx(shotPos(s.o, s.k, t)), wy(s.o.y), 0); });
+    const shots = [], tailGeo = new THREE.ConeGeometry(18, 80, 8);
+    ups.push(() => {
+        const L = (S.race && S.race.shots) || [];
+        while (shots.length < L.length) { const m = new THREE.Mesh(shotGeo, glow(shotCol, 2.6)); const tl = new THREE.Mesh(tailGeo, glow(shotCol, 1.4)); tl.rotation.z = -Math.PI / 2; tl.position.x = 52; m.add(tl); g.add(m); shots.push(m); }
+        shots.forEach((m, i) => { const q = L[i]; m.visible = !!q; if (q) { m.position.set(wx(q.x), wy(q.y), 0); const sc = q.k === 1 ? 1.25 : q.k === 2 ? 0.9 : 1; m.scale.set(sc, sc, sc); m.material.color.set(q.k === 2 ? '#a78bfa' : q.k === 1 ? '#fde047' : shotCol).multiplyScalar(2.6); } });
+    });
+    // ---- checkpoint flags (every 10th platform; they ride their platform when it slides)
+    const flags = (S.race.nodes || []).filter(n => n.cp).map(n => {
+        const fg = new THREE.Group(), col = new THREE.Color('#38bdf8').multiplyScalar(2.2);
+        const pole = new THREE.Mesh(new THREE.BoxGeometry(14, 90, 14), new THREE.MeshBasicMaterial({ color: col, toneMapped: false })); pole.position.y = 45;
+        const fl = new THREE.Mesh(new THREE.PlaneGeometry(46, 26), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, toneMapped: false })); fl.position.set(24, 76, 0);
+        fg.add(pole, fl); g.add(fg); return { n, fg };
+    });
+    ups.push(() => { for (const f of flags) f.fg.position.set(wx((f.n.l + f.n.r) / 2), wy(f.n.y), 0); });
     // ---- clouds (zones where you sink slowly and cannot jump)
     const puffGeo = new THREE.SphereGeometry(1, 10, 8), puffMat = new THREE.MeshBasicMaterial({ color: 0xf1f5f9, transparent: true, opacity: 0.62, depthWrite: false });
     for (const z of O.cloud) {

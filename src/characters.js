@@ -132,7 +132,7 @@ export const BRIEF = {
     terra: {
         N: ['Boulder', 'Hold F to throw a heavy rock in an arc. It breaks shields and knocks back normally.'],
         S: ['Boulder Roll', 'Tap side F for an armoured roll. Rocks fall along the path you rolled.'],
-        U: ['Rubble Launch', 'Tap up F for a blast under your feet, then a slow armoured lift with a hit at the top.'],
+        U: ['Rubble Launch', 'Tap up F for a blast under your feet, then a slow lift (no armour) with a hit at the top.'],
         DG: ['Quake', 'On the ground, down F winds up (you are armoured), then a big pound. Knockback is soft.'],
         DA: ['Landslide', 'In the air, down F is one heavy drop. Knockback is soft.'],
         M: ['Rock Melees', 'Side (ground or air): a haymaker with a rock in his fist. Running side: a body slam on the floor that launches everyone near him. Backward: a spin with a much larger rock. Up: an uppercut. Down on the ground: a stomp with a shockwave both ways. Down in the air: he turns to face the screen, holds a rock overhead, flips and slams it down onto the foe. Neutral melee still throws a rock.'],

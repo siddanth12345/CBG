@@ -109,7 +109,7 @@ export class TrainUI {
         const a = b.dataset.a;
         if (a === 'item') { spawnTrainItem(b.dataset.id); return; }
         if (a === 'race') {                                // practice race on the chosen stage: your character vs the training bot (same character for everyone)
-            const t = snap(), map = { normal: 'frontier', lobby: 'big' }[t.stage] || t.stage, ch = t.char;
+            const t = snap(), map = { normal: 'frontier', lobby: 'big' }[t.stage] || String(t.stage).replace(/^race_/, ''), ch = t.char;
             const lvl = ['static', 'frozen'].includes(t.botType) ? 'medium' : t.botType;
             this.close(); S.ranked = false; S.freeBot = false; S.rankBot = null;
             startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 5, map, race: true, hazards: true, items: { on: false, types: [] },
@@ -205,6 +205,9 @@ export class TrainUI {
                     <button class="lm-btn lm-mini ${t.stage === 'bighorizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="bighorizon">¥Horizon</button>
                     <button class="lm-btn lm-mini ${t.stage === 'lava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="lava">€Magma Forge</button>
                     <button class="lm-btn lm-mini ${t.stage === 'biglava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="biglava">¥Magma Forge</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'race_frontier' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_frontier">Race track: Frontier</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'race_horizon' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_horizon">Race track: Horizon</button>
+                    <button class="lm-btn lm-mini ${t.stage === 'race_lava' ? '' : 'lm-btn-ghost'}" data-a="stage" data-k="stage" data-v="race_lava">Race track: Magma</button>
                 </span></div>
                 <div class="lm-setrow"><span>Hazards</span><span>
                     <button class="lm-btn lm-mini ${t.hazards ? '' : 'lm-btn-ghost'}" data-hz="1">On</button>

@@ -56,7 +56,6 @@ function addRaceProps(st) {
     beam.position.set(wx(fx0), wy(fy) + 200, 0); g.add(beam);
     // start line + checkpoint flags
     post(STAGE.x + STAGE.width - 120, STAGE.y, 140, '#4ade80');
-    for (const n of R.nodes.slice(1, -1)) { const cx = (n.l + n.r) / 2; post(cx, n.y, 90, '#38bdf8'); const fl = new THREE.Mesh(new THREE.PlaneGeometry(46, 26), new THREE.MeshBasicMaterial({ color: new THREE.Color('#38bdf8').multiplyScalar(2.2), side: THREE.DoubleSide, toneMapped: false })); fl.position.set(wx(cx) + 24, wy(n.y) + 76, 0); g.add(fl); }
 }
 
 function buildStageBase(scene) {
