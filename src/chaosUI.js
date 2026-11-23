@@ -8,8 +8,8 @@ function css() {
 @keyframes chTick{0%{transform:scale(1.5);opacity:.4}100%{transform:scale(1);opacity:1}}`;
     document.head.appendChild(st);
 }
-const ICON = { lowgrav: '🌙', highgrav: '🪨', kb: '💥', meteors: '☄️', items: '🎁', speed: '💨', slowmo: '🐌', ice: '🧊', heal: '💖', poison: '☠️', lowkb: '🪶', kb3: '🔥', infjump: '🦘', shove: '👋', wind: '🌬️', floaty: '🎈', dive: '⚓', dark: '🔦', peace: '🕊️', spike: '📈', swap: '🔀', scramble: '🌀', armor: '🛡️', mud: '🟤', fullheal: '✨', moonturbo: '🚀' };
-const TINT = { ice: '125,211,252', poison: '74,222,128', heal: '244,114,182', mud: '120,83,45', slowmo: '96,165,250', lowgrav: '167,139,250', moonturbo: '167,139,250', highgrav: '120,113,108', speed: '251,191,36', wind: '226,232,240', kb3: '248,113,113', kb: '248,113,113', peace: '134,239,172', armor: '148,163,184' };
+const ICON = { lowgrav: '🌙', highgrav: '🪨', kb: '💥', meteors: '☄️', items: '🎁', speed: '💨', slowmo: '🐌', ice: '🧊', heal: '💖', poison: '☠️', lowkb: '🪶', kb3: '🔥', infjump: '🦘', shove: '👋', floaty: '🎈', dive: '⚓', dark: '🔦', peace: '🕊️', spike: '📈', swap: '🔀', scramble: '🌀', armor: '🛡️', mud: '🟤', fullheal: '✨', moonturbo: '🚀' };
+const TINT = { ice: '125,211,252', poison: '74,222,128', heal: '244,114,182', mud: '120,83,45', slowmo: '96,165,250', lowgrav: '167,139,250', moonturbo: '167,139,250', highgrav: '120,113,108', speed: '251,191,36', kb3: '248,113,113', kb: '248,113,113', peace: '134,239,172', armor: '148,163,184' };
 let tint = null;
 export function tickChaos() {
     const C = S.chaos, on = !!(C && S.gameState === 'playing' && S.match);
@@ -20,7 +20,7 @@ export function tickChaos() {
         box.style.cssText = 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:41;pointer-events:none;font:800 14px system-ui,sans-serif;letter-spacing:.12em;text-align:center;color:#fff;text-shadow:0 2px 10px #000;display:none;min-width:260px';
         document.body.appendChild(box);
         pop = document.createElement('div');
-        pop.style.cssText = 'position:fixed;left:50%;top:38%;z-index:42;pointer-events:none;font:900 clamp(30px,7vw,70px) system-ui,sans-serif;letter-spacing:.08em;color:#fff;text-shadow:0 0 28px #fb7185,0 4px 14px #000;text-align:center;white-space:nowrap;display:none';
+        pop.style.cssText = 'position:fixed;left:50%;top:178px;z-index:42;pointer-events:none;font:900 clamp(30px,7vw,70px) system-ui,sans-serif;letter-spacing:.08em;color:#fff;text-shadow:0 0 28px #fb7185,0 4px 14px #000;text-align:center;white-space:nowrap;display:none';
         document.body.appendChild(pop);
         dark = document.createElement('div');
         dark.style.cssText = 'position:fixed;inset:0;z-index:30;pointer-events:none;background:radial-gradient(circle at 50% 55%,rgba(0,0,0,0) 8%,rgba(0,0,0,.93) 38%);display:none';
@@ -39,7 +39,7 @@ export function tickChaos() {
     const key = h + (C.next <= 180 ? C.next : '');
     if (key !== lastHtml) { box.innerHTML = h; lastHtml = key; }
     if (C.shown && C.shown.n !== lastN) {
-        lastN = C.shown.n; pop.textContent = (ICON[C.shown.ev] || '') + ' ' + CHAOS_EVENTS[C.shown.ev]; pop.style.display = 'block'; pop.style.animation = 'none'; void pop.offsetWidth; pop.style.animation = 'chPop 1.8s ease-out forwards';
+        lastN = C.shown.n; pop.style.fontSize = C.n >= 6 ? 'clamp(10px,2.3vw,23px)' : 'clamp(30px,7vw,70px)'; pop.textContent = (ICON[C.shown.ev] || '') + ' ' + CHAOS_EVENTS[C.shown.ev]; pop.style.display = 'block'; pop.style.animation = 'none'; void pop.offsetWidth; pop.style.animation = 'chPop 1.8s ease-out forwards';
         clearTimeout(popTimer); popTimer = setTimeout(() => { pop.style.display = 'none'; }, 1850);
     }
 }

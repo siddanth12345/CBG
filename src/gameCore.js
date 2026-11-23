@@ -140,6 +140,12 @@ const ARENAS = {
         bz: { left: -380, right: 4180, top: -283, bottom: 2423 },       // kill zone 10% taller than before
         platforms: () => [],
     },
+    hill: {                                                                  // Sunny Hill (King of the Hill): the plain small stage plus three stacked soft platforms that make the hill
+        world: { width: 3800, height: 2100 },
+        stage: { x: 1140, y: 1250, width: 1520, height: 90 },
+        bz: { left: -380, right: 4180, top: -283, bottom: 2423 },
+        platforms: (st) => { const cx = st.x + st.width / 2; return [[900, 150], [580, 300], [300, 450]].map(([w, up]) => ({ x: Math.round(cx - w / 2), y: st.y - up, w })); },
+    },
     lobby: {
         // 0.7x the old big arena horizontally, then 1.3x wider side to side (stage, kill zone and platforms); same height
         world: { width: 8645, height: 5250 },
@@ -167,15 +173,16 @@ export function setArena(kind, theme = 'frontier') {
         const cx = STAGE.x + STAGE.width / 2, y0 = STAGE.y, k = 0.7, b = BLAST_ZONES;
         b.left = cx - (cx - b.left) * k; b.right = cx + (b.right - cx) * k; b.top = y0 - (y0 - b.top) * k; b.bottom = y0 + (b.bottom - y0) * k;
     }
-    S.arena = kind === 'lobby' ? 'lobby' : 'normal'; S.race = null;
-    S.theme = theme === 'horizon' ? 'horizon' : theme === 'lava' ? 'lava' : 'frontier';          // look only: Horizon has the exact same collision as Frontier
+    S.arena = kind === 'lobby' ? 'lobby' : 'normal'; S.arenaKind = kind; S.race = null;
+    S.theme = theme === 'horizon' ? 'horizon' : theme === 'lava' ? 'lava' : theme === 'sunny' ? 'sunny' : 'frontier';          // look only: Horizon has the exact same collision as Frontier
     S.arenaVersion = (S.arenaVersion || 0) + 1;
 }
 /** map ids: frontier (small), big (big Frontier), horizon (small), bighorizon, and the random picks rand / randS / randB */
 export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon', 'lava', 'biglava'];
 export const HAZ_IDS = ['frontierH', 'bigH', 'horizonH', 'bighorizonH'];      // old ids of the hazard maps: hazards are an option now, these just load the plain map
-export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', lava: '€Magma Forge', biglava: '¥Magma Forge', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
-export const cleanMap = (m) => HAZ_IDS.includes(m) ? m.replace(/H$/, '') : (MAP_IDS.includes(m) || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
+export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', lava: '€Magma Forge', biglava: '¥Magma Forge', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', sunny: '€Sunny Hill', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
+export const HILL_MAP = 'sunny';                                     // King of the Hill only; never in the random picks
+export const cleanMap = (m) => HAZ_IDS.includes(m) ? m.replace(/H$/, '') : (MAP_IDS.includes(m) || m === HILL_MAP || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
 export function resolveMap(m) {
     m = cleanMap(m);
     const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -187,6 +194,7 @@ export function resolveMap(m) {
 export function setArenaByMap(m) {
     m = resolveMap(m);
     const base = m.replace(/H$/, '');
+    if (base === HILL_MAP) { setArena('hill', 'sunny'); resetHazards(); return m; }
     setArena(base === 'frontier' || base === 'horizon' || base === 'lava' ? 'normal' : 'lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     resetHazards();
     return m;
@@ -3482,7 +3490,7 @@ function createParticles(x, y, color, count = 10) {
         // rate-limit: at most ~20 particle messages queued (no O(n) filter each call)
         if ((S._pOut = (S._pOut || 0) + 1) <= 20) outbox.push({ k: 'p', e: [x, y, color, count] });
     }
-    const room = Math.max(0, Math.round((lod >= 0.9 ? 120 : lod >= 0.45 ? 70 : 40) * lod) - particles.length);
+    const room = Math.max(5, Math.round((lod >= 0.9 ? 120 : lod >= 0.45 ? 70 : 40) * lod) - particles.length);      // always a few free slots, so the effect of a block / shield hit is never skipped
     count = Math.min(count, Math.min(lod >= 0.9 ? 14 : 8, room));
     for (let i = 0; i < count; i++) {
         particles.push({
@@ -3546,9 +3554,10 @@ const REST_LIFE = { BALL: 3600, STRAWBERRY: 1800, BALLOON: 1800, FIRESTICK: 1800
 const STICK_MAX_LEN = 2.5;
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
-function spawnItem(type, scatter) {
+function spawnItem(type, scatter, only) {
     // only ever above a surface: the main stage or one of the soft platforms (race: spread along the track's platforms)
-    const surfaces = S.race ? STAGE.platforms.slice() : [{ x: STAGE.x, w: STAGE.width, y: STAGE.y }, ...STAGE.platforms];
+    const surfaces = only || (S.race ? STAGE.platforms.slice() : [{ x: STAGE.x, w: STAGE.width, y: STAGE.y }, ...STAGE.platforms]);
+    if (!surfaces.length) return;
     const sf = surfaces[Math.random() * surfaces.length | 0];
     const pad = Math.min(60, sf.w * 0.15);
     const x = sf.x + pad + Math.random() * Math.max(10, sf.w - pad * 2);
@@ -3693,7 +3702,22 @@ function updateItems() {
     if (cfg && cfg.on && cfg.types.length && S.gameState === 'playing') {
         if (--S.itemTimer <= 0) {
             S.itemTimer = Math.max(60, cfg.interval * 60);
-            if (items.filter(i => i.st !== 'held' && i.st !== 'dead').length < (S.race ? 12 : 4)) spawnItem(cfg.types[Math.floor(Math.random() * cfg.types.length)]);
+            const pick = () => cfg.types[Math.floor(Math.random() * cfg.types.length)];
+            if (S.race) {                                            // race: items only appear ahead of a racer, inside what he can see coming (about 7 platforms), and at most 3 in front of each person
+                const AHEAD = 4500, loose = items.filter(i => i.st !== 'held' && i.st !== 'dead');
+                for (const f of fighters) {
+                    if (!f.active || f.out || f._finT) continue;
+                    const mine = loose.filter(i => i.x > f.x - 150 && i.x < f.x + AHEAD).length;
+                    if (mine >= 3) continue;
+                    const cand = STAGE.platforms.filter(p => !p.dyn && p.x > f.x + 350 && p.x + p.w < f.x + AHEAD && !loose.some(i => i.x > p.x && i.x < p.x + p.w));
+                    if (cand.length) spawnItem(pick(), false, cand);
+                }
+            } else {                                                 // normal matches: only on the surfaces somebody can see (near a fighter)
+                if (items.filter(i => i.st !== 'held' && i.st !== 'dead').length < 4) {
+                    const alive = fighters.filter(f => f.active && !f.out), near = (sf) => alive.some(f => Math.abs(f.x - (sf.x + sf.w / 2)) < 1900);
+                    spawnItem(pick(), false, [{ x: STAGE.x, w: STAGE.width, y: STAGE.y }, ...STAGE.platforms].filter(near));
+                }
+            }
         }
     }
     for (let n = items.length - 1; n >= 0; n--) {
@@ -3889,6 +3913,37 @@ function beginSuddenDeath(tied) {
     runCountdown();
 }
 /** timer matches: fewest deaths wins. A tie for first is sudden death. */
+// ------------------------------------------------------------ King of the Hill / Tag (timer matches with their own score)
+export const KOTH_TARGET = 50 * 60;                                          // 50 s on the hill wins at once
+const TAG_IMMUNE = 150;                                                      // the one who just passed the tag can't be tagged straight back
+function initModeState() {
+    const sub = S.match && S.match.sub; S.md = null; if (!sub) return;
+    S.md = { sub, sc: {}, it: -1, imm: 0, zone: sub === 'koth' ? { x: STAGE.x + STAGE.width / 2, y: STAGE.y - 450, r: 190 } : null, who: -1 };
+}
+const modeScore = (f) => S.md ? (S.md.sc[f.slot] || 0) : (f.deaths || 0);
+function tickMode() {
+    const M = S.md; if (!M || S.sudden || S.gameState !== 'playing' || S.online === 'guest') return;
+    const live = fighters.filter(f => f.active && !f.out && !(f.spawnT > 0));
+    if (M.sub === 'koth') {
+        const z = M.zone; z.x = STAGE.x + STAGE.width / 2; z.y = STAGE.y - 450;
+        const inside = live.filter(f => Math.abs(f.x - z.x) < z.r && Math.abs((f.y + f.height / 2) - z.y) < 90);
+        const teamOf = (f) => S.match.teams && f.team ? 't:' + f.team : 'p:' + f.slot;
+        const owners = new Set(inside.map(teamOf));
+        M.who = owners.size === 1 ? inside[0].slot : -1;                     // contested = nobody scores
+        if (M.who >= 0) { for (const f of inside) { M.sc[f.slot] = (M.sc[f.slot] || 0) + 1; if (M.sc[f.slot] >= KOTH_TARGET) S.timeLeft = Math.min(S.timeLeft, 1); } }
+    } else {
+        const act = fighters.filter(f => f.active && !f.out);
+        if (M.it < 0 || !act.some(f => f.slot === M.it)) { const pick = act[Math.floor(Math.random() * act.length)]; M.it = pick ? pick.slot : -1; M.imm = 90; }
+        if (M.imm > 0) M.imm--;
+        const it = act.find(f => f.slot === M.it); if (!it) return;
+        M.sc[it.slot] = (M.sc[it.slot] || 0) + 1;
+        if (M.imm > 0 || it.spawnT > 0) return;
+        for (const o of live) {
+            if (o === it || (S.match.teams && o.team && o.team === it.team) || o.invincibleTimer > 0 && o.spawnT > 0) continue;
+            if (Math.abs(o.x - it.x) < 85 && Math.abs(o.y - it.y) < 95) { M.it = o.slot; M.imm = TAG_IMMUNE; fx('hit', o.x, o.y, 18, 0); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 5); notify(`${o.name} is IT!`); break; }
+        }
+    }
+}
 function finishTimer() {
     if (!S.match || S.gameState !== 'playing' || S.sudden) return;
     if (S.match.race) { if (!S.race.first) { const st = raceStandings(); S.race.first = st[0] && st[0].f; } endRace(); return; }
@@ -3897,7 +3952,7 @@ function finishTimer() {
     const score = new Map(), members = new Map();
     for (const f of live) {
         const k = keyOf(f);
-        score.set(k, (score.get(k) || 0) + (f.deaths || 0));
+        score.set(k, (score.get(k) || 0) + (S.md ? (S.md.sub === 'koth' ? -modeScore(f) : modeScore(f)) : (f.deaths || 0)));
         if (!members.has(k)) members.set(k, []);
         members.get(k).push(f);
     }
@@ -4709,12 +4764,12 @@ function meteorBurst(m, dmg = 12) {
     fx('meteorend', m.x, m.y, 0, 0, m.id); fx('explosion', m.x, m.y, 100, 0.3, 'fire'); createParticles(m.x, m.y, '#fb923c', 16); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 11);
     for (const f of fighters) if (isAlive(f) && f.invincibleTimer <= 0 && Math.hypot(f.x - m.x, f.y - m.y) < 110 + f.width * 0.4) hazardHit(f, { kind: 'meteor', x: m.x, dmg });
 }
-function spawnMeteor() {
-    const K = Math.max(1, WORLD.height / 2100), vx = 8.5, vy = 11.5, sy = STAGE.y - 1450 * K, alive = fighters.filter(isAlive);
+function spawnMeteor(rain) {
+    const K = Math.max(1, WORLD.height / 2100), vx = rain ? 9 : 8.5, vy = rain ? 17 : 11.5, sy = STAGE.y - (rain ? 700 : 1450) * K, alive = fighters.filter(isAlive);     // Chaos rain starts close above the action: no long wait before it lands
     let tx, ty;
-    if (alive.length && Math.random() < 0.55) { const f = alive[Math.floor(Math.random() * alive.length)]; tx = f.x + (Math.random() - 0.5) * 120; ty = f.y; }
+    if (alive.length && Math.random() < (rain ? 0.7 : 0.55)) { const f = alive[Math.floor(Math.random() * alive.length)]; tx = f.x + (Math.random() - 0.5) * 120; ty = f.y; }
     else { const q = pickSurface(hazSurfaces()); tx = q.x0 + Math.random() * (q.x1 - q.x0); ty = q.y - 20; }
-    const T = Math.max(20, (ty - sy) / vy), m = { id: ++metId, x: tx - vx * T, y: sy, vx, vy, r: 44 };
+    const T = Math.max(rain ? 8 : 20, (ty - sy) / vy), m = { id: ++metId, x: tx - vx * T, y: sy, vx, vy, r: rain ? 56 : 44 };
     HAZ.met.push(m); fx('meteor', m.x, m.y, vx, vy, m.id);
 }
 // ---- the Horizon split: 5 s whole, 5 s apart (1 s of shaking, then a smooth drift), 5 s coming back together
@@ -5296,7 +5351,7 @@ function renderRoster() {
         tm.style.color = (S.sudden || sdMode) || (!S.sudden && Math.ceil((S.timeLeft || 0) / 60) <= 10) ? '#fb7185' : '#e2e8f0';
     } else tm.style.display = 'none';
     const rows = fighters.filter(f => f.active).map(f => {
-        const pips = timer && !S.sudden ? ('D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
+        const pips = timer && !S.sudden ? (S.md ? (Math.floor(((S.md.sc[f.slot] || 0)) / 60) + 's' + (S.md.sub === 'tag' && S.md.it === f.slot ? ' 🏷️ IT' : '')) : 'D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
         const nm = String(f.name).replace(/[<>&"]/g, '');
         return `<div style="display:flex;gap:8px;align-items:center;background:rgba(8,12,24,.72);border-left:4px solid ${f.color};padding:4px 8px;border-radius:8px;min-width:190px;opacity:${f.out ? .45 : 1}${f.slot === (S.mySlot || 0) ? ';outline:1px solid #fff6' : ''}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</span><span style="color:${f.damage > 120 ? '#fb7185' : f.damage > 60 ? '#fbbf24' : '#fff'}">${S.instantBlow ? '∞' : Math.floor(f.damage)}%</span><span style="color:${f.color};letter-spacing:1px">${pips}</span></div>`;
     }).join('');
@@ -5415,21 +5470,23 @@ function startMatchSequence(mode, cfg) {
     S.trainRace = !!(mode === 'lobby' && cfg && cfg.trainRace);
     { const tb = document.getElementById('trainMenuBtn'); if (tb) tb.classList.toggle('hidden', !S.trainRace); }
     S.chaos = null; chaosMods();
-    window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; S.progShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
+    window.__luminaryPaused = false; resetHazards(); S.fxClear++; S.kcT = 0; S.kcPause = 0; S.kcVis = 0; S.kcHold = null; S.lastKO = null; S.sudden = false; S.sdNoDmg = false; S.sdT = 0; S.sdBase = null; S.cdN = -1; S.gameMode = mode; S.stats = newStats(); S.replay = null; S.rec = []; S.ms = []; S.recN = 0; S.clips = []; S.clipsPend = []; S.klog = []; S.kr = null; S.rewardShown = false; S.vic = null; S.progShown = false; if (!['easy', 'medium', 'hard'].includes(mode)) S.ranked = false;
     S.demo = false; audio.muted = false;
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
         const lim = clampN(+cfg.timeLimit || 5, 1, 10);
-        const sdPick = cfg.mode === 'sudden', raceM = cfg.mode === 'race' || !!cfg.race;
+        const sdPick = cfg.mode === 'sudden', raceM = cfg.mode === 'race' || !!cfg.race, sub = !raceM && (cfg.mode === 'koth' || cfg.mode === 'tag') ? cfg.mode : null;
+        if (sub === 'koth') cfg.map = HILL_MAP; else if (cleanMap(cfg.map) === HILL_MAP) cfg.map = 'frontier';       // Sunny Hill belongs to King of the Hill
         S.match = {
             teams: !!cfg.teams, startDamage: sdPick ? 200 : clampN(+cfg.startDamage || 0, 0, 249), stocks: sdPick ? 1 : (cfg.stocks || 3),
-            mode: cfg.mode === 'timer' || raceM ? 'timer' : sdPick ? 'sudden' : 'stock', timeLimit: lim,
+            mode: cfg.mode === 'timer' || raceM || sub ? 'timer' : sdPick ? 'sudden' : 'stock', sub, timeLimit: lim,
             items: raceM ? { on: true, types: ITEM_TYPES.slice(), interval: 10 } : ic.on ? { on: true, types: (ic.types || []).filter(t => ITEM_TYPES.includes(t)), interval: clampN(+ic.interval || 15, 5, 60) } : { on: false, types: [], interval: 15 },
         };
         S.timeLeft = Math.round(lim * 3600);
         S.itemTimer = Math.round(S.match.items.interval * 30);
         S.mySlot = cfg.mySlot || 0;
         S.instantBlow = !!cfg.instantBlow && !raceM;
+        initModeState();
         S.chaos = cfg.chaos && !raceM ? { next: 360, gap: 480, n: 0, act: [], nextEv: null, last: null, shown: null } : null; chaosMods();
         S.matchCfg = cfg;
         S.hazards = (!!cfg.hazards || raceM) && !cfg.trainRace;      // a practice race in training runs without the map hazards
@@ -5506,7 +5563,7 @@ function startMatchSequence(mode, cfg) {
     const aiDescText = document.getElementById('aiDescText');
 
     if (S.gameMode === 'lobby') {
-        modeLabel.textContent = (S.match.mode === 'sudden' ? 'SUDDEN DEATH • ' : S.match.mode === 'timer' ? 'TIMER • ' : '') + (S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL');
+        modeLabel.textContent = (S.match.sub === 'koth' ? 'KING OF THE HILL • ' : S.match.sub === 'tag' ? 'TAG • ' : '') + (S.match.mode === 'sudden' ? 'SUDDEN DEATH • ' : S.match.mode === 'timer' ? 'TIMER • ' : '') + (S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL');
     } else if (S.gameMode === 'easy') {
         modeLabel.textContent = "MODE: EASY";
         aiDiffLabel.textContent = "Easy Bot";
@@ -5591,13 +5648,13 @@ S.trainDmg = (n) => { if (S.gameMode === 'training') p2.damage = Math.max(0, Mat
 export function applyTrainPrefs() {
     const t = ensureTrain();
     const stg = t.stage === 'frontier' ? 'lobby' : t.stage;
-    const kind = (stg === 'lobby' || stg === 'bighorizon' || stg === 'biglava') ? 'lobby' : 'normal', theme = (stg === 'horizon' || stg === 'bighorizon') ? 'horizon' : (stg === 'lava' || stg === 'biglava') ? 'lava' : 'frontier';
+    const kind = stg === 'sunny' ? 'hill' : (stg === 'lobby' || stg === 'bighorizon' || stg === 'biglava') ? 'lobby' : 'normal', theme = stg === 'sunny' ? 'sunny' : (stg === 'horizon' || stg === 'bighorizon') ? 'horizon' : (stg === 'lava' || stg === 'biglava') ? 'lava' : 'frontier';
     if (S.trainRace) {                                              // a practice race is running: the menu only tunes your own fighter (arena, hazards and bots stay as the race set them)
         if (t.char) p1.char = charOf(t.char).id; else p1.char = getMyChar();
         p1.maxJumps = trainJumps(p1); p1.jumpsLeft = p1.maxJumps; S.instantBlow = false;
         return;
     }
-    if (S.arena !== kind || S.theme !== theme || S.race) { setArena(kind, theme); placeDuel(true); }
+    if ((S.arenaKind || S.arena) !== kind || S.theme !== theme || S.race) { setArena(kind, theme); placeDuel(true); }
     if (!!S.hazards !== !!t.hazards) { S.hazards = !!t.hazards; resetHazards(); S.fxClear++; }
     if (t.char) { p1.char = charOf(t.char).id; }
     else p1.char = getMyChar();
@@ -5617,6 +5674,24 @@ export function applyTrainPrefs() {
 
 const gameOverModal = document.getElementById('gameOverModal');
 let endHook = null, raceEndHook = null;
+// ---- the victory scene (Smash style): winners are placed on the stage doing their victory pose, the camera circles them for a few seconds, then the stats slide in on the left
+export const VICTORY_MS = 5600;
+function beginVictory() {
+    S.vic = null;
+    if (!S.match || S.demo || S.gameMode === 'training' || S.replay) return false;
+    const ws = S.winnerSlots || [], win = fighters.filter(f => f.active && ws.includes(f.slot)), rest = fighters.filter(f => f.active && !ws.includes(f.slot) && f.stocks > 0 && !f.out);
+    if (!win.length) return false;
+    const cx = STAGE.x + STAGE.width / 2, place = (list, base, dir) => list.forEach((f, i) => {
+        f.interrupt && f.interrupt(); f.x = base + dir * i * 150; f.y = STAGE.y - f.height / 2 - 1; f.px = f.x; f.py = f.y; f.vx = f.vy = 0; f.hitstun = 0; f.grounded = true; f.facing = dir || 1; f.damage = 0; f.invincibleTimer = 9999;
+    });
+    const off = (win.length - 1) * 75; place(win, cx - off, 1);
+    const side = Math.min(rest.length, 4); rest.slice(0, 4).forEach((f, i) => { f.interrupt && f.interrupt(); f.x = cx + 320 + i * 140 + (win.length > 1 ? off : 0); f.y = STAGE.y - f.height / 2 - 1; f.px = f.x; f.py = f.y; f.vx = f.vy = 0; f.hitstun = 0; f.grounded = true; f.facing = -1; f.damage = 0; f.invincibleTimer = 9999; });
+    for (const f of rest.slice(4)) f.out = true;
+    fxClearAll();
+    S.vic = { t0: performance.now(), x: cx, y: STAGE.y, n: win.length };
+    return true;
+}
+function fxClearAll() { S.fxClear++; S.kcT = 0; S.kcFull = false; }
 export function setEndHook(f) { endHook = f; }
 export function setRaceEndHook(f) { raceEndHook = f; }
 function endGame(winnerText, winnerRole = null) {
@@ -5642,11 +5717,12 @@ function endGame(winnerText, winnerRole = null) {
     S.gameState = 'gameover';
     S.winnerRole = winnerRole;
     document.getElementById('winnerText').textContent = winnerText;
+    const vic = beginVictory();
     setTimeout(() => {
         const show = () => { if (S.gameState === 'gameover') gameOverModal.classList.remove('hidden'); };
         if (S.race && S.raceRes && raceEndHook && S.online !== 'guest') raceEndHook(show);
         else if (endHook && !S.demo && S.gameMode !== 'training' && S.online !== 'guest' && S.ms) endHook(show); else show();       // the match stats come first, then the win / lose screen
-    }, 800);
+    }, vic ? VICTORY_MS : 800);
 }
 
 // ---------------------------------------------------------------------------
@@ -5969,6 +6045,7 @@ export function snapshot() {
         o: !orbs.length ? undefined : orbs.map(o => ({ id: o.id, x: r2(o.x), y: r2(o.y), vx: r2(o.vx), vy: r2(o.vy), r: r2(o.r), c: r2(o.charge), own: idxOf(o.owner), k: o.kind || 0, cap: o.cap ? 1 : 0, sw: o.sword ? 1 : 0 })),
         it: !items.length ? undefined : items.map(i => ({ id: i.id, t: i.type, x: r2(i.x), y: r2(i.y), vx: r2(i.vx), vy: r2(i.vy), st: i.st, len: i.len, act: i.act ? 1 : 0, rot: r2(i.rot), sp: r2(i.spin), h: i.hold })),
         tl: S.match && S.match.mode === 'timer' ? S.timeLeft : 0,
+        md: S.md ? { it: S.md.it, w: S.md.who, sc: S.md.sc } : undefined,
         rb: S.race && S.race.obs && S.match && S.match.race ? [S.race.t, ...S.race.obs.dyn.map(d => d.p.y > 1e5 ? 99999 : Math.round(d.p.y - d.p.by)), ...fighters.map(f => f._finT || 0)] : undefined,
         sp: SPL.cuts.length ? [SPL.t, ...SPL.cuts] : 0, sd: S.sudden ? 1 : 0, sdt: S.sdT || 0, cd: S.sudden ? (S.cdN == null ? -1 : S.cdN) : -1,
         ev: ev.length ? ev : undefined,
@@ -6086,6 +6163,7 @@ export function applySnapshot(s) {
     for (const [id, g] of guestItems) if (!seenIt.has(id)) { guestItems.delete(id); const i = items.indexOf(g); if (i >= 0) items.splice(i, 1); }
     for (const f of (S.match ? fighters : [p1, p2])) f.heldItem = f.heldId ? (guestItems.get(f.heldId) || null) : null;     // the stick in a hand is drawn from heldItem, which only the host had
     if (s.tl) S.timeLeft = s.tl;
+    if (s.md && S.md) { S.md.it = s.md.it; S.md.who = s.md.w; S.md.sc = s.md.sc; }
     if (s.sp) { SPL.t = s.sp[0]; SPL.cuts = s.sp.slice(1); applySplit(false); }
     if (s.rb) applyRb(s.rb);
     if (s.sd) {
@@ -6293,13 +6371,14 @@ export function seekKillsReplay(secs) { const R = S.replay; if (!_kr || !R) retu
 export function killsReplayActive() { return !!_kr; }
 export function matchStatsData() {
     const rows = fighters.map((f, i) => ({ i, name: dispName(f, i), char: f.char, color: f.color, active: f.active !== false, team: f.team, kos: (S.klog || []).filter(k => k.att === i).length, falls: (S.klog || []).filter(k => k.def === i).length, stocks: Math.max(0, f.stocks || 0), ...msOf(i) })).filter(r => r.active);
-    return { rows, kills: (S.klog || []).slice(), secs: S.stats ? S.stats.frames / 60 : 0, clips: (S.clips || []).length };
+    for (const r of rows) r.ms = S.md ? Math.round((S.md.sc[fighters[r.i].slot] || 0) / 60) : 0;
+    return { rows, mode: S.md ? (S.md.sub === 'koth' ? 'Hill time' : 'Time as IT') : '', kills: (S.klog || []).slice(), secs: S.stats ? S.stats.frames / 60 : 0, clips: (S.clips || []).length };
 }
 // ---------------------------------------------------------------- CHAOS MODE: random twists hit the whole arena; the gap between them shrinks by 1 s after every 2 twists (never below 1 s), their lengths do not, so several can run at once
 export const CHAOS_EVENTS = {
     lowgrav: 'MOON GRAVITY', highgrav: 'HEAVY GRAVITY', kb: 'DOUBLE KNOCKBACK', meteors: 'METEOR RAIN', items: 'ITEM STORM', speed: 'TURBO',
     slowmo: 'SLOW MOTION', ice: 'ICE FLOOR', heal: 'HEALING RAIN', poison: 'POISON CLOUD', lowkb: 'FEATHER HITS', kb3: 'TRIPLE KNOCKBACK',
-    infjump: 'INFINITE JUMPS', shove: 'RANDOM SHOVES', wind: 'GALE WIND', floaty: 'FEATHER FALL', dive: 'ANVIL FALL', dark: 'LIGHTS OUT',
+    infjump: 'INFINITE JUMPS', shove: 'RANDOM SHOVES', floaty: 'FEATHER FALL', dive: 'ANVIL FALL', dark: 'LIGHTS OUT',
     peace: 'PEACE TIME', spike: 'DAMAGE SPIKE +40%', swap: 'SWITCHEROO', scramble: 'SCRAMBLE', armor: 'ARMOUR UP', mud: 'MUD WALK',
     fullheal: 'FULL HEAL', moonturbo: 'MOON TURBO',
 };
@@ -6341,13 +6420,12 @@ function chaosTick() {
     if (C.shown && --C.shown.t <= 0) C.shown = null;
     for (const e of C.act) {
         const k = e.ev, t = e.total - e.left;
-        if (k === 'meteors' && e.left % 24 === 0) spawnMeteor();
+        if (k === 'meteors' && e.left % 12 === 0) spawnMeteor(true);
         else if (k === 'items' && e.left % 45 === 0) spawnItem(ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)], true);
         else if (k === 'heal' && e.left % 6 === 0) for (const f of live) f.damage = Math.max(0, f.damage - 1);
         else if (k === 'poison' && e.left % 20 === 0) for (const f of live) f.damage = Math.min(999, f.damage + 1);
         else if (k === 'infjump') for (const f of live) f.jumpsLeft = Math.max(f.jumpsLeft, 2);
         else if (k === 'shove' && e.left % 45 === 0 && live.length) { const f = live[Math.floor(Math.random() * live.length)]; f.vx += (Math.random() < 0.5 ? -1 : 1) * 11; f.vy -= 4; }
-        else if (k === 'wind') for (const f of live) f.vx += e.dir * (f.grounded ? 0.12 : 0.3);
         else if (k === 'peace') for (const f of live) f.invincibleTimer = Math.max(f.invincibleTimer, 3);
         else if (k === 'armor') for (const f of live) f.armorT = Math.max(f.armorT, 3);
         e.left--;
@@ -6396,6 +6474,7 @@ export function step() {
             if (a !== b && !frz(a) && !frz(b) && !(S.match.teams && a.team && a.team === b.team)) checkCombatCollisions(a, b);
         }
         itemInteractions();
+        tickMode();
         if (!S.sudden && S.match.mode === 'timer' && S.online !== 'guest' && S.gameState === 'playing' && --S.timeLeft <= 0) finishTimer();
     } else if (S.gameState === 'playing') {
         flushBuffered();

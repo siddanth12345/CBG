@@ -41,23 +41,23 @@ export function raceTrack(map) {
     };
     const names = Object.keys(FIG);
     const fig = (name) => FIG[name].forEach(([g, r, w], i) => add(g + Math.round((R() - 0.5) * 30), r + Math.round((R() - 0.5) * 24), w + Math.round((R() - 0.5) * 30), (i === 1 && trap && R() < 0.4) ? { dyn: trap } : null));
-    const plusGap = () => add(sc(1100), 0, sc(560), { plus: 1 });
+    const plusGap = () => add(sc(2200), 0, sc(560), { plus: 1 });       // the plus signs and their gaps are twice as big
     const bigGap = () => {
         if (th === 'horizon') { add(sc(640), sc(260), sc(440), { cloud: 1 }); add(sc(230), -sc(260), sc(440)); return; }
         add(sc(170), -12, sc(160), { dyn: trap }); add(sc(170), 18, sc(160), { dyn: trap }); add(sc(170), -12, sc(160), { dyn: trap }); add(sc(200), 6, sc(380));
     };
     plusGap();
     const order = []; for (let i = 0; i < 3; i++) order.push(names.splice(Math.floor(R() * names.length), 1)[0]);
-    order.forEach((n, i) => { fig(n); if (i === 0) plusGap(); if (i === 1) bigGap(); });
+    order.forEach((n, i) => { fig(n); if (i === 0) plusGap(); if (i === 1) bigGap(); if (i === 2) plusGap(); });
     bigGap();
-    add(sc(1100), 0, sc(700), { plus: 1 });
+    add(sc(2200), 0, sc(700), { plus: 1 });
     add(sc(230), 0, sc(1500), { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
     const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
     let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
-            const r = Math.round(450 * 0.6), cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.011, ph: R() * 1.5 };
+            const r = Math.round(900 * 0.6), cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.0085, ph: R() * 1.5 };
             const pp = { x: cx - r, y: prev.y, w: r * 2, plus: o }; o.p = pp; nodes.push({ l: pp.x, r: pp.x + pp.w, y: prev.y, dyn: 2 }); obs.plus.push(o);
         }
         x += h.gap; y += h.rise;

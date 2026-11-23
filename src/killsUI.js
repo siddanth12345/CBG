@@ -24,11 +24,11 @@ const swatch = (c) => `<i style="display:inline-block;width:10px;height:10px;bor
 const cn = (c) => { try { return charOf(c).name || c; } catch (e) { return c || ''; } };
 
 function drawPages() {
-    const D = matchStatsData(), rows = D.rows.slice().sort((a, b) => b.kos - a.kos || b.stocks - a.stocks || a.falls - b.falls);
+    const D = matchStatsData(), rows = D.rows.slice().sort((a, b) => D.mode ? (D.mode === 'Hill time' ? b.ms - a.ms : a.ms - b.ms) : (b.kos - a.kos || b.stocks - a.stocks || a.falls - b.falls));
     const tabs = ['Overview', 'Combat', 'Kills'];
     let body = '';
     if (tab === 0) {
-        body = `<table><tr><th>Fighter</th><th>KOs</th><th>Falls</th><th>Stocks left</th><th>Damage dealt</th><th>Damage taken</th></tr>${rows.map((r, k) => `<tr class="${k === 0 ? 'top' : ''}"><td>${swatch(r.color)}${esc(r.name)} <small>${esc(cn(r.char))}</small></td><td>${r.kos}</td><td>${r.falls}</td><td>${r.stocks}</td><td>${Math.round(r.dealt)}%</td><td>${Math.round(r.taken)}%</td></tr>`).join('')}</table><p class="kr-sub">Match length ${mmss(D.secs)}</p>`;
+        body = `<table><tr><th>Fighter</th>${D.mode ? `<th>${D.mode}</th>` : ''}<th>KOs</th><th>Falls</th><th>Stocks left</th><th>Damage dealt</th><th>Damage taken</th></tr>${rows.map((r, k) => `<tr class="${k === 0 ? 'top' : ''}"><td>${swatch(r.color)}${esc(r.name)} <small>${esc(cn(r.char))}</small></td>${D.mode ? `<td>${r.ms}s</td>` : ''}<td>${r.kos}</td><td>${r.falls}</td><td>${r.stocks}</td><td>${Math.round(r.dealt)}%</td><td>${Math.round(r.taken)}%</td></tr>`).join('')}</table><p class="kr-sub">Match length ${mmss(D.secs)}</p>`;
     } else if (tab === 1) {
         const best = (k) => rows.reduce((a, r) => (r[k] > (a ? a[k] : -1) ? r : a), null);
         const aw = [['Most damage', best('dealt'), (r) => Math.round(r.dealt) + '%'], ['Most hits', best('hits'), (r) => r.hits], ['Best combo', best('combo'), (r) => r.combo + ' hits'], ['Most KOs', best('kos'), (r) => r.kos]];
@@ -66,6 +66,7 @@ export function initKills() {
 /** called every frame: button visibility + the victim card while the camera is zoomed in */
 export function tickKills() {
     if (!hud) return;
+    const vicOn = S.gameState === 'gameover' && !!S.vic && !S.replay; if (document.body.classList.contains('cbg-vic') !== vicOn) document.body.classList.toggle('cbg-vic', vicOn);
     const over = S.gameState === 'gameover' && !S.replay && S.online !== 'guest' && !killsReplayActive();
     const kb = $('killsBtn');
     kb.classList.toggle('hidden', !(over && S.clips && S.clips.length));

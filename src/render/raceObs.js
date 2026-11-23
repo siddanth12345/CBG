@@ -16,10 +16,10 @@ export function buildRaceObs(root) {
         const grp = new THREE.Group(), col = theme === 'lava' ? '#fb923c' : theme === 'horizon' ? '#f0abfc' : '#22d3ee', len = o.r * 2 + 40;
         const mat = new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.5, metalness: 0.3 }), edge = glow(col, 2.2);
         for (const rot of [0, Math.PI / 2]) {
-            const arm = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(len, 40, 300), mat), top = new THREE.Mesh(new THREE.BoxGeometry(len, 7, 304), edge);
-            top.position.y = 20; arm.add(body, top); arm.rotation.z = rot; grp.add(arm);
+            const arm = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(len, 64, 440), mat), top = new THREE.Mesh(new THREE.BoxGeometry(len, 9, 444), edge);
+            top.position.y = 32; arm.add(body, top); arm.rotation.z = rot; grp.add(arm);
         }
-        const hub = new THREE.Mesh(new THREE.CylinderGeometry(60, 60, 310, 20), glow('#fef3c7', 1.8)); hub.rotation.x = Math.PI / 2; grp.add(hub);
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(95, 95, 450, 24), glow('#fef3c7', 1.8)); hub.rotation.x = Math.PI / 2; grp.add(hub);
         g.add(grp); return { o, grp };
     });
     ups.push((t) => { for (const s of plus) { const p = s.o.p; s.grp.position.set(wx(p.x + p.w / 2), wy(s.o.by) - 20, 0); s.grp.rotation.z = -spinAngle(s.o, t); } });

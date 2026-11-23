@@ -13,6 +13,7 @@ import { FighterModel } from './fighterModel.js';
 import { Effects } from './effects.js';
 import { ImpactRings } from './impactRings.js';
 import { ItemsView } from './items.js';
+import { ModeFx } from './modeFx.js';
 import { getReduceFlash, getGfx, getZoom, particleScale, lowGfx } from '../gfx.js';
 import { Showcase } from './showcase.js';
 
@@ -73,6 +74,7 @@ export class View {
         this.fx.models = this.models;
         this.impact = new ImpactRings();
         this.items = new ItemsView(scene);
+        this.modeFx = new ModeFx(scene);
         this.arenaVersion = S.arenaVersion || 0;
         this.themeName = null;
         this.showcase = new Showcase(this);        // the start menu's cinematic
@@ -112,6 +114,9 @@ export class View {
             this.arenaVersion = S.arenaVersion || 0;
             syncSpace();
             this.scene.remove(this.stage.root);
+            { const seen = new Set(), killTex = (m) => { for (const k in m) { const v = m[k]; if (v && v.isTexture && !seen.has(v)) { seen.add(v); v.dispose(); } } };      // the old arena's GPU memory goes back (it used to pile up with every map change)
+              this.stage.root.traverse(o => { if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.dispose(); } const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) if (!seen.has(m)) { seen.add(m); killTex(m); m.dispose(); } });
+              if (this.stage.sky && this.stage.sky.isTexture) this.stage.sky.dispose(); }
             this.stage = buildStage(this.scene);
             this.fx.setStageTop(this.stage.topY);
             this.models.forEach((m, i) => m.setStageBounds(STAGE.x, STAGE.x + STAGE.width, this.stage.topY));
@@ -138,6 +143,15 @@ export class View {
             r.toneMappingExposure = 0.95;
             this.bloom.strength = 0.2; this.bloom.threshold = 1.0;
             this.camera.far = 70000;
+        } else if (this.stage.theme === 'sunny') {
+            scene.background = this.stage.sky;
+            scene.fog = new THREE.FogExp2(0xcfe6f7, 0.00007);
+            this.hemi.color.set(0xdcecff); this.hemi.groundColor.set(0x9bd47a); this.hemi.intensity = 1.6;
+            this.key.color.set(0xfff0c8); this.key.intensity = 3.1;
+            this.rim.color.set(0xbcd6ff); this.rim.intensity = 0.6;
+            r.toneMappingExposure = 0.95;
+            this.bloom.strength = 0.18; this.bloom.threshold = 1.0;
+            this.camera.far = 20000;
         } else if (this.stage.theme === 'lava') {
             scene.background = this.stage.sky;
             scene.fog = new THREE.FogExp2(0x3a0d08, 0.00006 / sc);
@@ -358,29 +372,41 @@ export class View {
         let goalDist = d0;
         const goal = this.v2.set(0, 0, 0);
         if (following) goalDist = this.followGoal(goal);
+        const vic = S.gameState === 'gameover' && !S.replay && S.vic;
+        if (vic) { const w = fighters.find(f => f.active && S.winnerSlots && S.winnerSlots.includes(f.slot)); if (w) { goal.set(wx(S.vic.x), wy(S.vic.y) + 70, 0); goalDist = d0 * (S.vic.n > 1 ? 0.2 : 0.13); } }
         if (!this.camDist) { this.camDist = goalDist; this.camTarget.copy(goal); }
-        const k = 1 - Math.exp(-dt * 3.2);
+        const k = 1 - Math.exp(-dt * (vic ? 5.5 : 3.2));
         this.camDist += (goalDist - this.camDist) * k;
         this.camTarget.lerp(goal, k);
 
         let target = this.baseTarget.copy(this.camTarget);
         let dist = this.camDist;
-        if (dramaticZoom.active) {
+        if (dramaticZoom.active && !vic) {
             const kk = clamp01((dramaticZoom.currentZoom - 1) / (dramaticZoom.targetZoom - 1));
             const e = smooth(kk);
             target.set(wx(dramaticZoom.targetX) * e, wy(dramaticZoom.targetY) * e, 0);
             dist = d0 / dramaticZoom.currentZoom;
         }
-        if (S.kcT > 0 && S.kcFull && fighters[S.kcDef]) {                // kill cam: push in on the victim
+        if (!vic && S.kcT > 0 && S.kcFull && fighters[S.kcDef]) {                // kill cam: push in on the victim
             const e = smooth(clamp01(Math.min(((S.kcDur || 1.2) - S.kcT) / 0.2, S.kcT / 0.25))), v = fighters[S.kcDef];
             target.x += (wx(v.x) - target.x) * e * 0.85; target.y += (wy(v.y) - target.y) * e * 0.85;
             dist /= 1 + 1.1 * e;
         }
+        let orbit = 0, shiftX = 0;
+        if (vic) {                                                      // circle the winner(s) for a few seconds, then settle at a slight angle with the winner on the right (the stats take the left)
+            const u = Math.min(1, (performance.now() - S.vic.t0) / 5200), e = smooth(u);
+            orbit = (1 - e) * -1.05 + e * -0.18; shiftX = e * dist * 0.22;
+        }
         if (this.debugCam) { target.copy(this.debugCam.target); dist = this.debugCam.dist; }
         this.zoomDist = dist;
+        if (vic) {
+            const ph = PITCH * 0.7; this.basePos.set(target.x + Math.sin(orbit) * Math.cos(ph) * dist, target.y + Math.sin(ph) * dist, Math.cos(orbit) * Math.cos(ph) * dist);
+            this.camera.position.copy(this.basePos); target.x -= shiftX * Math.cos(orbit); target.z -= shiftX * Math.sin(orbit) * 0; this.camera.position.x -= shiftX * Math.cos(orbit); this.camera.lookAt(target);
+        } else {
         this.basePos.set(target.x, target.y + Math.sin(PITCH) * dist, Math.cos(PITCH) * dist);
         this.camera.position.copy(this.basePos);
         this.camera.lookAt(target);
+        }
         this.camera.updateMatrixWorld(true);
     }
 
@@ -449,6 +475,7 @@ export class View {
             this.scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
         }
         this.stage.update(this.clock, dt);
+        this.modeFx.update(this.clock);
         if (inMatch) {
             S.detailLo = !!this._qLo || fighters.filter(x => x.active).length >= 5;      // many fighters / a slow device: tiny body details (fingers, studs, trim) are not drawn
             for (const m of this.models) m.update(dt, alpha, this.clock);

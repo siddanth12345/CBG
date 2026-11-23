@@ -7,6 +7,7 @@ import { buildHorizon } from './horizon.js';
 import { buildLava } from './lava.js';
 import { wx, wy } from './space.js';
 import { buildRaceObs } from './raceObs.js';
+import { buildSunnyDecor, grassMat } from './sunny.js';
 
 export const STAGE_DEPTH = 560;
 
@@ -311,9 +312,17 @@ function buildStageBase(scene) {
     });
     root.add(frame);
 
+    let sun = null;
+    if (S.theme === 'sunny') {
+        decor.visible = false; stars.visible = false; for (const r of rocks) r.visible = false;
+        bodyMat.color.set(0x7a5230); bodyMat.metalness = 0.05; bodyMat.roughness = 0.95;
+        const top = new THREE.Mesh(new THREE.BoxGeometry(W + 4, 14, D + 2), grassMat()); top.position.y = topY - 7; top.receiveShadow = true; stage.add(top);
+        for (const p of STAGE.platforms || []) { const m = new THREE.Mesh(new THREE.BoxGeometry(p.w + 4, 10, D * 0.55 + 2), grassMat()); m.position.set(wx(p.x + p.w / 2), wy(p.y) + 1, 0); root.add(m); }
+        sun = buildSunnyDecor(root, bodyMat, topY, cx);
+    }
     return {
-        root, stage, topY, W, D, decor, stars, rocks, details,
-        update(t, dt) { for (const f of anim) f(t, dt); },
+        root, stage, topY, W, D, decor, stars, rocks, details, ...(sun ? { theme: 'sunny', sky: sun.sky, sc: 1, sunny: sun } : {}),
+        update(t, dt) { for (const f of anim) f(t, dt); if (sun) sun.update(t, dt || 0.016); },
         /** world-space (render) y of the ledge for the lights / effects */
         ledgeY: topY,
     };

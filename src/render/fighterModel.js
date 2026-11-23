@@ -496,7 +496,9 @@ export class FighterModel {
             return p;
         }
         if (S.gameState === 'gameover' && !S.replay) {
-            if (f.stocks > 0) { // victory pose
+            const won = S.winnerSlots && S.winnerSlots.length ? S.winnerSlots.includes(f.slot) : f.stocks > 0;
+            if (!won && S.vic) { const b = Math.sin(t * 1.6); p.dy = -5 + b * 0.8; p.lean = 20; p.headX = 26; p.rSx = 8; p.lSx = 8; p.rSz = 14; p.lSz = 14; p.rE = 18; p.lE = 18; p.rK = 34; p.lK = 34; p.rHx = 0; p.lHx = 0; return p; }
+            if (won) { // victory pose
                 const b = Math.sin(t * 7);
                 p.dy = Math.abs(b) * 2.5; p.rSx = 172 + b * 6; p.lSx = 150 - b * 8; p.rSz = 18; p.lSz = 28; p.rE = 12; p.lE = 40;
                 p.lean = -4; p.headX = -10; p.torsoY = Math.sin(t * 3) * 10; p.rHx = 6; p.lHx = -6; p.rK = 12; p.lK = 8;

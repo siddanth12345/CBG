@@ -388,7 +388,7 @@ export class Effects {
         count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
+            if (this.sparks_.length >= this.sCap) this.sparks_.splice(0, this.sparks_.length - this.sCap + 1);     // full: the oldest spark goes, never the new one
             let a = Math.random() * Math.PI * 2;
             if (dir === 'up') a = Math.PI / 2 + (Math.random() - 0.5) * 2.4;
             if (dir === 'down') a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
@@ -404,7 +404,7 @@ export class Effects {
         count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
+            if (this.sparks_.length >= this.sCap) this.sparks_.splice(0, this.sparks_.length - this.sCap + 1);     // full: the oldest spark goes, never the new one
             const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.15;
             const s = speed * (0.35 + Math.random() * 0.7);
             this.sparks_.push({
@@ -420,7 +420,7 @@ export class Effects {
         count = Math.max(Math.ceil(count * (S.fxLod || 1)), Math.min(count, 4));   // low graphics still keeps a few sparks so every move reads
         const col = new THREE.Color(color).multiplyScalar(2);
         for (let i = 0; i < count; i++) {
-            if (this.sparks_.length >= this.sCap) this.sparks_.length = this.sCap - 1;
+            if (this.sparks_.length >= this.sCap) this.sparks_.splice(0, this.sparks_.length - this.sCap + 1);     // full: the oldest spark goes, never the new one
             const a = angle + (Math.random() - 0.5) * spread;
             const s = speed * (0.4 + Math.random() * 0.9);
             this.sparks_.push({
@@ -454,8 +454,12 @@ export class Effects {
     #consumeEvents() {
         // No Array.shift() — O(n²) drains caused late-match lag when events piled up
         const queue = fxEvents;
-        if (queue.length > 28) queue.splice(0, queue.length - 28);
-        for (let ei = 0; ei < queue.length && ei < 40; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
+        if (queue.length > 28) {                                       // too many at once: drop the small stuff first, never the big set pieces (this used to swallow one of Ember's two pillars)
+            const DROP = new Set(['hit', 'trail', 'burn', 'gust', 'ember', 'flame', 'spiral', 'lspiral', 'zigzag', 'heal', 'pickup', 'poolmove']);     // only these repeat so much that losing some is fine: shields, blocks, counters, KOs, explosions are never skipped
+            for (let i = 0; i < queue.length && queue.length > 28; i++) if (DROP.has(queue[i].type)) { queue.splice(i, 1); i--; }
+            if (queue.length > 70) queue.splice(0, queue.length - 70);
+        }
+        for (let ei = 0; ei < queue.length && ei < 80; ei++) {         // events queued while consuming (the whirlpool) are handled in the same pass
             const e = queue[ei];
             const pos = new THREE.Vector3(wx(e.x), wy(e.y), 0);
             switch (e.type) {
@@ -468,8 +472,8 @@ export class Effects {
                     break;
                 }
                 case 'block':
-                    this.ring(pos, 10, 62, 0.28, '#22d3ee', 'screen');
-                    if (!lowGfx()) { this.star(pos, 34, '#a5f3fc', 0.14, 4); this.sparks(pos, '#67e8f9', 8, 200, 0.25); }
+                    this.ring(pos, 10, 62, 0.28, '#22d3ee', 'screen'); this.star(pos, 34, '#a5f3fc', 0.14, 4);
+                    this.sparks(pos, '#67e8f9', lowGfx() ? 4 : 8, 200, 0.25);
                     break;
                 case 'grab':
                     this.ring(pos, 6, 54, 0.3, '#ef4444', 'screen');
@@ -978,7 +982,7 @@ export class Effects {
         // ---- core particles
         let n = 0;
         const pcap = Math.round(this.MAXP * (S.fxLod || 1));
-        for (let i = 0; i < particles.length && n < pcap; i++) {
+        for (let i = Math.max(0, particles.length - pcap); i < particles.length && n < pcap; i++) {       // over the cap: the newest particles stay, the oldest are skipped
             const p = particles[i];
             const r = Math.max(0.6, p.radius * (0.35 + 0.9 * p.alpha)) * 1.6;
             V.set(wx(p.x), wy(p.y), p.z || 0); Sc.set(r, r, r);

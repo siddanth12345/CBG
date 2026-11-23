@@ -108,13 +108,13 @@ function render() {
     panel.querySelector('[data-body]').innerHTML = `<div style="text-align:center;margin-bottom:12px"><div style="font-size:44px;font-weight:900;color:#fde047;line-height:1">LEVEL ${L.level}</div>
 <div style="margin:8px auto;width:min(420px,86%);height:14px;border-radius:8px;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.4);overflow:hidden"><div style="height:100%;width:${(L.frac * 100).toFixed(1)}%;background:linear-gradient(90deg,#22d3ee,#a78bfa)"></div></div>
 <div style="font-size:13px;color:#94a3b8">${L.next ? `${L.into} / ${L.next} XP to level ${L.level + 1}` : 'MAX LEVEL'} · ${P.matches} matches · ${P.wins} wins · ${P.kills} KOs · ${hrs} played</div></div>
-<div style="font-weight:800;margin:6px 0">Achievements ${done} / ${ACHIEVEMENTS.length}</div><div style="display:grid;gap:6px">${rows}</div>`;
+<div style="font-weight:800;margin:6px 0">Achievements ${done} / ${ACHIEVEMENTS.length}</div><div style="display:grid;gap:6px;overflow-y:auto;flex:1;min-height:0;padding-right:4px;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch">${rows}</div>`;
 }
 export function openProfile() {
     if (!panel) {
         panel = document.createElement('div'); panel.style.cssText = 'position:fixed;inset:0;z-index:120;background:rgba(2,6,16,.9);display:none;align-items:center;justify-content:center;font-family:system-ui,sans-serif;color:#e2e8f0';
-        panel.innerHTML = '<div style="width:min(620px,94vw);max-height:90vh;overflow:auto;background:#0b1220;border:1px solid rgba(148,163,184,.3);border-radius:18px;padding:20px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0;letter-spacing:.1em">PROFILE</h2><button data-x class="lm-btn lm-mini">✕ Close</button></div><div data-body></div></div>';
-        document.body.appendChild(panel); panel.addEventListener('click', (e) => { if (e.target === panel || e.target.closest('[data-x]')) panel.style.display = 'none'; });
+        panel.innerHTML = '<div style="width:min(620px,94vw);height:min(90vh,780px);display:flex;flex-direction:column;box-sizing:border-box;background:#0b1220;border:1px solid rgba(148,163,184,.3);border-radius:18px;padding:20px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0;letter-spacing:.1em">PROFILE</h2><button data-x class="lm-btn lm-mini">✕ Close</button></div><div data-body style="display:flex;flex-direction:column;flex:1;min-height:0"></div></div>';
+        panel.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true }); panel.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true }); document.body.appendChild(panel); panel.addEventListener('click', (e) => { if (e.target === panel || e.target.closest('[data-x]')) panel.style.display = 'none'; });
     }
     render(); panel.style.display = 'flex';
 }

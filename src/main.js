@@ -8,6 +8,8 @@ import { displayName } from './account.js';
 import { MAP_IDS } from './gameCore.js';
 import { tickRace, initRace } from './raceUI.js';
 import { tickChaos } from './chaosUI.js';
+import { tickAnnouncer } from './announcer.js';
+import { initChatUI } from './chatUI.js';
 import {
     S, audio, step, p1, p2, fighters, keys, mouse, dramaticZoom,
     updateAimMatrix, renderHUD, startMatchSequence, gameOverModal, bufferInput, inputBuf, startReplay, tickReplay,
@@ -295,7 +297,7 @@ function backToMenu() {
 }
 $('menuQuitBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); backToMenu(); });
 $('exitBtn').addEventListener('click', () => { gameOverModal.classList.add('hidden'); S.ranked = false; S.rankBot = null; backToMenu(); });
-initKills(); initRace(); initPresent(); initProgress();
+initKills(); initRace(); initPresent(); initProgress(); initChatUI();
 $('rematchBtn').addEventListener('click', () => { if (S.online) requestRematch(); else if (S.matchCfg && S.match) { const c = S.matchCfg; if (c.race) { const pl = c.players, ch = CHAR_IDS[Math.floor(Math.random() * CHAR_IDS.length)]; pl.forEach(p => { p.char = ch; }); document.getElementById('gameOverModal').classList.add('hidden'); showRoulette(ch, () => startMatchSequence('lobby', c)); } else startMatchSequence('lobby', c); } else startMatchSequence(S.gameMode); });      // a rematch replays the same custom match / race (a race gets a new shared character)
 
 const trainMenuBtn = $('trainMenuBtn');
@@ -352,7 +354,7 @@ function frame(now) {
         ui.guide.tick();
         touch.tick();
         onlineGameOver();
-        renderHUD(); tickRace(); tickChaos();
+        renderHUD(); tickRace(); tickChaos(); tickAnnouncer();
         view.update(dt, window.__luminaryPaused ? 0 : acc / STEP);
     } catch (err) {
         console.error('frame', err);

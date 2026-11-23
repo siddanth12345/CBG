@@ -485,8 +485,8 @@ body.touch-ui .lm-fs,body.touch-ui .lm-fs{display:flex}
 .kr-card{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);min-width:260px;max-width:92vw;background:#020617d9;border:1px solid #f43f5e;border-radius:16px;padding:14px 22px;color:#e2e8f0;text-align:center;box-shadow:0 0 30px #f43f5e55;transition:opacity .15s}
 .kr-card small{color:#94a3b8;font-size:.75em}.kr-v{font:900 26px system-ui;color:#fff}
 .kr-row{display:flex;flex-wrap:wrap;gap:4px 10px;justify-content:center;align-items:baseline;margin-top:8px}.kr-row span{font:800 20px system-ui;color:#fb7185}
-.kr-pages{position:absolute;inset:0;z-index:60;background:#020617f2;display:flex;align-items:center;justify-content:center;padding:16px;cursor:pointer}
-.kr-panel{width:min(820px,100%);max-height:100%;display:flex;flex-direction:column;color:#e2e8f0;font-family:system-ui,sans-serif}
+.kr-pages{position:absolute;inset:0;z-index:60;background:linear-gradient(90deg,#020617f0 0,#020617dd 44%,#02061700 66%);display:flex;align-items:center;justify-content:flex-start;padding:16px 16px 16px 24px;cursor:pointer}
+.kr-panel{width:min(600px,56vw);max-height:100%;display:flex;flex-direction:column;color:#e2e8f0;font-family:system-ui,sans-serif}
 .kr-tabs{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
 .kr-tabs button{background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:10px;padding:8px 18px;font:800 14px system-ui;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
 .kr-tabs button.on{background:linear-gradient(90deg,#f43f5e,#f97316);color:#fff;border-color:transparent}
@@ -510,3 +510,5 @@ body.krplay #inGameMenuContainer,body.krplay #menuDropdown,body.krplay #menuTogg
 .kr-top #krLabel::after{content:attr(data-end);font-size:12px;letter-spacing:.08em;color:#fbbf24}
 .kr-pulse{animation:krp 1s infinite;border-color:#fbbf24!important}@keyframes krp{50%{box-shadow:0 0 14px #fbbf24}}
 body.krplay div:has(> .flex > .glass-panel > #modeDisplayLabel),body.krplay #toggleControlsBtn,body.krplay #aimMatrixHud{visibility:hidden!important}
+
+.cbg-vic #gameHud,.cbg-vic #aimMatrixHud,.cbg-vic #inGameMenuContainer,.cbg-vic #raceProgBox,.cbg-vic #rosterHud,.cbg-vic #hudTimer,.cbg-vic #modeLabelWrap{visibility:hidden}
