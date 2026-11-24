@@ -32,7 +32,7 @@ export function bindChat(sendFn) { transport = sendFn; }
 export function sendChat(raw) {
     const t = (raw || '').trim();
     if (!t || !transport) return;
-    const m = { id: Math.random().toString(36).slice(2, 10), name: displayName(), text: filterChat(t), t: Date.now() };
+    const m = { id: Math.random().toString(36).slice(2, 10), name: displayName(), text: filterChat(t), t: Date.now(), mine: true };
     pushChat(m);
     transport({ t: 'chat', id: m.id, name: m.name, text: m.text });
 }

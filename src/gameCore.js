@@ -3029,6 +3029,7 @@ class AIBot extends Fighter {
             else if (q >= 0.3 && !this.actionBlocked() && this.actionLock <= 0 && this.vy > -1 && this.actionTimer > 6 && Math.random() < react) {
                 const toL = nn.l - this.x;
                 if (toL > T.dash && feet < nn.y + 120 && this.cd.BLINK <= 0 && T.blink) { if (this.useSpecial('BLINK', this.x + 600, nn.y)) this.actionTimer = 0; }
+                else if (T.fwd && toL > T.dash && feet < nn.y + 150 && this.cd.SPIRAL <= 0) { if (this.useSpecial('SPIRAL', this.x + 700, nn.y)) this.actionTimer = 0; }   // Tide: Geyser, then the end boost carries you forward
                 else if (feet > nn.y + 30 && this.jumpsLeft <= 0 && this.cd.SPIRAL <= 0 && T.spiral && this.x > nn.l - 700) { if (this.useSpecial('SPIRAL', (nn.l + nn.r) / 2, nn.y)) this.actionTimer = 0; }
             }
             if (this.x > nn.r + 40 && nxt === N.length - 1) this.vx *= 0.9;
@@ -3577,6 +3578,7 @@ const isAlive = (f) => f.active && !f.out;
 /** where this fighter is aiming: the mouse / stick for a local player, the guest's aim for a remote one, a sensible target for a bot */
 function aimOf(f) {
     if (f.isAI) {
+        if (S.match && S.match.race) return { x: f.x + 900, y: f.y - 40 };          // race bots aim down the track (Tide's Geyser boost goes where you aim)
         const cx = STAGE.x + STAGE.width / 2;
         if (f.x < STAGE.x - 20 || f.x > STAGE.x + STAGE.width + 20 || f.y > STAGE.y) return { x: cx, y: STAGE.y - 220 };
         const foe = S.md && f._kAim && isAlive(f._kAim) ? f._kAim : nearestOf(f, foesOf(f)); return foe ? { x: foe.x, y: foe.y } : { x: cx, y: STAGE.y - 300 };
@@ -3626,10 +3628,11 @@ const hasPerk = (f, id) => !!f && f === viewerFighter() && S.online !== 'guest' 
 /** harder bots (Expert / Master / Apex) fight with built-in stat bundles, the same kind of numbers as the shop perks */
 /** race bots: driving quality per difficulty, and per-character movement-move tuning (dash = smallest gap in px worth a Side-F; blink/spiral = may use the move to travel) */
 const RACE_Q = { easy: 0.15, medium: 0.35, hard: 0.55, expert: 0.7, master: 0.85, apex: 1 };
-export const RACE_TUNE = {                                                     // from a per-character Apex race sweep (Frontier + Magma Forge); noisy, so only clear winners use their moves
+export const RACE_TUNE = {                                                     // from per-character Apex race sweeps (Frontier + Magma Forge + Horizon, 5 move settings each); best setting kept
     _: { dash: 450, blink: 1, spiral: 0 },
-    ember: { dash: 300, blink: 1, spiral: 0 }, zephyr: { dash: 420, blink: 0, spiral: 0 }, terra: { dash: 450, blink: 1, spiral: 1 },
-    volt: { dash: 420, blink: 0, spiral: 0 }, tide: { dash: 450, blink: 1, spiral: 0 }, bulwark: { dash: 420, blink: 0, spiral: 0 },
+    ember: { dash: 400, blink: 1, spiral: 1 }, zephyr: { dash: 420, blink: 0, spiral: 1 }, terra: { dash: 500, blink: 1, spiral: 0 },
+    volt: { dash: 400, blink: 1, spiral: 1 }, tide: { dash: 350, blink: 0, spiral: 1, fwd: 1 }, bulwark: { dash: 500, blink: 1, spiral: 0 },
+    umbra: { dash: 420, blink: 0, spiral: 0 }, luminent: { dash: 400, blink: 1, spiral: 1 },
 };
 const SKILL = { expert: 1.3, master: 1.6, apex: 2 };
 const BOT_STATS = {
@@ -3987,8 +3990,8 @@ function tickMode() {
         const inside = live.filter(f => Math.abs(f.x - z.x) < z.r && Math.abs((f.y + f.height / 2) - z.y) < 90);
         const teamOf = (f) => S.match.teams && f.team ? 't:' + f.team : 'p:' + f.slot;
         const owners = new Set(inside.map(teamOf));
-        M.who = owners.size === 1 ? inside[0].slot : -1;                     // contested = nobody scores
-        if (M.who >= 0) { for (const f of inside) { M.sc[f.slot] = (M.sc[f.slot] || 0) + 1; if (M.sc[f.slot] >= KOTH_TARGET) S.timeLeft = Math.min(S.timeLeft, 1); } }
+        M.who = owners.size === 1 ? inside[0].slot : -1;                     // contested (red ring) but everyone standing on it still scores
+        { for (const f of inside) { M.sc[f.slot] = (M.sc[f.slot] || 0) + 1; if (M.sc[f.slot] >= KOTH_TARGET) S.timeLeft = Math.min(S.timeLeft, 1); } }
     }
 }
 function finishTimer() {
