@@ -2,7 +2,7 @@
 // drifting rocks and the dashed blast-zone frame. Collision is still the original
 // rectangle, so what you see is exactly what you stand on.
 import * as THREE from 'three';
-import { S, STAGE, BLAST_ZONES, WORLD } from '../gameCore.js';
+import { S, STAGE, BLAST_ZONES, WORLD, fighters } from '../gameCore.js';
 import { buildHorizon } from './horizon.js';
 import { buildLava } from './lava.js';
 import { wx, wy } from './space.js';
@@ -275,6 +275,7 @@ function buildStageBase(scene) {
     });
 
     // ------------------------------------------------------------ soft platforms (Big Battlefield)
+    const cull = [];                                                     // race: platforms far from every racer are not drawn (about 7 stages of view)
     for (const p of STAGE.platforms || []) {
         if (p.dyn || p.plus) continue;                                   // race trap platforms are drawn by raceObs
         const py = wy(p.y), g = new THREE.Group();
@@ -285,6 +286,7 @@ function buildStageBase(scene) {
         g.add(slab2, edge2);
         g.position.set(wx(p.x + p.w / 2), py, 0);
         root.add(g);
+        if (S.race) cull.push({ g, x: p.x + p.w / 2 });
     }
 
     // ------------------------------------------------------------ blast-zone frame (dashed)
@@ -322,7 +324,7 @@ function buildStageBase(scene) {
     }
     return {
         root, stage, topY, W, D, decor, stars, rocks, details, ...(sun ? { theme: 'sunny', sky: sun.sky, sc: 1, sunny: sun } : {}),
-        update(t, dt) { for (const f of anim) f(t, dt); if (sun) sun.update(t, dt || 0.016); },
+        update(t, dt) { for (const f of anim) f(t, dt); if (cull.length) { const xs = fighters.filter(q => q.active && !q.out).map(q => q.x); if (xs.length) for (const c of cull) c.g.visible = xs.some(x => Math.abs(x - c.x) < 6500); } if (sun) sun.update(t, dt || 0.016); },
         /** world-space (render) y of the ledge for the lights / effects */
         ledgeY: topY,
     };

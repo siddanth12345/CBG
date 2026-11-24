@@ -178,10 +178,10 @@ export function setArena(kind, theme = 'frontier') {
     S.arenaVersion = (S.arenaVersion || 0) + 1;
 }
 /** map ids: frontier (small), big (big Frontier), horizon (small), bighorizon, and the random picks rand / randS / randB */
-export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon', 'lava', 'biglava'];
+export const MAP_IDS = ['frontier', 'big', 'horizon', 'bighorizon', 'lava', 'biglava', 'sunny'];
 export const HAZ_IDS = ['frontierH', 'bigH', 'horizonH', 'bighorizonH'];      // old ids of the hazard maps: hazards are an option now, these just load the plain map
-export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', lava: '€Magma Forge', biglava: '¥Magma Forge', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', sunny: '€Sunny Hill', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
-export const HILL_MAP = 'sunny';                                     // King of the Hill only; never in the random picks
+export const MAP_NAMES = { frontier: '€Frontier', big: '¥Frontier', horizon: '€Horizon', bighorizon: '¥Horizon', lava: '€Magma Forge', biglava: '¥Magma Forge', frontierH: '(€)Frontier', bigH: '(¥)Frontier', horizonH: '(€)Horizon', bighorizonH: '(¥)Horizon', sunny: 'Sunny Hill', rand: 'Random (any)', randS: 'Random €', randB: 'Random ¥' };
+export const HILL_MAP = 'sunny';                                     // a normal map everywhere; King of the Hill is the only mode with the hill zone
 export const cleanMap = (m) => HAZ_IDS.includes(m) ? m.replace(/H$/, '') : (MAP_IDS.includes(m) || m === HILL_MAP || m === 'rand' || m === 'randS' || m === 'randB') ? m : 'big';
 export function resolveMap(m) {
     m = cleanMap(m);
@@ -201,7 +201,7 @@ export function setArenaByMap(m) {
 }
 /** race: the map's own track on the big arena (the start island is the stage, every other piece is a soft platform) */
 export function setRaceArena(m) {
-    const base = String(m).replace(/H$/, ''), t = raceTrack(base);
+    const base = String(m).replace(/H$/, '') === HILL_MAP ? 'frontier' : String(m).replace(/H$/, ''), t = raceTrack(base);   // Sunny Hill has no race track
     setArena('lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
     WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
@@ -2995,32 +2995,84 @@ class AIBot extends Fighter {
         return false;
     }
 
-    /** race bot: run right, jump at the end of each platform, double jump to reach the next one, recover to the track when it falls */
+    /** race bot: run right, jump at the end of each platform, double jump to reach the next one, dodge shots, leave trap platforms at once,
+     *  and (from Medium up) use the character's own moves for movement: Side-F dash over big gaps, Up-F to climb back. Quality 0.15 (Easy) .. 1 (Apex). */
     raceDrive(target) {
         this.isShielding = false; this.shieldHold = 0; this.actionTimer++;
         if (this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.freezeTimer > 0) return;
-        const R = S.race, N = R.nodes, hh = this.height / 2, feet = this.y + hh, cap = 8.2 * Math.max(0.93, charOf(this.char).walk) * (0.8 + 0.06 * Math.min(5, this.skill));
+        const q = RACE_Q[this.diff || this.level] ?? 0.55, T = RACE_TUNE[this.char] || RACE_TUNE._;
+        const R = S.race, N = R.nodes, hh = this.height / 2, feet = this.y + hh, cap = 8.2 * Math.max(0.93, charOf(this.char).walk) * (0.78 + 0.16 * q);
         if (this.x >= R.finishX) return;
         let cur = -1;
         for (let i = 0; i < N.length; i++) if (this.x > N[i].l - 20 && this.x < N[i].r + 20 && feet < N[i].y + 40) cur = i;       // the platform we are over (or just left)
         let nxt = N.findIndex(n => n.l > this.x + 10);
         if (nxt < 0) nxt = N.length - 1;
-        const nn = N[nxt], onCur = cur >= 0 && this.grounded;
+        const nn = N[nxt], onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
         this.facing = 1;
         if (this.vx < cap) this.vx = Math.min(cap, this.vx + 1.2);
+        // incoming shots: hop over the ones about to hit (better bots see them sooner and never miss the timing)
+        if (R.shots && this.grounded && this.actionTimer > 4) for (const sh of R.shots) {
+            const dx = sh.x - this.x, rel = this.vx - sh.vx;
+            if (dx > 20 && rel > 1 && Math.abs(sh.y - this.y) < this.height / 2 + 60) {
+                const tti = dx / rel;
+                if (tti < 10 + 8 * q && tti > 3 && Math.random() < react) { this.jump(); this.actionTimer = 0; break; }
+            }
+        }
         if (onCur) {
-            const n = N[cur], edge = n.r - this.x;
-            if (nxt !== cur && edge < 26 + Math.max(0, nn.l - n.r) * 0.12 && this.actionTimer > 6) { this.jump(); this.actionTimer = 0; }
-            else if (nn.y < n.y - 90 && edge < 120) { this.jump(); this.actionTimer = 0; }
+            const n = N[cur], edge = n.r - this.x, trap = n.dyn && n.dyn !== 2, gap = Math.max(0, nn.l - n.r);
+            if (nxt !== cur && edge < (26 + gap * 0.12 + (trap ? 50 : 0)) * slackK && this.actionTimer > 6) { this.jump(); this.actionTimer = 0; }
+            else if (nn.y < n.y - 90 && edge < 120 * slackK + 20) { this.jump(); this.actionTimer = 0; }
         } else if (!this.grounded) {
             const below = feet > nn.y - 10 && this.vy > 0, farLeft = this.x + this.vx * 14 < nn.l + 40;
-            if (this.jumpsLeft > 0 && this.actionTimer > 10 && ((below && farLeft) || (nn.y < feet - 60 && this.vy > -2) )) { this.jump(); this.actionTimer = 0; }
+            if (this.jumpsLeft > 0 && this.actionTimer > 10 + (1 - q) * 14 && ((below && farLeft) || (nn.y < feet - 60 && this.vy > -2))) { this.jump(); this.actionTimer = 0; }
+            // movement specials
+            else if (q >= 0.3 && !this.actionBlocked() && this.actionLock <= 0 && this.vy > -1 && this.actionTimer > 6 && Math.random() < react) {
+                const toL = nn.l - this.x;
+                if (toL > T.dash && feet < nn.y + 120 && this.cd.BLINK <= 0 && T.blink) { if (this.useSpecial('BLINK', this.x + 600, nn.y)) this.actionTimer = 0; }
+                else if (feet > nn.y + 30 && this.jumpsLeft <= 0 && this.cd.SPIRAL <= 0 && T.spiral && this.x > nn.l - 700) { if (this.useSpecial('SPIRAL', (nn.l + nn.r) / 2, nn.y)) this.actionTimer = 0; }
+            }
             if (this.x > nn.r + 40 && nxt === N.length - 1) this.vx *= 0.9;
         }
         if (target && this.actionTimer % 40 === 0 && Math.hypot(target.x - this.x, target.y - this.y) < 110 && Math.random() < 0.4) this.attack(target.x >= this.x ? 'SIDE_RIGHT' : 'SIDE_LEFT');
     }
 
+    /** King of the Hill: bots go to the hill, hold it, fight whoever stands on it, and from the hill shoot at anyone outside (the normal AI does the actual fighting).
+     *  Difficulty = hill control: Easy is slow and wanders off, Apex never leaves the hill and shoots constantly. */
     updateAI(target) {
+        const M = S.md;
+        if (!M || M.sub !== 'koth' || this.level === 'static' || S.demo || S.gameMode === 'training' || !target) return this.updateAIBase(target);
+        const z = M.zone, feet = this.y + this.height / 2, inZ = (f) => Math.abs(f.x - z.x) < z.r && Math.abs(f.y + f.height / 2 - z.y) < 90;
+        const foes = foesOf(this).filter(f => f.active && !f.out && !(f.spawnT > 0) && !(f.cloakT > 0));
+        const occ = foes.filter(inZ).sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
+        const near = foes.sort((a, b) => Math.hypot(a.x - this.x, a.y - this.y) - Math.hypot(b.x - this.x, b.y - this.y))[0];
+        const busy = this.hitstun > 0 || this.dizzyTimer > 0 || this.clashStunTimer > 0 || this.grabbedBy || this.freezeTimer > 0 || this.fActive || this.sx || this.isHanging || this.spiralT > 0 || this.suplexT > 0;
+        const offStage = this.x < STAGE.x - 10 || this.x > STAGE.x + STAGE.width + 10 || this.y > STAGE.y + 40;
+        if (busy || offStage) { this.updateAIBase(occ || target); return; }                      // recovery, charging and moves in progress are the normal AI's job
+        const inside = inZ(this), dNear = near ? Math.hypot(near.x - this.x, near.y - this.y) : 1e9;
+        const q = RACE_Q[this.diff || this.level] ?? 0.55;
+        if (inside) {
+            if (dNear < 190 + 90 * (1 - q) || (occ && occ !== near)) {                            // a fight on the hill: fight, but never be walked off it
+                this.updateAIBase(occ || near || target);
+                if (q > 0.3 && Math.abs(this.x - z.x) > z.r * (1.05 - 0.3 * q) && this.vx * (this.x - z.x) > 0) this.vx = 0;
+                return;
+            }
+            this.actionTimer++; this.isShielding = false;
+            const dx = z.x - this.x; if (Math.abs(dx) > z.r * 0.3) { this.facing = dx > 0 ? 1 : -1; this.vx += this.facing * 0.5; } else this.vx *= 0.6;
+            if (near && dNear < 1100 && Math.abs(near.y - this.y) < 420) {                       // hold the hill and throw things at whoever waits outside
+                this.facing = near.x > this.x ? 1 : -1;
+                if (this.actionTimer % Math.round(76 - 44 * q) === 0 && !this.actionBlocked() && this.actionLock <= 0) { this._kAim = near; this.attack('NEUTRAL'); }
+            }
+            return;
+        }
+        if (occ) { this.updateAIBase(occ); return; }                                              // somebody holds it: go and knock them off
+        if (dNear < 130) { this.updateAIBase(near); return; }
+        this.actionTimer++; this.isShielding = false;                                              // the hill is free: take it
+        if (Math.random() > 0.4 + 0.6 * q) return;                                                  // slower bots dawdle
+        const dx = z.x - this.x; this.facing = dx > 0 ? 1 : -1; this.vx += this.facing * 0.55;
+        if (feet > z.y + 10 && (this.grounded || this.vy > 1.5) && this.actionTimer % 7 === 0 && Math.abs(dx) < z.r * 2.2 + 200) this.jump();
+        else if (this.grounded && Math.abs(dx) > 200 && feet > STAGE.y - 20 && Math.abs(this.x - z.x) < 700 && this.actionTimer % 40 === 0) this.jump();
+    }
+    updateAIBase(target) {
         if (S.match && S.match.race && S.race && this.level !== 'static') { this.raceDrive(target); return; }
         // static / training dummy: zero input, no rolls, no attacks
         if (this.level === 'static' || (S.gameMode === 'training' && (!S.train || !S.train.botType || (S.train.botType === 'static' || S.train.botType === 'frozen')))) {
@@ -3527,7 +3579,7 @@ function aimOf(f) {
     if (f.isAI) {
         const cx = STAGE.x + STAGE.width / 2;
         if (f.x < STAGE.x - 20 || f.x > STAGE.x + STAGE.width + 20 || f.y > STAGE.y) return { x: cx, y: STAGE.y - 220 };
-        const foe = nearestOf(f, foesOf(f)); return foe ? { x: foe.x, y: foe.y } : { x: cx, y: STAGE.y - 300 };
+        const foe = S.md && f._kAim && isAlive(f._kAim) ? f._kAim : nearestOf(f, foesOf(f)); return foe ? { x: foe.x, y: foe.y } : { x: cx, y: STAGE.y - 300 };
     }
     const a = f.remoteAim ? f.remoteAim : { x: mouse.worldX, y: mouse.worldY };
     return a;
@@ -3572,6 +3624,13 @@ export const viewerFighter = () => S.demo ? null : S.match ? fighters[S.mySlot] 
 /** perks (bought in the shop, equipped per character): only the fighter this screen belongs to carries them */
 const hasPerk = (f, id) => !!f && f === viewerFighter() && S.online !== 'guest' && perksFor(f.char).includes(id);
 /** harder bots (Expert / Master / Apex) fight with built-in stat bundles, the same kind of numbers as the shop perks */
+/** race bots: driving quality per difficulty, and per-character movement-move tuning (dash = smallest gap in px worth a Side-F; blink/spiral = may use the move to travel) */
+const RACE_Q = { easy: 0.15, medium: 0.35, hard: 0.55, expert: 0.7, master: 0.85, apex: 1 };
+export const RACE_TUNE = {                                                     // from a per-character Apex race sweep (Frontier + Magma Forge); noisy, so only clear winners use their moves
+    _: { dash: 450, blink: 1, spiral: 0 },
+    ember: { dash: 300, blink: 1, spiral: 0 }, zephyr: { dash: 420, blink: 0, spiral: 0 }, terra: { dash: 450, blink: 1, spiral: 1 },
+    volt: { dash: 420, blink: 0, spiral: 0 }, tide: { dash: 450, blink: 1, spiral: 0 }, bulwark: { dash: 420, blink: 0, spiral: 0 },
+};
 const SKILL = { expert: 1.3, master: 1.6, apex: 2 };
 const BOT_STATS = {
     expert: { dmg: 0.08, taken: -0.10, kbTaken: -0.06, cd: -0.12 },
@@ -3913,9 +3972,8 @@ function beginSuddenDeath(tied) {
     runCountdown();
 }
 /** timer matches: fewest deaths wins. A tie for first is sudden death. */
-// ------------------------------------------------------------ King of the Hill / Tag (timer matches with their own score)
+// ------------------------------------------------------------ King of the Hill (timer matches with their own score)
 export const KOTH_TARGET = 50 * 60;                                          // 50 s on the hill wins at once
-const TAG_IMMUNE = 150;                                                      // the one who just passed the tag can't be tagged straight back
 function initModeState() {
     const sub = S.match && S.match.sub; S.md = null; if (!sub) return;
     S.md = { sub, sc: {}, it: -1, imm: 0, zone: sub === 'koth' ? { x: STAGE.x + STAGE.width / 2, y: STAGE.y - 450, r: 190 } : null, who: -1 };
@@ -3931,17 +3989,6 @@ function tickMode() {
         const owners = new Set(inside.map(teamOf));
         M.who = owners.size === 1 ? inside[0].slot : -1;                     // contested = nobody scores
         if (M.who >= 0) { for (const f of inside) { M.sc[f.slot] = (M.sc[f.slot] || 0) + 1; if (M.sc[f.slot] >= KOTH_TARGET) S.timeLeft = Math.min(S.timeLeft, 1); } }
-    } else {
-        const act = fighters.filter(f => f.active && !f.out);
-        if (M.it < 0 || !act.some(f => f.slot === M.it)) { const pick = act[Math.floor(Math.random() * act.length)]; M.it = pick ? pick.slot : -1; M.imm = 90; }
-        if (M.imm > 0) M.imm--;
-        const it = act.find(f => f.slot === M.it); if (!it) return;
-        M.sc[it.slot] = (M.sc[it.slot] || 0) + 1;
-        if (M.imm > 0 || it.spawnT > 0) return;
-        for (const o of live) {
-            if (o === it || (S.match.teams && o.team && o.team === it.team) || o.invincibleTimer > 0 && o.spawnT > 0) continue;
-            if (Math.abs(o.x - it.x) < 85 && Math.abs(o.y - it.y) < 95) { M.it = o.slot; M.imm = TAG_IMMUNE; fx('hit', o.x, o.y, 18, 0); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 5); notify(`${o.name} is IT!`); break; }
-        }
     }
 }
 function finishTimer() {
@@ -3952,7 +3999,7 @@ function finishTimer() {
     const score = new Map(), members = new Map();
     for (const f of live) {
         const k = keyOf(f);
-        score.set(k, (score.get(k) || 0) + (S.md ? (S.md.sub === 'koth' ? -modeScore(f) : modeScore(f)) : (f.deaths || 0)));
+        score.set(k, (score.get(k) || 0) + (S.md ? -modeScore(f) : (f.deaths || 0)));
         if (!members.has(k)) members.set(k, []);
         members.get(k).push(f);
     }
@@ -5351,7 +5398,7 @@ function renderRoster() {
         tm.style.color = (S.sudden || sdMode) || (!S.sudden && Math.ceil((S.timeLeft || 0) / 60) <= 10) ? '#fb7185' : '#e2e8f0';
     } else tm.style.display = 'none';
     const rows = fighters.filter(f => f.active).map(f => {
-        const pips = timer && !S.sudden ? (S.md ? (Math.floor(((S.md.sc[f.slot] || 0)) / 60) + 's' + (S.md.sub === 'tag' && S.md.it === f.slot ? ' 🏷️ IT' : '')) : 'D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
+        const pips = timer && !S.sudden ? (S.md ? (Math.floor(((S.md.sc[f.slot] || 0)) / 60) + 's') : 'D-' + (f.deaths || 0)) : (f.out ? 'OUT' : '●'.repeat(Math.max(0, f.stocks)));
         const nm = String(f.name).replace(/[<>&"]/g, '');
         return `<div style="display:flex;gap:8px;align-items:center;background:rgba(8,12,24,.72);border-left:4px solid ${f.color};padding:4px 8px;border-radius:8px;min-width:190px;opacity:${f.out ? .45 : 1}${f.slot === (S.mySlot || 0) ? ';outline:1px solid #fff6' : ''}"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${nm}</span><span style="color:${f.damage > 120 ? '#fb7185' : f.damage > 60 ? '#fbbf24' : '#fff'}">${S.instantBlow ? '∞' : Math.floor(f.damage)}%</span><span style="color:${f.color};letter-spacing:1px">${pips}</span></div>`;
     }).join('');
@@ -5475,8 +5522,8 @@ function startMatchSequence(mode, cfg) {
     if (mode === 'lobby' && cfg) {
         const ic = cfg.items || {};
         const lim = clampN(+cfg.timeLimit || 5, 1, 10);
-        const sdPick = cfg.mode === 'sudden', raceM = cfg.mode === 'race' || !!cfg.race, sub = !raceM && (cfg.mode === 'koth' || cfg.mode === 'tag') ? cfg.mode : null;
-        if (sub === 'koth') cfg.map = HILL_MAP; else if (cleanMap(cfg.map) === HILL_MAP) cfg.map = 'frontier';       // Sunny Hill belongs to King of the Hill
+        const sdPick = cfg.mode === 'sudden', raceM = cfg.mode === 'race' || !!cfg.race, sub = !raceM && cfg.mode === 'koth' ? 'koth' : null;
+        if (sub === 'koth') cfg.map = HILL_MAP;                          // King of the Hill is always on Sunny Hill
         S.match = {
             teams: !!cfg.teams, startDamage: sdPick ? 200 : clampN(+cfg.startDamage || 0, 0, 249), stocks: sdPick ? 1 : (cfg.stocks || 3),
             mode: cfg.mode === 'timer' || raceM || sub ? 'timer' : sdPick ? 'sudden' : 'stock', sub, timeLimit: lim,
@@ -5563,7 +5610,7 @@ function startMatchSequence(mode, cfg) {
     const aiDescText = document.getElementById('aiDescText');
 
     if (S.gameMode === 'lobby') {
-        modeLabel.textContent = (S.match.sub === 'koth' ? 'KING OF THE HILL • ' : S.match.sub === 'tag' ? 'TAG • ' : '') + (S.match.mode === 'sudden' ? 'SUDDEN DEATH • ' : S.match.mode === 'timer' ? 'TIMER • ' : '') + (S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL');
+        modeLabel.textContent = (S.match.sub === 'koth' ? 'KING OF THE HILL • ' : '') + (S.match.mode === 'sudden' ? 'SUDDEN DEATH • ' : S.match.mode === 'timer' ? 'TIMER • ' : '') + (S.match.teams ? 'CUSTOM MATCH • TEAMS' : 'CUSTOM MATCH • FREE FOR ALL');
     } else if (S.gameMode === 'easy') {
         modeLabel.textContent = "MODE: EASY";
         aiDiffLabel.textContent = "Easy Bot";
@@ -5887,7 +5934,7 @@ export function raceResults() {
     const R = S.race; if (!R) return [];
     const x0 = STAGE.x, x1 = R.finishX;
     const rows = fighters.filter(f => f.active).map(f => ({
-        slot: f.slot, name: f.name, color: f.color, char: f.char, team: f.team, time: f._finT || 0, p: f._finT ? 1 : Math.max(0, Math.min(1, (raceProg(f) - x0) / (x1 - x0))),
+        slot: f.slot, name: f.name, color: f.color, char: f.char, team: f.team, time: f._finT || 0, p: f._finT ? 1 : Math.max(0, Math.min(1, (f.x - x0) / (x1 - x0))),
         falls: (S.raceDeaths || []).filter(d => d.slot === f.slot),
     }));
     rows.sort((a, b) => (a.time && b.time) ? a.time - b.time : a.time ? -1 : b.time ? 1 : b.p - a.p);
@@ -5908,7 +5955,7 @@ function endRace() {
 export function raceStandings() {
     const R = S.race; if (!R) return [];
     const x0 = STAGE.x, x1 = R.finishX;
-    return fighters.filter(f => f.active).map(f => ({ f, p: f._finT ? 1 : Math.max(0, Math.min(1, (raceProg(f) - x0) / (x1 - x0))) })).sort((a, b) => (a.f._finT && b.f._finT) ? a.f._finT - b.f._finT : a.f._finT ? -1 : b.f._finT ? 1 : b.p - a.p);
+    return fighters.filter(f => f.active).map(f => ({ f, p: f._finT ? 1 : Math.max(0, Math.min(1, (f.x - x0) / (x1 - x0))) })).sort((a, b) => (a.f._finT && b.f._finT) ? a.f._finT - b.f._finT : a.f._finT ? -1 : b.f._finT ? 1 : b.p - a.p);
 }
 function checkMatchEnd() {
     if (!S.match || S.gameState !== 'playing') return;

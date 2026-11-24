@@ -24,8 +24,6 @@ export class ModeFx {
             const held = M.who >= 0, pulse = 0.85 + Math.sin(t * 4) * 0.15;
             this.ringMat.color.setRGB(held ? 0.6 : 2.2, held ? 2.2 : 1.7, held ? 0.6 : 0.3).multiplyScalar(pulse); this.colMat.color.copy(this.ringMat.color); this.colMat.opacity = held ? 0.1 : 0.06;
         }
-        const f = M.sub === 'tag' ? fighters.find(x => x.slot === M.it && x.active && !x.out) : null;
-        this.it.visible = !!f;
-        if (f) { this.it.position.set(wx(f.x), wy(f.y) + (f.height || 110) + 60 + Math.sin(t * 6) * 8, 0); this.it.rotation.y = t * 3; }
+        this.it.visible = false;
     }
 }

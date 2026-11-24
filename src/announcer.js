@@ -52,7 +52,6 @@ export function tickAnnouncer() {
             if (sec <= 10 && sec > 9 && seen.tl !== 10) { say('Ten seconds', { key: 't10' }); seen.tl = 10; }
         }
         const M = S.md;
-        if (M && M.sub === 'tag' && M.it !== seen.it && M.it >= 0) { const f = act.find(x => x.slot === M.it); if (f) say(`${nm(f)} is it!`, { key: 'tag', gap: 1200 }); seen.it = M.it; }
         if (M && M.sub === 'koth' && M.who !== seen.who) { const f = act.find(x => x.slot === M.who); if (f) say(`${nm(f)} takes the hill`, { key: 'hill', gap: 2500 }); else if (seen.who >= 0) say('Hill is open', { key: 'hillopen', gap: 3000 }); seen.who = M.who; }
         if (S.chaos && S.chaos.shown && S.chaos.shown.n !== seen.chaos) { seen.chaos = S.chaos.shown.n; say(CHAOS_EVENTS[S.chaos.shown.ev] || 'Chaos', { key: 'chaos', gap: 500, rate: 1.15 }); }
         seen.first = false;
