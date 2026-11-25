@@ -3014,6 +3014,9 @@ class AIBot extends Fighter {
             const end = d.p.by + (d.kind === 'liftU' ? -LIFT_TRAVEL : LIFT_TRAVEL);
             if (Math.abs(d.p.y - end) > 40) { this.vx *= 0.5; this.facing = 1; return; }
         }
+        const galeNow = R.map === 'sunny' ? galeOf(this.slot, R.t) : null, qq = RACE_Q[this.diff || this.level] ?? 0.55;
+        if (galeNow && this.grounded && qq > 0.3) { this.vx = this.vx * 0.5 - galeNow.ax * 0.5 * qq; return; }              // a gale is blowing: brace on the platform and wait it out (it only lasts a second)
+        if (galeNow && !this.grounded && qq > 0.3 && galeNow.ay > 0.3 && this.jumpsLeft > 0 && feet > nn.y + 40) this.vy -= 0.5 * qq;   // pushed down: fight it with the air jumps' lift
         const onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
         this.facing = 1;
         if (this.vx < cap) this.vx = Math.min(cap, this.vx + 1.2);
@@ -3638,7 +3641,7 @@ const RACE_Q = { easy: 0.15, medium: 0.35, hard: 0.55, expert: 0.7, master: 0.85
 export const RACE_TUNE = {                                                     // from per-character Apex race sweeps (Frontier + Magma Forge + Horizon, 5 move settings each); best setting kept
     _: { dash: 450, blink: 1, spiral: 0 },
     ember: { dash: 400, blink: 1, spiral: 1 }, zephyr: { dash: 420, blink: 0, spiral: 1 }, terra: { dash: 500, blink: 1, spiral: 0 },
-    volt: { dash: 400, blink: 1, spiral: 1 }, tide: { dash: 350, blink: 0, spiral: 1, fwd: 1 }, bulwark: { dash: 500, blink: 1, spiral: 0 },
+    volt: { dash: 400, blink: 1, spiral: 1 }, tide: { dash: 350, blink: 0, spiral: 1, fwd: 1 }, bulwark: { dash: 450, blink: 1, spiral: 1 },
     umbra: { dash: 380, blink: 0, spiral: 1, fwd: 1 }, luminent: { dash: 400, blink: 1, spiral: 1 },
 };
 const SKILL = { expert: 1.3, master: 1.6, apex: 2 };
@@ -4788,11 +4791,11 @@ function updatePillars() {
 
 // ------------------------------------------------------------ stage hazards (an option for custom matches and training). Host-only; guests just see the effects and the hits.
 // Every map: lightning strikes + geysers (also on the platforms). Frontier: falling meteors. Horizon: the stage splits into pieces that drift apart and come back.
-const HAZ = { t: 0, list: [], met: [], cr: [] };
+const HAZ = { t: 0, list: [], met: [], cr: [] }; S._haz = HAZ;
 let metId = 0;
 function resetHazards() {
     if (SPL.base) { if (!SPL.base.race) { STAGE.x = SPL.base.x; STAGE.width = SPL.base.w; } for (const q of STAGE.platforms) if (q.bx !== undefined) { q.x = q.bx; delete q.bx; } }
-    HAZ.t = 0; HAZ.list.length = 0; HAZ.met.length = 0; HAZ.cr.length = 0; SPL.base = null; SPL.cuts = []; SPL.t = 0; SPL.off = []; STAGE.segs = null;
+    HAZ.t = 0; HAZ.gale = null; HAZ.list.length = 0; HAZ.met.length = 0; HAZ.cr.length = 0; SPL.base = null; SPL.cuts = []; SPL.t = 0; SPL.off = []; STAGE.segs = null;
 }
 function hazardHit(f, h) {
     if (S.race && S.match && S.match.race) { obsHit(f, -1, -0.8, h.kind === 'meteor' ? 12 : 13, h.dmg || 10, 60); return; }
@@ -4930,6 +4933,17 @@ function updateHazards() {
             }
         }
         if (c.t > c.warn + 45) HAZ.cr.splice(i, 1);
+    }
+    if (S.hazards && S.theme === 'sunny' && !RC) {                           // Sunny Hill: a gale appears out of nowhere on the stage for 1 s in a random direction, then is gone for 1 s (1400 x 900 wide)
+        const GW = 1400, GH = 900, ph = HAZ.t % 120;
+        if (HAZ.t > 150 && ph === 0) { const a = Math.random() * Math.PI * 2; HAZ.gale = { x: STAGE.x + STAGE.width * (0.2 + Math.random() * 0.6), y: STAGE.y - 330, ax: Math.cos(a), ay: Math.sin(a), t: 0 }; fx('gale', HAZ.gale.x, HAZ.gale.y, a, 60, GW); }
+        const G = HAZ.gale;
+        if (G && ph < 60) {
+            for (const f of fighters) {
+                if (!isAlive(f) || f.hitstun > 0 && f.invincibleTimer > 0 || Math.abs(f.x - G.x) > GW / 2 || Math.abs(f.y - G.y) > GH / 2) continue;
+                f.vx = Math.max(-20, Math.min(20, f.vx + G.ax * 1.0)); f.vy = Math.max(-18, Math.min(18, f.vy + G.ay * 0.8)); if (f.grounded && G.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); }
+            }
+        } else if (G && ph >= 60) HAZ.gale = null;
     }
     if (S.theme === 'frontier') {                                            // Frontier only: meteors fall diagonally from the top left
         if (S.hazards && HAZ.t > 240 && HAZ.t % ev(170) === 0) spawnMeteor();
@@ -5866,7 +5880,7 @@ function updateRaceObs(R) {
         if (f._finT) continue;
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
-            if (gl && f.hitstun <= 0) { f.vx = Math.max(-16, Math.min(16, f.vx + gl.ax * GALE.accel)); if (!f.grounded) f.vy += gl.ay * GALE.accel * 0.3; else if (gl.ay < -0.8) f.vy -= 0.2; if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
+            if (gl && f.hitstun <= 0) { f.vx = Math.max(-18, Math.min(18, f.vx + gl.ax * GALE.accel)); f.vy = Math.max(-17, Math.min(17, f.vy + gl.ay * GALE.accel * 0.9)); if (f.grounded && gl.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); } if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
         }
         const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
         for (const o of O.spin) {                                    // spinning plus signs

@@ -257,7 +257,7 @@ export class UI {
     renderSettings() {
         const rows = this.set.querySelector('.lm-rows');
         const L = getLayout();
-        const gfx = getGfx();
+        const gfx = getGfx(), de = document.documentElement, fsOk = !!(de.requestFullscreen || de.webkitRequestFullscreen), fsOn = !!(document.fullscreenElement || document.webkitFullscreenElement);
         const mv = Math.round(audio.musicVolume * 100), sv = Math.round(audio.sfxVolume * 100);
         let group = '', html = `<h4 class="lm-group">Audio</h4>
             <div class="lm-row lm-row-stack"><span>Music<small class="lm-sub">Title, matches and stage themes. Drag to 0 to mute</small></span>
@@ -280,7 +280,7 @@ export class UI {
               <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getHitboxes() ? 1 : 0) === m ? ' on' : ''}" data-hb="${m}">${t}</button>`).join('')}</span></div>
             <div class="lm-row"><span>Reduce flashing lights<small class="lm-sub">Fewer full-screen flashes, dimmer lights and glow, and a smoother fade for final blows. Recommended if bright flashes bother you</small></span>
               <span class="lm-seg">${[[0, 'Off'], [1, 'On']].map(([m, t]) => `<button class="lm-segb${(getReduceFlash() ? 1 : 0) === m ? ' on' : ''}" data-rf="${m}">${t}</button>`).join('')}</span></div>
-            <div class="lm-row"><span>Fullscreen<small class="lm-sub">Also the corner button on phones</small></span><button class="lm-key" data-fs>Toggle fullscreen</button></div>
+            <div class="lm-row"><span>Fullscreen<small class="lm-sub">${fsOk ? 'On / off. Also the corner button on phones' : 'This browser cannot do fullscreen (iPhone Safari): use Share, then Add to Home Screen'}</small></span>${fsOk ? `<span class="lm-seg"><button class="lm-segb${fsOn ? ' on' : ''}" data-fsset="1">On</button><button class="lm-segb${fsOn ? '' : ' on'}" data-fsset="0">Off</button></span>` : '<span class="lm-sub">not supported</span>'}</div>
             <h4 class="lm-group">PC controls (keyboard &amp; mouse)</h4>`;
         group = 'PC';
         for (const a of ACTIONS) {
@@ -310,8 +310,7 @@ export class UI {
             inp.addEventListener('change', apply);
         });
         rows.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { setMode(b.dataset.mode); this.renderSettings(); }));
-        const fs = rows.querySelector('[data-fs]');
-        if (fs) fs.addEventListener('click', () => document.dispatchEvent(new Event('cbg-fs')));
+        rows.querySelectorAll('[data-fsset]').forEach(b => b.addEventListener('click', () => { document.dispatchEvent(new CustomEvent('cbg-fs-set', { detail: b.dataset.fsset === '1' })); setTimeout(() => this.renderSettings(), 350); }));
         const ed = rows.querySelector('[data-edit-layout]');
         if (ed) ed.addEventListener('click', () => {
             if (!this.layoutEditor) return;

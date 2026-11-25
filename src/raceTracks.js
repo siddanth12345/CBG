@@ -95,7 +95,7 @@ export const shotPos = (o, k, t) => { const span = o.x1 - o.x0, pos = (t * o.sp 
 export const plusSolid = (o, t) => true; const _plusSolidOld = (o, t) => { const m = (((spinAngle(o, t) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.52; };
 
 /** Sunny Hill gale: every racer gets a big gust (1400 x 900) that appears out of nowhere for 1 s in a random direction, then is gone for 1 s. A pure function of the race clock. */
-export const GALE = { w: 1400, h: 900, accel: 0.6, on: 60, period: 120 };
+export const GALE = { w: 1400, h: 900, accel: 0.8, on: 60, period: 120 };
 export function galeOf(slot, t) {
     if (t < 180) return null; const k = Math.floor(t / GALE.period), age = t % GALE.period; if (age >= GALE.on) return null;
     const r = rng(hash('g' + k + ':' + slot)), a = r() * Math.PI * 2;

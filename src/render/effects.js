@@ -579,6 +579,17 @@ export class Effects {
                     if (!lowGfx()) for (let i = 0; i < 14; i++) this.sparks(new THREE.Vector3(pos.x + (Math.random() - 0.5) * w * 1.2, y + 4, (Math.random() - 0.5) * 80), '#a8a29e', 2, 140, 0.8, 'up');
                     break;
                 }
+                case 'gale': {           // a = angle, b = frames, c = width: a pale oval of wind with streaks flying along the angle
+                    const W = e.c || 1400, ax = Math.cos(e.a || 0), ay = Math.sin(e.a || 0), g = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.CircleGeometry(0.5, 32), new THREE.MeshBasicMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false })); body.scale.set(W, W * 0.64, 1); g.add(body);
+                    const st = []; for (let j = 0; j < (lowGfx() ? 8 : 16); j++) { const m = new THREE.Mesh(new THREE.BoxGeometry(150, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false })); m.rotation.z = e.a || 0; g.add(m); st.push(m); }
+                    g.position.set(pos.x, pos.y, 20); g.renderOrder = 4; this.scene.add(g);
+                    this.timed.push({ obj: g, t: 0, dur: (e.b || 60) / 60, step: (u) => {
+                        const k = Math.min(1, u * 7, (1 - u) * 7); body.material.opacity = 0.16 * k;
+                        st.forEach((m, j) => { const f = (j * 0.137 + u * 2.1) % 1, v = ((j * 0.61) % 1) - 0.5, al = (f - 0.5) * W, ac = v * W * 0.55; m.position.set(ax * al - ay * ac, ay * al + ax * ac, 0); m.material.opacity = 0.7 * k; });
+                    }, free: () => { this.scene.remove(g); body.geometry.dispose(); body.material.dispose(); st.forEach(m => { m.geometry.dispose(); m.material.dispose(); }); } });
+                    break;
+                }
                 case 'crusher': {        // a = width, b = 0 warning strip / 1 the slam. A giant metal block drops onto the surface at pos
                     const w = Math.max(120, e.a || 300), y0 = pos.y + 2;
                     if (!e.b) {
