@@ -14,6 +14,7 @@ const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion:
 const MAP_INFO = {
     frontier: { title: 'FRONTIER', sub: 'Neon night arena', theme: 'frontier' }, big: { title: 'FRONTIER', sub: 'The big arena', theme: 'frontier' },
     horizon: { title: 'HORIZON', sub: 'Morning valley', theme: 'horizon' }, bighorizon: { title: 'HORIZON', sub: 'The big valley', theme: 'horizon' },
+    sunny: { title: 'SUNNY HILL', sub: 'Rolling green hills', theme: 'horizon' },
     lava: { title: 'MAGMA FORGE', sub: 'Volcano over a lava sea', theme: 'lava' }, biglava: { title: 'MAGMA FORGE', sub: 'The big forge', theme: 'lava' },
 };
 const COLORS = { horizon: { fill: '#f8ecd2', edge: '#ffffff', glow: '#ffd98a' }, frontier: { fill: '#06101f', edge: '#22d3ee', glow: '#38bdf8' }, lava: { fill: '#1b0a08', edge: '#fb923c', glow: '#ef4444' } };

@@ -159,7 +159,10 @@ export function reportMatch(st, cx) {
     if (cx.ranked) {
         const before = M.rating, tb = tierOf(before);
         const x = cx.online ? 3 : 1;                                   // online ranked climbs 3x faster
-        if (!cx.draw) { M.rating = Math.max(0, M.rating + x * (cx.won ? RANK.win + (st.deaths === 0 ? RANK.flawless : 0) : -RANK.loss)); if (cx.won) M.wins++; else M.losses++; }
+        const diff = cx.opp > 0 ? cx.opp - M.rating : 0;                // beating a higher-rated player is worth more (up to 2.5x); losing to one costs less
+        const kWin = Math.max(0.5, Math.min(2.5, 1 + diff / 400)), kLoss = Math.max(0.4, Math.min(1.6, 1 - diff / 800));
+        if (!cx.draw) { M.rating = Math.max(0, M.rating + x * (cx.won ? (RANK.win + (st.deaths === 0 ? RANK.flawless : 0)) * kWin : -RANK.loss * kLoss)); M.rating = Math.round(M.rating); if (cx.won) M.wins++; else M.losses++; }
+        if (cx.won && diff > 0) gain += Math.min(40, Math.round(diff / 20));
         M.hist = [...M.hist.slice(-29), { r: M.rating, w: cx.won ? 1 : 0, t: Date.now() }];
         rank = { before, after: M.rating, tier: tierOf(M.rating), up: tierOf(M.rating).name !== tb.name && M.rating > before, down: tierOf(M.rating).name !== tb.name && M.rating < before };
         gain += cx.won ? 20 : 6;

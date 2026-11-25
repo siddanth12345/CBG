@@ -335,11 +335,11 @@ function onlineGameOver() {
         if (!resultRecorded) { resultRecorded = true; recordResult(S.winnerRole === 'lobby' ? !!S.iWon : S.winnerRole === S.online); $('requeueBtn').classList.toggle('hidden', !Online.viaQueue || Online.mode === 'lobby'); }
     } else if (S.gameState !== 'gameover') resultRecorded = false;
 }
-$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(Online.rankedQ); });
+$('requeueBtn').addEventListener('click', () => { $('gameOverModal').classList.add('hidden'); leaveRoom(); backToMenu(); lobby.open(); joinQueue(true, Online.queueKind || '1v1'); });
 
 function frame(now) {
     tickKills();
-    S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online);
+    S.rankedQ = !!(Online.viaQueue && Online.rankedQ && S.online); S.viaQueue = !!(Online.viaQueue && S.online); S.oppRating = S.online ? Online.oppRating : 0;
     const dt = Math.min(0.1, (now - last) / 1000), rawDt = Math.min(0.5, (now - last) / 1000);
     last = now;
     try {

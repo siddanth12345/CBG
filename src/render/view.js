@@ -508,9 +508,9 @@ export class View {
         this.modeFx.update(this.clock);
         if (inMatch) {
             S.detailLo = !!this._qLo || fighters.filter(x => x.active).length >= 5;      // many fighters / a slow device: tiny body details (fingers, studs, trim) are not drawn
-            for (const m of this.models) m.update(dt, alpha, this.clock);
+            const farX = S.race ? this.camera.position.x : null;           // race: racers far out of view are neither animated nor drawn
+            this.models.forEach((m, i) => { const f = fighters[i]; if (farX !== null && f && Math.abs(wx(f.x) - farX) > 7000) { m.root.visible = false; return; } m.update(dt, alpha, this.clock); });
             this.portalPass(dt);
-            if (S.race) { const cx = this.camera.position.x; fighters.forEach((f, i) => { const m = this.models[i]; if (m && m.root.visible && Math.abs(wx(f.x) - cx) > 7000) m.root.visible = false; }); }      // race: racers far out of view are not drawn
             this.fx.update(dt, this.models);
             this.items.update(dt, this.clock, this.models);
         } else this.fx.clearEvents();

@@ -9,6 +9,8 @@ import { displayName } from '../account.js';
 import { getMyChar, charOf, CHAR_IDS } from '../characters.js';
 import { ITEM_TYPES, ITEM_DEFAULT, ITEM_INTERVAL_MIN, ITEM_INTERVAL_MAX } from '../items.js';
 import { bindChat, onRemoteChat, clearChat } from './chat.js';
+import { getMeta } from '../meta.js';
+const myRt = () => { try { return Math.round(getMeta().rating) || 0; } catch (e) { return 0; } };      // sent to the other players only to scale rating changes: never shown before a match
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
@@ -33,7 +35,7 @@ export function cleanItems(i) {
     const types = Array.isArray(i.types) ? ITEM_TYPES.filter(t => i.types.includes(t)) : ITEM_TYPES.slice();
     return { on: !!i.on, types, interval: Math.max(ITEM_INTERVAL_MIN, Math.min(ITEM_INTERVAL_MAX, Math.round(+i.interval) || ITEM_DEFAULT.interval)) };
 }
-export const defaultSettings = () => ({ teams: false, startDamage: 0, stocks: 3, mode: 'stock', timeLimit: 5, map: 'big', hazards: false, instantBlow: false, chaos: false, items: cleanItems(ITEM_DEFAULT) });
+export const defaultSettings = () => ({ duel: false, teams: false, startDamage: 0, stocks: 3, mode: 'stock', timeLimit: 5, map: 'big', hazards: false, instantBlow: false, chaos: false, items: cleanItems(ITEM_DEFAULT) });
 export const Online = {
     role: null,           // 'host' | 'guest' | null
     code: '',
@@ -41,7 +43,7 @@ export const Online = {
     note: '',
     name: 'Player',
     mode: 'pvp',          // 'pvp' (1v1) | 'lobby' (up to 8)
-    viaQueue: false, rankedQ: false,
+    viaQueue: false, rankedQ: false, oppRating: 0,
     slot: 1,              // my fighter slot (0 = host)
     myId: '',
     lobby: { members: [], settings: defaultSettings(), started: false },
@@ -112,8 +114,8 @@ export async function hostRoom(code, mode = 'pvp') {
                     break;
                 }
                 if (Online.status === 'connected') { t.send({ t: 'full', to: m.id }); break; }
-                Online.peerName = (m.name || 'Guest').slice(0, 20); S.peerChar = charOf(m.char).id;
-                t.send({ t: 'welcome', name: Online.name, mode: 'pvp', to: m.id, slot: 1, char: getMyChar() });
+                Online.peerName = (m.name || 'Guest').slice(0, 20); S.peerChar = charOf(m.char).id; Online.oppRating = +m.rt || 0;
+                t.send({ t: 'welcome', name: Online.name, mode: 'pvp', to: m.id, slot: 1, char: getMyChar(), rt: myRt() });
                 set('connected', Online.peerName + ' joined');
                 beginMatch();
                 break;
@@ -138,7 +140,7 @@ export async function hostRoom(code, mode = 'pvp') {
     bindChat((msg) => t.send(msg)); clearChat();
     watch();
     if (mode === 'lobby') {
-        Online.lobby = { members: [{ id: 'host', slot: 0, name: Online.name, team: 'red', char: getMyChar(), seen: Infinity }], settings: defaultSettings(), started: false };
+        Online.lobby = { members: [{ id: 'host', slot: 0, name: Online.name, team: 'red', char: getMyChar(), rt: myRt(), seen: Infinity }], locked: false, settings: defaultSettings(), started: false };
         Online.slot = 0;
         lobbyTimer = setInterval(lobbyTick, 1500);
         set('connected', 'Lobby open. Share the code ' + Online.code);
@@ -148,7 +150,7 @@ export async function hostRoom(code, mode = 'pvp') {
 
 // ---------------------------------------------------------------- custom-match lobby (host side)
 const memberOf = (m) => Online.lobby.members.find(x => x.id === m.id && x.id !== 'host');
-const publicLobby = () => ({ t: 'lobby', settings: Online.lobby.settings, started: Online.lobby.started, members: Online.lobby.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent' })) });
+const publicLobby = () => ({ t: 'lobby', settings: Online.lobby.settings, started: Online.lobby.started, members: Online.lobby.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: x.char || 'luminent', rt: x.rt || 0 })), locked: !!Online.lobby.locked });
 export function lobbyPush() { if (Online.role === 'host' && Online.mode === 'lobby') { Online.t.send(publicLobby()); Online.onChange(); } }
 function lobbyHello(m) {
     const L = Online.lobby;
@@ -156,9 +158,11 @@ function lobbyHello(m) {
     if (!mem) {
         if (L.started) { Online.t.send({ t: 'full', to: m.id, why: 'That match already started' }); return; }
         if (L.members.length >= MAX_PLAYERS) { Online.t.send({ t: 'full', to: m.id, why: 'That lobby is full (8 players)' }); return; }
+        if (L.settings.duel && L.members.length >= 2) { Online.t.send({ t: 'full', to: m.id, why: 'That lobby is 1v1 and already has 2 players' }); return; }
+        if (L.locked && L.members.length >= (L.cap || 4)) { Online.t.send({ t: 'full', to: m.id, why: 'That match is full' }); return; }
         let slot = 1; while (L.members.some(x => x.slot === slot)) slot++;
         const counts = TEAMS.map(tm => L.members.filter(x => x.team === tm).length);
-        mem = { id: m.id, slot, char: charOf(m.char).id, name: String(m.name || 'Guest').slice(0, 20), team: TEAMS[counts.indexOf(Math.min(...counts))], seen: performance.now() };
+        mem = { id: m.id, slot, char: charOf(m.char).id, rt: +m.rt || 0, name: String(m.name || 'Guest').slice(0, 20), team: TEAMS[counts.indexOf(Math.min(...counts))], seen: performance.now() };
         L.members.push(mem);
     }
     Online.t.send({ t: 'welcome', name: Online.name, mode: 'lobby', to: m.id, slot: mem.slot });
@@ -176,8 +180,9 @@ function lobbyTick() {
     for (const mem of Online.lobby.members.slice()) if (mem.id !== 'host' && now - mem.seen > 9000) dropMember(mem);
     Online.t.send(publicLobby());
 }
-export function setLobbySetting(k, v) {
-    if (Online.role !== 'host' || Online.lobby.started) return;
+export function setLobbySetting(k, v, force = false) {
+    if (Online.role !== 'host' || Online.lobby.started || (Online.lobby.locked && !force)) return;
+    if (k === 'duel') { v = !!v; if (v && Online.lobby.members.length > 2) { Online.note = '1v1 is only possible with 2 players or fewer'; Online.onChange(); return; } }
     if (k === 'mode' && v === 'sudden') {
         Online.lobby.settings.mode = 'sudden';
         Online.lobby.settings.stocks = 1;
@@ -207,6 +212,7 @@ export function setMemberTeam(slot, team) {
 export function addBot(level) {
     if (Online.role !== 'host' || Online.mode !== 'lobby' || Online.lobby.started) return false;
     const L = Online.lobby;
+    if (L.locked || (L.settings.duel && L.members.length >= 2)) return false;
     if (L.members.length >= MAX_PLAYERS || !['static', 'frozen', 'easy', 'medium', 'hard', 'expert', 'master', 'apex'].includes(level)) return false;
     let slot = 1; while (L.members.some(x => x.slot === slot)) slot++;
     const counts = TEAMS.map(tm => L.members.filter(x => x.team === tm).length);
@@ -222,7 +228,7 @@ export function addBot(level) {
     return true;
 }
 export function kickMember(slot) {
-    if (Online.role !== 'host') return;
+    if (Online.role !== 'host' || Online.lobby.locked) return;
     const mem = Online.lobby.members.find(x => x.slot === slot); if (!mem || mem.id === 'host') return;
     if (!mem.bot) Online.t.send({ t: 'kick', to: mem.id });
     dropMember(mem);
@@ -235,8 +241,9 @@ export function beginLobbyMatch() {
     const raceMode = L.settings.mode === 'race', raceChar = raceMode ? CHAR_IDS[Math.floor(Math.random() * CHAR_IDS.length)] : null;
     const cfg = { chaos: !!L.settings.chaos && !raceMode, instantBlow: !!L.settings.instantBlow && !raceMode, players: L.members.map(x => ({ slot: x.slot, name: x.name, team: x.team, bot: x.bot || null, char: raceChar || x.char || 'luminent' })), teams: L.settings.teams, startDamage: L.settings.mode === 'sudden' ? 200 : Math.min(249, +L.settings.startDamage || 0), stocks: L.settings.mode === 'sudden' ? 1 : (+L.settings.stocks || 3), mode: raceMode ? 'race' : L.settings.mode === 'koth' ? 'koth' : L.settings.mode === 'timer' ? 'timer' : L.settings.mode === 'sudden' ? 'sudden' : 'stock', timeLimit: +L.settings.timeLimit || 5, map: resolveMap(L.settings.map), hazards: raceMode || !!L.settings.hazards, race: raceMode, items: cleanItems(L.settings.items) };
     S.online = 'host'; S.opponentName = null; Online.cfg = cfg;
+    { const others = L.members.filter(x => x.slot !== 0 && !x.bot && x.rt > 0); Online.oppRating = others.length ? Math.round(others.reduce((a, x) => a + x.rt, 0) / others.length) : 0; }
     NETHOOK.send = (snap) => Online.t && Online.t.send({ t: 'snap', s: snap });
-    Online.t.send({ t: 'start', cfg });
+    Online.t.send({ t: 'start', cfg, rts: L.members.filter(x => !x.bot).map(x => ({ slot: x.slot, rt: x.rt || 0 })) });
     startMatchSequence('lobby', { ...cfg, mySlot: 0 });
     Online.onChange();
     return true;
@@ -267,13 +274,13 @@ export async function joinRoom(code) {
     t.onmessage = (m) => {
         Online.lastRecv = performance.now();
         switch (m.t) {
-            case 'welcome': if (m.to && m.to !== myId) break; Online.mode = m.mode === 'lobby' ? 'lobby' : 'pvp'; Online.slot = m.slot || 1; welcomed = true; Online.peerName = (m.name || 'Host').slice(0, 20); set('connected', 'Connected to ' + Online.peerName); break;
+            case 'welcome': if (m.to && m.to !== myId) break; Online.mode = m.mode === 'lobby' ? 'lobby' : 'pvp'; Online.slot = m.slot || 1; if (Online.mode === 'pvp') Online.oppRating = +m.rt || 0; welcomed = true; Online.peerName = (m.name || 'Host').slice(0, 20); set('connected', 'Connected to ' + Online.peerName); break;
             case 'full': if (m.to === myId) { leaveRoom(false); set('closed', m.why || 'That room is full'); } break;
             case 'kick': if (m.to === myId) { const cb = Online.onLeft; leaveRoom(false); set('closed', 'You were removed from the lobby'); cb('You were removed from the lobby'); } break;
-            case 'lobby': if (welcomed) { Online.lobby = { members: m.members, settings: m.settings, started: m.started }; Online.onChange(); } break;
+            case 'lobby': if (welcomed) { Online.lobby = { members: m.members, settings: m.settings, started: m.started, locked: !!m.locked }; Online.onChange(); } break;
             case 'start': if (m.to && m.to !== myId) break;
                 if (m.train) { Online.inTrain = true; Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); setArena(m.train.arena || 'normal', m.train.theme || 'frontier'); S.hazards = !!m.train.hz; Online.onChange(); break; }
-                if (m.cfg) { S.online = 'guest'; Online.lobby.started = true; resetSnapshotState(); startMatchSequence('lobby', { ...m.cfg, mySlot: Online.slot }); Online.onChange(); break; }
+                if (m.cfg) { S.online = 'guest'; Online.lobby.started = true; { const o = (m.rts || []).filter(x => x.slot !== Online.slot && x.rt > 0); Online.oppRating = o.length ? Math.round(o.reduce((a, x) => a + x.rt, 0) / o.length) : 0; } resetSnapshotState(); startMatchSequence('lobby', { ...m.cfg, mySlot: Online.slot }); Online.onChange(); break; }
                 Online.peerName = (m.name || Online.peerName).slice(0, 20); S.online = 'guest'; S.opponentName = Online.peerName; resetSnapshotState(); startMatchSequence('online'); break;
             case 'snap': if (S.online === 'guest') applySnapshot(m.s); break;
             case 'leave': { const cb = Online.onLeft; leaveRoom(false); set('closed', 'The host left'); cb('The host left'); break; }
@@ -283,7 +290,7 @@ export async function joinRoom(code) {
     };
     bindChat((msg) => t.send(msg)); clearChat();
     watch();
-    const hello = () => t.send({ t: 'hello', id: myId, name: Online.name, char: getMyChar() });
+    const hello = () => t.send({ t: 'hello', id: myId, name: Online.name, char: getMyChar(), rt: myRt() });
     hello();
     const retry = setInterval(() => { if (welcomed || Online.role !== 'guest') clearInterval(retry); else hello(); }, 500);
     setTimeout(() => { if (!welcomed && Online.role === 'guest') { clearInterval(retry); leaveRoom(false); set('closed', 'No room with that code' + (t.local ? ' (this page cannot reach the internet: open the standalone link, see the lobby note)' : '')); } }, 15000);

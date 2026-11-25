@@ -1,6 +1,6 @@
 // "Play online" dialog: quick match (queue), host a 1v1 room by code, join by code.
 import { Online, hostRoom, joinRoom, leaveRoom, hasRealtime } from './online.js';
-import { Queue, joinQueue, leaveQueue } from './queue.js';
+import { Queue, joinQueue, leaveQueue, QUEUE_KINDS } from './queue.js';
 import { displayName } from '../account.js';
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -15,11 +15,12 @@ export class LobbyUI {
                 <div class="lm-body">
                     <p class="lm-note" data-who></p>
                     <div class="lm-online-split lm-split3">
-                        <div class="lm-card"><h4>Quick match</h4>
-                            <p>Get paired with the next player searching. 1v1, 3 stocks.</p>
+                        <div class="lm-card"><h4>Quick match <small>(ranked)</small></h4>
+                            <p>Get matched with players searching. Beating a higher-rated player is worth more.</p>
+                            <div class="lm-botrow" data-kinds></div>
                             <button class="lm-btn" data-queue>Find a match</button></div>
-                        <div class="lm-card"><h4>Host a 1v1</h4>
-                            <p>Get a 4-letter code and send it to a friend.</p>
+                        <div class="lm-card"><h4>Host a room</h4>
+                            <p>Get a 4-letter code and open a lobby: pick the mode (stocks, timer, King of the Hill, race, 1v1), teams, map and bots.</p>
                             <button class="lm-btn" data-host>Create room</button>
                             <div class="lm-code lm-hidden" data-codebox><span>ROOM CODE</span><b data-code></b></div></div>
                         <div class="lm-card"><h4>Join a room</h4>
@@ -35,8 +36,10 @@ export class LobbyUI {
         this.q = (s) => this.el.querySelector(s);
 
         this.el.addEventListener('click', (e) => { if (e.target === this.el || e.target.closest('[data-close]')) this.close(); });
-        this.q('[data-queue]').addEventListener('click', () => { if (Queue.active) { leaveQueue(); this.render(); } else joinQueue(); });
-        this.q('[data-host]').addEventListener('click', () => { leaveQueue(); hostRoom(); });
+        this.kind = '1v1';
+        this.q('[data-kinds]').addEventListener('click', (e) => { const b = e.target.closest('[data-kind]'); if (!b || Queue.active) return; this.kind = b.dataset.kind; this.render(); });
+        this.q('[data-queue]').addEventListener('click', () => { if (Queue.active) { leaveQueue(); this.render(); } else joinQueue(true, this.kind); });
+        this.q('[data-host]').addEventListener('click', () => { leaveQueue(); hostRoom(undefined, 'lobby'); });
         const join = () => { leaveQueue(); joinRoom(this.q('[data-join-code]').value); };
         this.q('[data-join]').addEventListener('click', join);
         this.q('[data-join-code]').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
@@ -62,8 +65,9 @@ export class LobbyUI {
         this.q('[data-codebox]').classList.toggle('lm-hidden', !hosting);
         this.q('[data-code]').textContent = Online.code;
         this.q('[data-queue]').textContent = Queue.active ? 'Cancel search' : 'Find a match';
+        this.q('[data-kinds]').innerHTML = Object.entries(QUEUE_KINDS).map(([k, n]) => `<button class="lm-btn lm-mini ${this.kind === k ? '' : 'lm-btn-ghost'}" data-kind="${k}">${n}</button>`).join(' ');
         let status = Online.note || this.note || '';
-        if (Queue.active) status = Queue.waiting ? 'Opponent found, connecting…' : 'Searching for an opponent…';
+        if (Queue.active) status = this.kind === '1v1' ? (Queue.waiting ? 'Opponent found, connecting…' : 'Searching for an opponent…') : `Searching… ${Queue.waiting + 1} player${Queue.waiting ? 's' : ''} found (starts with 2 to 4)`;
         this.q('[data-status]').textContent = status;
         this.q('[data-status]').className = 'lm-status' + (Online.status === 'closed' ? ' bad' : '');
         this.q('[data-mode]').textContent = hasRealtime()

@@ -87,7 +87,7 @@ export function present(list, done) {
             if (shown !== k) {
                 shown = k; const c = p.color || '#38bdf8', ch = CHARS[p.char] || CHARS.luminent;
                 cnt.textContent = 'PLAYER ' + (k + 1) + ' / ' + list.length; card.classList.remove('on');
-                card.innerHTML = `<div class="pp-name" style="color:${esc(c)};--c:${esc(c)}">${esc(p.name || 'Player')}</div><div class="pp-char" style="color:${colOf(p.char)}">${esc(ch.name)}</div><div class="pp-role">${esc(ch.role)}</div><div class="pp-kd" style="--c:${esc(c)}">${esc(kd(p))}</div>`;
+                card.innerHTML = `<div class="pp-name" style="color:${esc(c)};--c:${esc(c)}">${esc(p.name || 'Player')}</div><div class="pp-char" style="color:${colOf(p.char)}">${esc(ch.name)}</div><div class="pp-role">${esc(ch.role)}</div>${S.gameMode === 'training' ? `<div class="pp-kd" style="--c:${esc(c)}">${esc(kd(p))}</div>` : ''}`;
                 setTimeout(() => { if (shown === k) card.classList.add('on'); }, 500);
             }
         }

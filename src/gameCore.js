@@ -4258,6 +4258,7 @@ function applyKillCam(ai, di) {
     S.kcFull = !S.demo && (S.race && S.match && S.match.race ? me === di : (me === ai || me === di));      // race: only the one who got hit sees the final blow
 }
 function startKillCam(att, def) {
+    if (S.race && S.match && S.match.race) return;                                  // races: no final-blow freeze
     if (S.kcT > 0 || S.replay || S.demo || (S.gameMode === 'training' && !S.instantBlow) || S.online === 'guest' || !att || att === def || def.frozenBot) return;
     if (def.stocks <= 0 || def.out || !willKO(def)) return;
     def._kcInv = 400;
@@ -4368,6 +4369,7 @@ function tideMeleeFx(f, e) {
 }
 /** every melee hit freezes only the victim for 0.3 s (18 frames); the velocity they were launched with is kept and released afterwards */
 function hitPause(def, hb, att) {
+    if (S.race && S.match && S.match.race) return;                                  // races: no hit pause either
     if (!hb || !hb.type || S.kcVis > 0 || def.stocks <= 0 || def.frozenBot) return;
     // If already in hit-pause, keep remaining frames (don't stack another 0.3 s — was causing stutter lag)
     if (!def._hp) def._hp = { n: 18, vx: def.vx, vy: def.vy };
@@ -5764,7 +5766,7 @@ function endGame(winnerText, winnerRole = null) {
         S.rewardShown = true; if (!S.stats) S.stats = newStats();
         const v = viewerFighter(), won = /YOU WIN|PLAYER 1 WINS/.test(winnerText);
         S.stats.deaths = v ? v.deaths : 0; S.stats.kills = v ? v.kills : 0;
-        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, online: !!S.rankedQ, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
+        try { showReward(reportMatch(S.stats, { won, char: v ? v.char : 'luminent', mode: S.gameMode, ranked: !!S.ranked || !!S.rankedQ, online: !!S.rankedQ, opp: S.oppRating || 0, draw: /DRAW/.test(winnerText), secs: S.stats.frames / 60, maxDmg: S.stats.maxDmg })); } catch (e) { /* meta is optional */ }
     }
     if (S.clipsPend && S.clipsPend.length) { S.clipsPend[S.clipsPend.length - 1].final = true; for (const c of S.clipsPend) finishClip(c); S.clipsPend = []; }      // the KO that ended the match is already slowed by the game itself
     S.gameState = 'gameover';
