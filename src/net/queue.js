@@ -79,7 +79,7 @@ async function hostGroup(ids) {
     Online.viaQueue = true; Online.rankedQ = rankedQ;
     const L = Online.lobby; L.cap = ids.length;
     setLobbySetting('mode', k === 'koth' ? 'koth' : 'race', true); setLobbySetting('timeLimit', k === 'koth' ? 3 : 5, true); setLobbySetting('stocks', 3, true);
-    setLobbySetting('map', k === 'koth' ? 'sunny' : ['frontier', 'big', 'horizon', 'bighorizon', 'lava', 'biglava'][Math.floor(Math.random() * 6)], true);
+    setLobbySetting('map', k === 'koth' ? 'sunny' : ['frontier', 'big', 'horizon', 'bighorizon', 'lava', 'biglava', 'sunny'][Math.floor(Math.random() * 7)], true);
     setLobbySetting('teams', false, true); setLobbySetting('items', { on: k === 'race', types: undefined }, true);
     L.locked = true;
     let n = 0;

@@ -110,7 +110,7 @@ export class TrainUI {
         if (a === 'item') { spawnTrainItem(b.dataset.id); return; }
         if (a === 'endrace') { this.close(); endRaceNow(); return; }
         if (a === 'race') {                                // practice race on the chosen stage: your character vs the training bot (same character for everyone)
-            const t = snap(), map0 = { normal: 'frontier', lobby: 'big' }[t.stage] || String(t.stage).replace(/^race_/, ''), map = map0 === 'sunny' ? 'frontier' : map0, ch = t.char;
+            const t = snap(), map0 = { normal: 'frontier', lobby: 'big' }[t.stage] || String(t.stage).replace(/^race_/, ''), map = map0, ch = t.char;
             const lvl = ['static', 'frozen'].includes(t.botType) ? 'medium' : t.botType;
             this.close(); S.ranked = false; S.freeBot = false; S.rankBot = null;
             startMatchSequence('lobby', { mySlot: 0, teams: false, startDamage: 0, stocks: 99, mode: 'race', timeLimit: 5, map, race: true, hazards: false, trainRace: true, items: { on: false, types: [] },

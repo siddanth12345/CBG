@@ -36,6 +36,9 @@ export function buildStage(scene) {
     const st = buildStageBase(scene);
     if (S.race) {
         addRaceProps(st);
+        if (st.sunny && st.sunny.group) { const sg = st.sunny.group, u1 = st.update, cx0 = STAGE.x + STAGE.width / 2; st.update = (t, dt) => {   // the scenery follows the racers (slowly, so it still feels far away)
+            u1(t, dt); const xs = fighters.filter(q => q.active && !q.out); if (xs.length) { const mx = xs.reduce((a, q) => a + q.x, 0) / xs.length, my = xs.reduce((a, q) => a + q.y, 0) / xs.length; sg.position.x = (wx(mx) - wx(cx0)) * 0.92; sg.position.y = (wy(my) - wy(STAGE.y)) * 0.85; }
+        }; }
         if (S.race.obs) { const ro = buildRaceObs(st.root), u0 = st.update; st.update = (t, dt) => { u0(t, dt); ro.update(); }; }
     }
     return st;
@@ -319,7 +322,7 @@ function buildStageBase(scene) {
         decor.visible = false; stars.visible = false; for (const r of rocks) r.visible = false;
         bodyMat.color.set(0x7a5230); bodyMat.metalness = 0.05; bodyMat.roughness = 0.95;
         const top = new THREE.Mesh(new THREE.BoxGeometry(W + 4, 14, D + 2), grassMat()); top.position.y = topY - 7; top.receiveShadow = true; stage.add(top);
-        for (const p of STAGE.platforms || []) { const m = new THREE.Mesh(new THREE.BoxGeometry(p.w + 4, 10, D * 0.55 + 2), grassMat()); m.position.set(wx(p.x + p.w / 2), wy(p.y) + 1, 0); root.add(m); }
+        for (const p of STAGE.platforms || []) { if (p.dyn || p.plus) continue; const m = new THREE.Mesh(new THREE.BoxGeometry(p.w + 4, 10, D * 0.55 + 2), grassMat()); m.position.set(wx(p.x + p.w / 2), wy(p.y) + 1, 0); root.add(m); }
         sun = buildSunnyDecor(root, bodyMat, topY, cx);
     }
     return {

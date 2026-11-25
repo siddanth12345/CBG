@@ -1,5 +1,6 @@
 // Race tracks: every map has its own course (small and big versions of a theme share the look, not the track).
 // A track is a chain of soft platforms [gap, rise (negative = up), width] after the start island; the last one is the finish island.
+export const LIFT_TRAVEL = 720;
 const START = { x: 300, y: 3125, w: 1300 };
 const CH = {
     // Neon Sprint: a rhythm of short hops, then a long thin bridge between two pillars, a dive, and a final staircase
@@ -14,12 +15,14 @@ const CH = {
     lava:       [[180, 0, 140], [200, -40, 120], [210, 40, 120], [200, -60, 120], [210, 30, 120], [200, 0, 560], [220, -70, 120], [230, 80, 110], [230, -60, 110], [230, 50, 110], [230, -90, 120], [240, -20, 140], [250, 0, 700]],
     // Volcano Ascent: a steep zig-zag climb around the crater, with a few wide ledges to rest on, and a summit
     biglava:    [[170, -100, 220], [190, -120, 160], [180, 70, 160], [200, -130, 160], [190, -120, 240], [190, 60, 140], [210, -120, 140], [190, -120, 180], [190, -110, 360], [210, 70, 140], [220, -110, 140], [200, -110, 160], [190, -90, 700]],
+    // Sunny Hill: gentle grassy hops; the ten big lift platforms (white circle) are added by the generator below
+    sunny:      [[170, 0, 240], [190, -50, 220], [190, 50, 220], [210, -60, 200], [180, 0, 460], [200, 40, 200], [0, 0, 0]],
 };
-export const TRACK_NAMES = { frontier: 'Neon Sprint', big: 'Skyline Climb', horizon: 'Cloud Hop', bighorizon: 'Waterfall Descent', lava: 'Magma Dash', biglava: 'Volcano Ascent' };
+export const TRACK_NAMES = { sunny: 'Sunny Hill Run', frontier: 'Neon Sprint', big: 'Skyline Climb', horizon: 'Cloud Hop', bighorizon: 'Waterfall Descent', lava: 'Magma Dash', biglava: 'Volcano Ascent' };
 // ---- the full course is three acts (about 3x the old length): the hand-made chain, its mirror with hazards, then a long flat run with big platforms, spinners and shots
 const hash = (str) => { let h = 2166136261; for (const c of String(str)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 const rng = (seed) => () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-const themeOf = (m) => m === 'horizon' || m === 'bighorizon' ? 'horizon' : m === 'lava' || m === 'biglava' ? 'lava' : 'frontier';
+const themeOf = (m) => m === 'sunny' ? 'sunny' : m === 'horizon' || m === 'bighorizon' ? 'horizon' : m === 'lava' || m === 'biglava' ? 'lava' : 'frontier';
 export function raceTrack(map) {
     const base = CH[map] || CH.big, th = themeOf(map), R = rng(hash(map));
     const hops = [];                                              // {gap, rise, w, dyn?, rest?, plus?, cloud?, fin?}
@@ -29,9 +32,18 @@ export function raceTrack(map) {
         hops.push(Object.assign({ gap, rise, w }, o));
         if (!o || !(o.dyn || o.plus || o.rest || o.cloud || o.fin)) { if (++plain % 3 === 0) hops.push({ gap: sc(230) + Math.round(R() * 40), rise: 0, w: sc(900) + Math.round(R() * 160), rest: 1, stage: 1 }); }      // a small-stage platform after every 3 platforms
     };
-    const trap = th === 'frontier' ? 'star' : th === 'lava' ? 'fall' : null;
+    const trap = th === 'sunny' ? null : th === 'frontier' ? 'star' : th === 'lava' ? 'fall' : null;
     // act 1: the hand-made chain of the map (scaled), then the first plus gap
     base.slice(0, -1).forEach(([g, r, w]) => add(sc(g), sc(r), sc(w)));
+    if (map === 'sunny') {                                         // ten lift platforms spread over the course: 5 carry you very high, 5 very low (stand on one and it moves)
+        const TR = LIFT_TRAVEL;
+        for (let k = 0; k < 10; k++) {
+            const up = k % 2 === 0;
+            add(sc(200), sc(k % 3 === 0 ? -40 : 30), sc(240)); add(sc(210), sc(-30), sc(220)); add(sc(220), 0, sc(700), { rest: 1, stage: 1 });
+            add(sc(230), 0, sc(420), { dyn: up ? 'liftU' : 'liftD', lift: 1 });
+            add(sc(230), up ? -TR : TR, sc(520), { rest: 1 });
+        }
+    }
     // the creative middle: three-platform figures, picked at random for every course, each ending on a stage
     const FIG = {
         stairsUp: [[140, -70, 150], [150, -70, 150], [150, -70, 170]], stairsDown: [[140, 60, 160], [150, 70, 150], [150, 60, 170]],
@@ -81,3 +93,11 @@ export const shotPos = (o, k, t) => { const span = o.x1 - o.x0, pos = (t * o.sp 
 
 /** a plus-sign platform is solid while one of its arms is within 30 degrees of level, and gone while it turns through the diagonal */
 export const plusSolid = (o, t) => true; const _plusSolidOld = (o, t) => { const m = (((spinAngle(o, t) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.52; };
+
+/** Sunny Hill gale: every racer gets a big gust (1400 x 900) that appears out of nowhere for 1 s in a random direction, then is gone for 1 s. A pure function of the race clock. */
+export const GALE = { w: 1400, h: 900, accel: 0.9, on: 60, period: 120 };
+export function galeOf(slot, t) {
+    if (t < 180) return null; const k = Math.floor(t / GALE.period), age = t % GALE.period; if (age >= GALE.on) return null;
+    const r = rng(hash('g' + k + ':' + slot)), a = r() * Math.PI * 2;
+    return { k, age, ox: (r() - 0.5) * 360, oy: (r() - 0.5) * 220, ax: Math.cos(a), ay: Math.sin(a), ang: a };
+}

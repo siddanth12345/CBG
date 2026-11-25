@@ -5,7 +5,7 @@
 //  3800 x 2100. The 3D renderer only *reads* this state; the `fx(...)` hooks and
 //  presentation fields (attackKind, specialKind, ...) never feed back in.
 // ============================================================================
-import { raceTrack, spinAngle, shotPos, plusSolid } from './raceTracks.js';
+import { raceTrack, spinAngle, shotPos, plusSolid, galeOf, GALE, LIFT_TRAVEL } from './raceTracks.js';
 import { BW_KEYS, bwEval } from './bwSword.js';
 import { MELEE, buildMelee } from './melees.js';
 import { tickExtras, notify, showReward } from './hudExtras.js';
@@ -201,11 +201,11 @@ export function setArenaByMap(m) {
 }
 /** race: the map's own track on the big arena (the start island is the stage, every other piece is a soft platform) */
 export function setRaceArena(m) {
-    const base = String(m).replace(/H$/, '') === HILL_MAP ? 'frontier' : String(m).replace(/H$/, ''), t = raceTrack(base);   // Sunny Hill has no race track
-    setArena('lobby', base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
+    const base = String(m).replace(/H$/, ''), t = raceTrack(base);
+    setArena('lobby', base === 'sunny' ? 'sunny' : base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
     WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
-    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0 })) } };
+    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
     resetHazards();
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -3009,7 +3009,12 @@ class AIBot extends Fighter {
         for (let i = 0; i < N.length; i++) if (this.x > N[i].l - 20 && this.x < N[i].r + 20 && feet < N[i].y + 40) cur = i;       // the platform we are over (or just left)
         let nxt = N.findIndex(n => n.l > this.x + 10);
         if (nxt < 0) nxt = N.length - 1;
-        const nn = N[nxt], onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
+        const nn = N[nxt];
+        for (const d of R.obs.dyn) if ((d.kind === 'liftU' || d.kind === 'liftD') && this.grounded && Math.abs(feet - d.p.y) < 12 && this.x > d.p.x && this.x < d.p.x + d.p.w) {     // on a lift: wait until it has carried us all the way
+            const end = d.p.by + (d.kind === 'liftU' ? -LIFT_TRAVEL : LIFT_TRAVEL);
+            if (Math.abs(d.p.y - end) > 40) { this.vx *= 0.5; this.facing = 1; return; }
+        }
+        const onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
         this.facing = 1;
         if (this.vx < cap) this.vx = Math.min(cap, this.vx + 1.2);
         // incoming shots: hop over the ones about to hit (better bots see them sooner and never miss the timing)
@@ -5814,6 +5819,13 @@ function updateRaceObs(R) {
     for (const f of act) if (f._oc > 0) f._oc--;
     for (const d of O.dyn) {                                         // trap platforms
         const p = d.p;
+        if (d.kind === 'liftU' || d.kind === 'liftD') {              // Sunny Hill lift: stand on it and it rises (white circle with an up arrow) or sinks; empty, it drifts back
+            const hi = p.by + (d.kind === 'liftU' ? -LIFT_TRAVEL : LIFT_TRAVEL);
+            const riders = act.filter(f => f.grounded && Math.abs(f.y + f.height / 2 - p.y) < 10 && f.x > p.x - 6 && f.x < p.x + p.w + 6);
+            const tgt = riders.length ? hi : p.by, dy = Math.sign(tgt - p.y) * Math.min(riders.length ? 4.6 : 3, Math.abs(tgt - p.y));
+            if (dy) { p.y += dy; for (const f of riders) { f.y += dy; f.py += dy; } if (d.node) d.node.y = p.y; }
+            d.st = riders.length ? 1 : 0; continue;
+        }
         if (d.st === 0) {
             for (const f of act) if (f.grounded && Math.abs(f.y + f.height / 2 - p.y) < 6 && f.x > p.x - 6 && f.x < p.x + p.w + 6) { d.st = 1; d.tm = 0; break; }
         } else if (d.st === 1) {
@@ -5852,6 +5864,10 @@ function updateRaceObs(R) {
     }
     for (const f of act) {
         if (f._finT) continue;
+        if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
+            const gl = galeOf(f.slot, t);
+            if (gl && f.hitstun <= 0) { f.vx = Math.max(-22, Math.min(22, f.vx + gl.ax * GALE.accel)); if (!f.grounded) f.vy += gl.ay * GALE.accel * 0.55; else if (gl.ay < -0.8) f.vy -= 0.2; if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
+        }
         const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
         for (const o of O.spin) {                                    // spinning plus signs
             const dx = f.x - o.x, dy = f.y - o.y;

@@ -2,7 +2,8 @@
 // All motion comes from the race clock (S.race.t), so the host, the guests and the replay draw the same thing.
 import * as THREE from 'three';
 import { S } from '../gameCore.js';
-import { spinAngle, shotPos } from '../raceTracks.js';
+import { spinAngle, shotPos, galeOf, GALE } from '../raceTracks.js';
+import { fighters } from '../gameCore.js';
 import { wx, wy } from './space.js';
 
 const glow = (c, k = 2.4) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
@@ -53,22 +54,31 @@ export function buildRaceObs(root) {
     }
     // ---- trap platforms
     const dyn = O.dyn.map((d) => {
-        const p = d.p, grp = new THREE.Group(), star = d.kind === 'star';
-        const slabMat = new THREE.MeshStandardMaterial({ color: star ? 0x2a2540 : 0x2a1d1b, roughness: 0.6, metalness: 0.3 });
+        const p = d.p, grp = new THREE.Group(), star = d.kind === 'star', lift = d.kind === 'liftU' || d.kind === 'liftD';
+        const slabMat = new THREE.MeshStandardMaterial({ color: lift ? 0x7a5230 : star ? 0x2a2540 : 0x2a1d1b, roughness: 0.6, metalness: 0.3 });
         const slab = new THREE.Mesh(new THREE.BoxGeometry(p.w, 26, 300), slabMat); slab.position.y = -13;
-        const edgeMat = glow(star ? '#fde047' : '#ff7a1a', 2.4), edge = new THREE.Mesh(new THREE.BoxGeometry(p.w, 5, 304), edgeMat); edge.position.y = 1;
+        const edgeMat = glow(lift ? '#7be36b' : star ? '#fde047' : '#ff7a1a', 2.0), edge = new THREE.Mesh(new THREE.BoxGeometry(p.w, 5, 304), edgeMat); edge.position.y = 1;
         grp.add(slab, edge);
         let ornament = null;
         if (star) {
             const sh = new THREE.Shape(), R0 = 52, R1 = 22; for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R1 : R0; (i ? sh.lineTo : sh.moveTo).call(sh, Math.cos(a) * r, Math.sin(a) * r); } sh.closePath();
             ornament = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 24, bevelEnabled: false }), edgeMat); ornament.position.set(0, 70, -12); grp.add(ornament);
+        } else if (lift) {                                               // white hill-style circle with an arrow: up or down
+            const rr = Math.min(80, p.w * 0.36), disc = new THREE.Mesh(new THREE.CircleGeometry(rr, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+            disc.rotation.x = -Math.PI / 2; disc.position.set(0, 7, 0); grp.add(disc);
+            const ringM = new THREE.Mesh(new THREE.RingGeometry(rr * 1.08, rr * 1.22, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.6), toneMapped: false, side: THREE.DoubleSide }));
+            ringM.rotation.x = -Math.PI / 2; ringM.position.set(0, 7, 0); grp.add(ringM);
+            const tri = new THREE.Shape(); const up = d.kind === 'liftU'; tri.moveTo(0, up ? rr * 0.6 : -rr * 0.6); tri.lineTo(-rr * 0.5, up ? -rr * 0.4 : rr * 0.4); tri.lineTo(rr * 0.5, up ? -rr * 0.4 : rr * 0.4); tri.closePath();
+            const arrow = new THREE.Mesh(new THREE.ShapeGeometry(tri), new THREE.MeshBasicMaterial({ color: up ? 0x16a34a : 0xdc2626, toneMapped: false, side: THREE.DoubleSide }));
+            arrow.rotation.x = -Math.PI / 2; arrow.rotation.z = Math.PI; arrow.position.set(0, 8, 0); grp.add(arrow);
         } else { const keel = new THREE.Mesh(new THREE.ConeGeometry(Math.min(60, p.w * 0.25), 80, 5), slabMat); keel.rotation.x = Math.PI; keel.position.y = -66; grp.add(keel); }
-        g.add(grp); return { d, grp, edgeMat, ornament };
+        g.add(grp); return { d, grp, edgeMat, ornament, lift };
     });
     ups.push((t) => {
         for (const o of dyn) {
             const d = o.d, p = d.p; o.grp.visible = p.y < 1e5;
             if (!o.grp.visible) continue;
+            if (o.lift) { o.grp.position.set(wx(p.x + p.w / 2), wy(p.y), 0); continue; }
             const arm = d.st === 1, sh = arm ? Math.sin(t * 1.4) * 5 : 0;
             o.grp.position.set(wx(p.x + p.w / 2) + sh, wy(p.y), 0);
             if (o.ornament) o.ornament.rotation.y = t * 0.05;
@@ -76,5 +86,21 @@ export function buildRaceObs(root) {
             o.edgeMat.color.setRGB(arm ? 2.6 : (d.kind === 'star' ? 2.4 : 2.4), arm ? 0.5 + 1.2 * k : (d.kind === 'star' ? 2.1 : 1.0), arm ? 0.2 : (d.kind === 'star' ? 0.3 : 0.1));
         }
     });
+    if (R.map === 'sunny') {                                          // gales: a pale oval of wind with streaks flying in its direction
+        const gal = fighters.map(() => {
+            const gg = new THREE.Group(), body = new THREE.Mesh(new THREE.CircleGeometry(0.5, 40), new THREE.MeshBasicMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false }));
+            body.scale.set(GALE.w, GALE.h, 1); gg.add(body);
+            const st = []; for (let j = 0; j < 16; j++) { const m = new THREE.Mesh(new THREE.BoxGeometry(150, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false })); gg.add(m); st.push(m); }
+            gg.visible = false; g.add(gg); return { gg, body, st };
+        });
+        ups.push((t) => {
+            fighters.forEach((f, i) => {
+                const G = gal[i]; if (!G) return; const gl = f.active && !f.out ? galeOf(f.slot, t) : null; G.gg.visible = !!gl; if (!gl) return;
+                const k = Math.min(1, gl.age / 8, (60 - gl.age) / 8); G.gg.position.set(wx(f.x + gl.ox), wy(f.y + gl.oy), 20); G.gg.rotation.z = Math.atan2(gl.ay, gl.ax) * 0.0;
+                G.body.material.opacity = 0.16 * k;
+                G.st.forEach((m, j) => { const u = ((j * 0.137 + gl.age * 0.035) % 1), v = ((j * 0.61) % 1) - 0.5; const along = (u - 0.5) * GALE.w, across = v * GALE.h * 0.85; m.position.set(gl.ax * along - gl.ay * across, gl.ay * along + gl.ax * across, 0); m.rotation.z = Math.atan2(gl.ay, gl.ax); m.material.opacity = 0.7 * k; });
+            });
+        });
+    }
     return { update: () => { const t = S.race ? S.race.t : 0; for (const f of ups) f(t); }, root: g };
 }
