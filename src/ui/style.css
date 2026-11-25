@@ -512,3 +512,13 @@ body.krplay #inGameMenuContainer,body.krplay #menuDropdown,body.krplay #menuTogg
 body.krplay div:has(> .flex > .glass-panel > #modeDisplayLabel),body.krplay #toggleControlsBtn,body.krplay #aimMatrixHud{visibility:hidden!important}
 
 .cbg-vic #gameHud,.cbg-vic #aimMatrixHud,.cbg-vic #inGameMenuContainer,.cbg-vic #raceProgBox,.cbg-vic #rosterHud,.cbg-vic #hudTimer,.cbg-vic #modeLabelWrap{visibility:hidden}
+
+/* ---- phones: every panel / menu / overlay that is not the game itself scrolls (and does not hand the swipe to the page, which would drop fullscreen) ---- */
+html,body{overscroll-behavior:none}
+.lm-modal,.lm-panel,.lm-train-panel,.kr-panel,.kr-body,.pz:not(.pz-3d),#gameOverModal,#menuDropdown,.cbg-menu,.lm-chat-list,.lm-menu-players{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;max-height:100dvh}
+.lm-panel,.lm-train-panel,.kr-panel{max-height:calc(100dvh - 8px)}
+#menuDropdown{max-height:calc(100dvh - 90px)}
+.cbg-menu{max-height:100%}
+@media (max-aspect-ratio:1/1){.cbg-menu{max-height:68%}}
+.lm-body{touch-action:pan-y;overscroll-behavior:contain}
+body.no-fs .lm-fs{display:none!important}

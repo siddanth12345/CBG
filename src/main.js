@@ -119,6 +119,7 @@ function toggleFullscreen() {
     } catch (e) { /* ignore */ }
 }
 document.addEventListener('cbg-fs', toggleFullscreen);
+if (!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) document.body.classList.add('no-fs');   // iPhone Safari has no fullscreen for pages: hide the button (add the page to the home screen instead)
 // No zooming on phones: lock the viewport, block pinch / double-tap zoom / ctrl-wheel zoom.
 (() => {
     let v = document.querySelector('meta[name=viewport]');
