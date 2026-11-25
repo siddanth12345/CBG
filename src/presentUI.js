@@ -1,7 +1,8 @@
 // Pre-match: the character roulette wheel (races) and the player presentation (portal, walk-in, zoom, K/D).
-import { setPresentHook, S } from './gameCore.js';
+import { setPresentHook, S, fighters } from './gameCore.js';
 import { CHAR_IDS, CHARS } from './characters.js';
-import { getMeta } from './meta.js';
+import { getMeta, tierOf } from './meta.js';
+import { levelInfo } from './progress.js';
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const colOf = (id) => (CHARS[id] && CHARS[id].art && CHARS[id].art.skin) || '#e2e8f0';
@@ -95,4 +96,36 @@ export function present(list, done) {
     };
     tick();
 }
-export function initPresent() { setPresentHook(present); }
+/** the 10-second "get ready" screen before every match except training and the tutorial: everyone's rank, level and K/D (hidden everywhere else), and you can swap your own character */
+export function preMatch(list, done) {
+    css();
+    const o = document.createElement('div'); o.className = 'pz'; o.style.cssText = 'display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.84);z-index:90;pointer-events:auto;overflow:auto;padding:12px';
+    document.body.appendChild(o);
+    const m = getMeta(), lv = levelInfo().level, T = tierOf(m.rating || 0), race = !!(S.match && S.match.race);
+    let left = 10, sort = 'az', ended = false, timer = 0;
+    const meSlot = (list.find(p => p.human) || {}).slot;
+    const mine = () => fighters.find(f => f.slot === meSlot);
+    const stat = (p) => p.human ? `<div class="pm-row"><b>Rank</b> ${esc(T.name || T.id || '')} · ${Math.round(m.rating || 0)}</div><div class="pm-row"><b>Level</b> ${lv}</div><div class="pm-row"><b>K/D</b> ${(m.kills || 0)} / ${(m.deaths || 0)}${m.deaths ? ' (' + ((m.kills || 0) / m.deaths).toFixed(2) + ')' : ''}</div>`
+        : p.bot ? `<div class="pm-row"><b>Rank</b> CPU · ${esc(String(p.diff || 'bot'))}</div><div class="pm-row"><b>Level</b> –</div><div class="pm-row"><b>K/D</b> –</div>`
+        : `<div class="pm-row"><b>Rank</b> ${p.rating ? Math.round(p.rating) : '?'}</div><div class="pm-row"><b>Level</b> ?</div><div class="pm-row"><b>K/D</b> ?</div>`;
+    const draw = () => {
+        const ids = CHAR_IDS.slice().sort((a, b) => sort === 'az' ? CHARS[a].name.localeCompare(CHARS[b].name) : (CHARS[a].role || '').localeCompare(CHARS[b].role || '') || CHARS[a].name.localeCompare(CHARS[b].name));
+        const f = mine(), cur = f ? f.char : '';
+        o.innerHTML = `<div style="max-width:980px;width:100%;color:#e2e8f0;font-family:Inter,sans-serif">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><div style="font-weight:900;letter-spacing:.14em;font-size:clamp(18px,3.4vmin,28px)">GET READY</div><div style="font-weight:900;font-size:clamp(18px,3.4vmin,28px);color:#38bdf8">Starting in ${left}s</div></div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px">${list.map(p => { const c = p.color || '#38bdf8', ch = CHARS[(fighters.find(f => f.slot === p.slot) || p).char] || CHARS.luminent;
+                return `<div style="flex:1 1 200px;min-width:180px;background:#0f172a;border:2px solid ${esc(c)};border-radius:14px;padding:10px 12px"><div style="font-weight:900;color:${esc(c)}">${esc(p.name || 'Player')}${p.human ? ' (you)' : ''}</div><div style="font-weight:800;color:${colOf(ch.id)}">${esc(ch.name)} <span style="color:#94a3b8;font-weight:600">${esc(ch.role)}</span></div><div style="margin-top:6px;font-size:13px;color:#cbd5e1">${stat(p)}</div></div>`; }).join('')}</div>
+            ${meSlot != null && !race ? `<div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:800;letter-spacing:.1em;color:#94a3b8;font-size:12px">YOUR CHARACTER (this match only)</div><button data-sort style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:8px;padding:4px 10px;font-weight:700;cursor:pointer">Sort: ${sort === 'az' ? 'A–Z' : 'Role'}</button></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${ids.map(id => `<button data-ch="${id}" style="flex:1 1 110px;background:${id === cur ? '#164e63' : '#1e293b'};border:2px solid ${id === cur ? '#22d3ee' : '#334155'};color:${colOf(id)};border-radius:10px;padding:8px 6px;font-weight:800;cursor:pointer">${esc(CHARS[id].name)}<div style="color:#94a3b8;font-size:11px;font-weight:600">${esc(CHARS[id].role || '')}</div></button>`).join('')}</div>` : ''}
+            <div style="margin-top:16px;text-align:center"><button data-go style="background:linear-gradient(90deg,#06b6d4,#2563eb);color:#fff;border:0;border-radius:12px;padding:10px 34px;font-weight:900;letter-spacing:.12em;cursor:pointer;font-size:16px">READY</button></div></div>`;
+    };
+    const end = () => { if (ended) return; ended = true; clearInterval(timer); o.remove(); done(); };
+    o.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.go !== undefined) return end();
+        if (b.dataset.sort !== undefined) { sort = sort === 'az' ? 'role' : 'az'; return draw(); }
+        if (b.dataset.ch) { const f = mine(); if (f) { f.char = b.dataset.ch; const L = list.find(p => p.human); if (L) L.char = f.char; } draw(); }
+    });
+    draw(); timer = setInterval(() => { left--; if (left <= 0) end(); else draw(); }, 1000);
+}
+export function initPresent() { setPresentHook((list, done) => { if (S.gameMode === 'training' || S.gameMode === 'tutorial' || S.tutorial) return present(list, done); preMatch(list, () => present(list, done)); }); }

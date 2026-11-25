@@ -3639,7 +3639,7 @@ export const RACE_TUNE = {                                                     /
     _: { dash: 450, blink: 1, spiral: 0 },
     ember: { dash: 400, blink: 1, spiral: 1 }, zephyr: { dash: 420, blink: 0, spiral: 1 }, terra: { dash: 500, blink: 1, spiral: 0 },
     volt: { dash: 400, blink: 1, spiral: 1 }, tide: { dash: 350, blink: 0, spiral: 1, fwd: 1 }, bulwark: { dash: 500, blink: 1, spiral: 0 },
-    umbra: { dash: 420, blink: 0, spiral: 0 }, luminent: { dash: 400, blink: 1, spiral: 1 },
+    umbra: { dash: 380, blink: 0, spiral: 1, fwd: 1 }, luminent: { dash: 400, blink: 1, spiral: 1 },
 };
 const SKILL = { expert: 1.3, master: 1.6, apex: 2 };
 const BOT_STATS = {
@@ -5682,7 +5682,7 @@ function startMatchSequence(mode, cfg) {
     }, 1000);
     };
     // offline matches open with a presentation of every player (character, name, K/D), then the countdown
-    if (presentHook && !S.online && !S.demo) { const list = fighters.filter(f => f.active).map(f => ({ slot: f.slot, name: f.name, char: f.char, color: f.color, bot: !!f.isAI, human: f.slot === (S.mySlot || 0) })); if (list.length > 1) { presentHook(list, runCountdown); return; } }
+    if (presentHook && !S.online && !S.demo) { const list = fighters.filter(f => f.active).map(f => ({ slot: f.slot, name: f.name, char: f.char, color: f.color, bot: !!f.isAI, diff: f.diff, human: f.slot === (S.mySlot || 0) })); if (list.length > 1) { presentHook(list, runCountdown); return; } }
     runCountdown();
 }
 let presentHook = null;
@@ -5866,7 +5866,7 @@ function updateRaceObs(R) {
         if (f._finT) continue;
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
-            if (gl && f.hitstun <= 0) { f.vx = Math.max(-22, Math.min(22, f.vx + gl.ax * GALE.accel)); if (!f.grounded) f.vy += gl.ay * GALE.accel * 0.55; else if (gl.ay < -0.8) f.vy -= 0.2; if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
+            if (gl && f.hitstun <= 0) { f.vx = Math.max(-16, Math.min(16, f.vx + gl.ax * GALE.accel)); if (!f.grounded) f.vy += gl.ay * GALE.accel * 0.3; else if (gl.ay < -0.8) f.vy -= 0.2; if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
         }
         const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
         for (const o of O.spin) {                                    // spinning plus signs
