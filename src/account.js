@@ -127,6 +127,10 @@ const SupaBackend = {
         return { userId: data.user.id, username: p ? p.username : u };
     },
     async signOut() { const c = await getAccountClient(); await c.auth.signOut(); },
+    /** the signed-in account's own verified e-mail (row-level security hides everyone else's) */
+    async emailOf(u) { const c = await getAccountClient(); const { data } = await c.from('luminary_profiles').select('email,email_verified').ilike('username', String(u)).maybeSingle(); return data && data.email_verified && data.email ? data.email : ''; },
+    async setVerifiedEmail(userId, email) { const c = await getAccountClient(); await c.from('luminary_profiles').update({ email, email_verified: true, updated_at: new Date().toISOString() }).eq('id', userId); },
+    async resetPassword() { return false; },
     async load(userId) { const c = await getAccountClient(); const { data } = await c.from('luminary_profiles').select('settings').eq('id', userId).maybeSingle(); return (data && data.settings) || {}; },
     async save(userId, data) { const c = await getAccountClient(); await c.from('luminary_profiles').update({ settings: data, updated_at: new Date().toISOString() }).eq('id', userId); },
 };
@@ -274,7 +278,8 @@ export function recordResult(win) {
 // An e-mail only counts once its 6-digit code has been typed back (sign-up never connects one by itself). Recovery only works for accounts with a verified e-mail.
 const pending = new Map();                                     // purpose:key -> { hash, exp, tries, email, sentAt }
 export const emailReady = () => !!(EMAILJS_SERVICE && EMAILJS_TEMPLATE && EMAILJS_KEY);
-const supportsMail = () => backend.name === 'local';
+const supportsMail = () => true;                                    // connecting an e-mail works for both account stores
+const canRecover = () => backend.name === 'local';                 // forgot-password needs the built-in store (the online store has no server to check the code)
 const maskEmail = (e) => e.replace(/^(.).*(@.*)$/, (m, a, d) => a + '***' + d);
 async function mail(email, code, username, purpose) {
     if (!emailReady()) return { test: true, code };
@@ -305,7 +310,6 @@ export async function myEmail() { return ACC.status === 'user' && supportsMail()
 /** connect an e-mail: step 1, send the code */
 export async function requestEmailCode(email) {
     if (ACC.status !== 'user') return { error: 'Log in to an account first.' };
-    if (!supportsMail()) return { error: 'E-mail recovery is only available with the built-in account store.' };
     if (!/^\S+@\S+\.\S+$/.test(email)) return { error: "That email doesn't look right." };
     return issue('verify:' + ACC.userId, email, ACC.username, 'verify your e-mail');
 }
@@ -315,9 +319,9 @@ export async function confirmEmailCode(code) {
     await backend.setVerifiedEmail(ACC.userId, r.email); return { ok: true, email: r.email };
 }
 /** log-in screen: does this username have a verified e-mail? (decides whether "Forgot password?" is offered) */
-export async function recoveryAvailable(username) { try { return supportsMail() && !!username && !!(await backend.emailOf(username)); } catch (e) { return false; } }
+export async function recoveryAvailable(username) { try { return canRecover() && !!username && !!(await backend.emailOf(username)); } catch (e) { return false; } }
 export async function requestResetCode(username) {
-    if (!supportsMail()) return { error: 'Password reset is only available with the built-in account store.' };
+    if (!canRecover()) return { error: 'Password reset by e-mail is not available for online accounts yet.' };
     const em = await backend.emailOf(username);
     if (!em) return { error: 'That account has no verified e-mail, so it cannot be recovered.' };
     return issue('reset:' + username.toLowerCase(), em, username, 'reset your password');

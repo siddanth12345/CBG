@@ -348,7 +348,7 @@ export class View {
             pg.userData.r1.material.color.set(f.color || '#38bdf8').multiplyScalar(2.4); pg.userData.r2.material.color.set(f.color || '#38bdf8').multiplyScalar(2.4);
             pg.userData.r1.rotation.z = p * 9; pg.userData.r2.rotation.z = -p * 12;
             pg.userData.disc.material.opacity = 1 - smooth01(Math.min(1, Math.max(0, (p - 0.35) / 0.2)));
-            if (m && p > 0.26) { m.root.visible = true; const w = smooth01(Math.min(1, (p - 0.26) / 0.3)); m.root.position.z = -90 + 110 * w; m.root.scale.setScalar(0.4 + 0.6 * Math.min(1, w * 1.4)); }
+            if (m && p > 0.26) { m.root.visible = true; const w = smooth01(Math.min(1, (p - 0.26) / 0.3)); m.root.position.z = -90 + 110 * w; m.root.scale.setScalar(0.4 + 0.6 * Math.min(1, w * 1.4)); f.vx = p < 0.62 ? 6 * (f.facing || 1) : 0; }                 // they walk out of the portal
             if (m && p <= 0.26) m.root.visible = false;
         }
         if (!this._iPos) { this._iPos = pos.clone(); this._iLook = look.clone(); }
@@ -358,9 +358,39 @@ export class View {
         this.camera.position.copy(this._iPos); this.camera.lookAt(this._iLook); this.camera.updateMatrixWorld(true);
         this._introOn = true;
     }
+    /** entrance through a portal (online start, sudden death): the fighter is not there beforehand, a ring opens, they step (walk) out, the ring closes */
+    portalPass(dt) {
+        const sm = (x) => x * x * (3 - 2 * x);
+        if (!this._ports) this._ports = [];
+        fighters.forEach((f, i) => {
+            const m = this.models[i]; if (!m) return;
+            let pg = this._ports[i];
+            if (f.active && f.portalT > 0 && !S.intro) {
+                if (S.gameState === 'countdown') f.portalT = Math.max(0, f.portalT - dt * 60);
+                const p = Math.min(1, 1 - f.portalT / (f.portalMax || 1));
+                if (!pg) {
+                    pg = this._ports[i] = new THREE.Group();
+                    const mk = (r, tube) => new THREE.Mesh(new THREE.TorusGeometry(r, tube, 12, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+                    pg.userData.r1 = mk(78, 7); pg.userData.r2 = mk(54, 5);
+                    pg.userData.disc = new THREE.Mesh(new THREE.CircleGeometry(76, 40), new THREE.MeshBasicMaterial({ color: 0x05070d, transparent: true, depthWrite: true }));
+                    pg.add(pg.userData.disc, pg.userData.r1, pg.userData.r2); this.scene.add(pg);
+                }
+                const open = sm(Math.min(1, p / 0.22)) * (1 - sm(Math.max(0, (p - 0.72) / 0.28)));
+                pg.visible = open > 0.01; pg.scale.setScalar(Math.max(0.01, open) * 1.1);
+                pg.position.set(wx(f.x), wy(f.y) + 6, -30);
+                const col = new THREE.Color(f.color || '#38bdf8').multiplyScalar(2.4); pg.userData.r1.material.color.copy(col); pg.userData.r2.material.color.copy(col);
+                pg.userData.r1.rotation.z = p * 9; pg.userData.r2.rotation.z = -p * 12;
+                pg.userData.disc.material.opacity = 1 - sm(Math.min(1, Math.max(0, (p - 0.35) / 0.2)));
+                if (p < 0.26) m.root.visible = false;
+                else { const w = sm(Math.min(1, (p - 0.26) / 0.3)); m.root.visible = true; m.root.position.z = -90 + 110 * w; m.root.scale.setScalar(0.4 + 0.6 * Math.min(1, w * 1.4)); f.vx = p < 0.62 ? 6 * (f.facing || 1) : 0; }
+                f._pv = true;
+            } else if (f._pv) { f._pv = false; if (pg) pg.visible = false; m.root.scale.setScalar(1); m.root.position.z = 0; f.vx = 0; }
+        });
+    }
     introEnd() {
         this._introOn = false; this._iPos = null; this._iLook = null; if (this._portal) this._portal.visible = false;
         for (const m of this.models) { m.root.visible = true; m.root.scale.setScalar(1); m.root.position.z = 0; }
+        for (const f of fighters) f.vx = 0;
         this.camDist = 0;
     }
 
@@ -479,6 +509,8 @@ export class View {
         if (inMatch) {
             S.detailLo = !!this._qLo || fighters.filter(x => x.active).length >= 5;      // many fighters / a slow device: tiny body details (fingers, studs, trim) are not drawn
             for (const m of this.models) m.update(dt, alpha, this.clock);
+            this.portalPass(dt);
+            if (S.race) { const cx = this.camera.position.x; fighters.forEach((f, i) => { const m = this.models[i]; if (m && m.root.visible && Math.abs(wx(f.x) - cx) > 7000) m.root.visible = false; }); }      // race: racers far out of view are not drawn
             this.fx.update(dt, this.models);
             this.items.update(dt, this.clock, this.models);
         } else this.fx.clearEvents();

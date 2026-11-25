@@ -27,3 +27,6 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from public.luminary_profiles where lower(username) = lower(_name));
 $$;
 grant execute on function public.luminary_username_exists(text) to anon, authenticated;
+
+-- e-mail connected + verified with the 6-digit code (safe to run again)
+alter table public.luminary_profiles add column if not exists email_verified boolean not null default false;

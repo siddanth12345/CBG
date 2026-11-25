@@ -529,6 +529,7 @@ class Fighter {
         this.freezeAirTimer = 0;
         this.bounceReflectT = 0;
         this.invincibleTimer = 0;
+        this.portalT = 0; this.portalMax = 1;   // entrance through a portal (online start, sudden death): hidden, then steps out; frozen meanwhile
         this.spawnT = 0;                     // respawn pre-animation: frozen and untouchable at the spawn point while the light pillar plays (60 frames = 1 s)
         this.ghostT = 0;                     // Phoenix Dash aftermath: invincible, but nothing this fighter does hurts anyone
         this.facing = 1;
@@ -744,6 +745,7 @@ class Fighter {
             if (!(sxc && sxc.k === 'roll' && sxc.ph === 'roll')) { this._rollCarry = null; if (c._rollLast && isAlive(c)) c.rollRelease(this, c._rollLast); }
         }
         if (!(this.hitstun > 0 || this.clashStunTimer > 0 || this.dizzyTimer > 0)) this._freeFace = this.facing;      // remembered for Umbra's backstab: which way they faced before being stunned
+        if (this.portalT > 0) { this.portalT--; this.vx = this.vy = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2); return; }
         if (this.spawnT > 0) {                                          // 1 s pre-spawn: hold still in the light while it plays, then drop in
             this.spawnT--; this.vx = this.vy = 0; this.y = STAGE.y - 300; this.grounded = false; this.isHanging = false;
             this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2);
@@ -3963,7 +3965,7 @@ function beginSuddenDeath(tied) {
         f.startX = STAGE.x + STAGE.width * 0.15 + (n > 1 ? span * i / (n - 1) : span / 2);
         f.reset(false);
         f.damage = 200; f.stocks = 1; f.out = false;
-        f.invincibleTimer = 40; f.spawnT = 0;
+        f.invincibleTimer = 40; f.spawnT = 0; f.portalT = f.portalMax = 84;     // sudden death: they step out of a portal
         f.y = STAGE.y - f.height / 2; f.grounded = true; f.vx = f.vy = 0;
     });
     for (const f of fighters) {
@@ -5651,6 +5653,7 @@ function startMatchSequence(mode, cfg) {
 
     S.gameState = 'countdown';
     const runCountdown = () => {
+    if (S.online && !S.demo) for (const f of fighters) if (f.active) { f.portalT = f.portalMax = 100; }      // online: everyone steps out of a portal while the countdown runs
     const countdownScreen = document.getElementById('countdownScreen');
     const countdownText = document.getElementById('countdownText');
     countdownScreen.classList.remove('hidden');
