@@ -1648,7 +1648,7 @@ class Fighter {
     spawnPillars(pl) {
         const feet = this.y + this.height / 2, st = STYLE_OF[this.char], w = STAGE.width * pl.w;
         for (const sd of [-1, 1]) {
-            pillars.push({ x: this.x + sd * pl.off, feet, w, aw: w * 2.6, h: pl.h, dmg: pl.dmg, burn: pl.burn, tick: pl.tick, life: 24, owner: this, hit: new Set() });
+            pillars.push({ x: this.x + sd * pl.off, feet, w, aw: w * 2.6, h: pl.h, dmg: pl.dmg, burn: pl.burn, tick: pl.tick, bkb: pl.bkb, kbg: pl.kbg, life: 24, owner: this, hit: new Set() });
             fx('pillar', this.x + sd * pl.off, feet, w * 1.6, pl.h, st + '!@'); fx('quake', this.x + sd * pl.off, feet, w * 2.2, 0, st + '@');
         }
         S.screenShake = Math.max(S.screenShake, 12); audio.playHit(true);
@@ -4780,7 +4780,7 @@ function updatePillars() {
             const ax = Math.abs(t.x - p.x);
             if (ax < p.w / 2 + t.width / 2) {
                 const res = interaction('SPIRAL', t, true);
-                if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: 9, kbg: 0.9, angle: -1.35, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
+                if (res === 'hit') { p.hit.add(t); launch(p.owner, t, { damage: p.dmg, bkb: p.bkb || 32, kbg: p.kbg || 1.5, angle: -Math.PI / 2, burn: { t: p.burn, dmg: p.tick }, x: p.x, y: p.feet }); }
                 else if (res === 'shield') { p.hit.add(t); audio.playShield(); t.shieldHealth = Math.max(0, t.shieldHealth - 8); fx('block', t.x, t.y); }
             } else if (ax < p.aw / 2 + t.width / 2) {
                 p.hit.add(t); t.burnT = Math.max(t.burnT, p.burn); t.burnDmg = p.tick; t.burnBy = p.owner; fx('burn', t.x, t.y - 30);
