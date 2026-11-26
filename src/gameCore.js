@@ -1878,7 +1878,7 @@ class Fighter {
             if (full) { rb *= 1.25; rk *= 1.25; }                                     // blue is carried faster, so its throw must be stronger than white's to still read as knockback
             const rd = x.d || this.facing || 1, ang = rd === 1 ? -Math.PI / 6 : Math.PI + Math.PI / 6;
             const before = f.damage; f.grounded = false;
-            launch(this, f, { damage: full ? 12 : 8, bkb: rb * (1 + 0.7 * c) * 0.8, kbg: rk * (1 + 0.7 * c) * 0.8, angle: ang, x: this.x, y: this.y });
+            launch(this, f, { damage: full ? 12 : 8, bkb: rb * (1 + 0.7 * c) * 0.64, kbg: rk * (1 + 0.7 * c) * 0.64, angle: ang, x: this.x, y: this.y });
             f.damage = before;                                                        // the hit counts for the knockback only: the damage comes as burn ticks
         } else {
             f.clashStunTimer = Math.max(f.clashStunTimer, 30);                        // red: grey stun 0.5 s, no knockback
