@@ -67,7 +67,10 @@ function stopTimers() { clearInterval(pingTimer); clearInterval(watchTimer); pin
 
 
 /** ---- common ---- */
+let connGen = 0;                                   // every connect attempt takes a number; a slower, older attempt that finishes after you left / pressed again is dropped (fixes join/leave spam)
+export const cancelConnect = () => { connGen++; };
 export function leaveRoom(notify = true) {
+    connGen++;
     if (Online.t) {
         if (notify && Online.role !== 'spectator') Online.t.send({ t: 'leave', id: Online.myId });
         Online.t.close();
@@ -96,7 +99,10 @@ export async function hostRoom(code, mode = 'pvp') {
     Online.name = displayName(); Online.mode = mode; Online.viaQueue = false; Online.rankedQ = false;
     Online.role = 'host'; Online.code = code || newCode();
     set('waiting', 'Opening room…');
-    try { Online.t = await openTransport(Online.code); } catch (e) { Online.role = null; set('closed', e.message); return false; }
+    const my = ++connGen; let tt;
+    try { tt = await openTransport(Online.code); } catch (e) { if (my === connGen) { Online.role = null; set('closed', e.message); } return false; }
+    if (my !== connGen) { try { tt.close(); } catch (e) { /* stale */ } return false; }
+    Online.t = tt;
     const t = Online.t;
     if (t.enableRtc) t.enableRtc('host');
     t.onmessage = (m) => {
@@ -265,7 +271,10 @@ export async function joinRoom(code) {
     if (!/^[A-Z]{4}$/.test(code)) { set('closed', 'Codes are 4 letters'); return false; }
     Online.role = 'guest'; Online.code = code;
     set('joining', 'Connecting…');
-    try { Online.t = await openTransport(code); } catch (e) { Online.role = null; set('closed', e.message); return false; }
+    const my = ++connGen; let tt;
+    try { tt = await openTransport(code); } catch (e) { if (my === connGen) { Online.role = null; set('closed', e.message); } return false; }
+    if (my !== connGen) { try { tt.close(); } catch (e) { /* stale */ } return false; }
+    Online.t = tt;
     const t = Online.t;
     if (t.enableRtc) t.enableRtc('guest');
     NETHOOK.rtt = () => (Online.t && Online.t.info && Online.t.info.rtt) || 0;

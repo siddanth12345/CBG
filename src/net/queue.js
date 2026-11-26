@@ -13,17 +13,20 @@ function stop() {
     if (t) { try { t.send({ t: 'unq', id }); } catch (e) { /* ignore */ } t.close(); }
     t = null; peers.clear(); Queue.active = false; Queue.waiting = 0; Queue.onChange();
 }
-export function leaveQueue() { matched = true; stop(); }
+let qGen = 0, lastJoin = 0;
+export function leaveQueue() { qGen++; matched = true; stop(); }
 
 export const QUEUE_KINDS = { '1v1': '1v1', koth: 'King of the Hill', race: 'Race' };
 /** kind: '1v1' (pairs), 'koth' or 'race' (groups of 2 to 4). Every queue match counts for rating. */
 export async function joinQueue(ranked = true, k = '1v1') {
-    leaveRoom(false);
+    if (Date.now() - lastJoin < 700) return false; lastJoin = Date.now();      // button spam: ignore presses that come too fast
+    leaveRoom(false); const my = ++qGen;
     rankedQ = !!ranked; kind = QUEUE_KINDS[k] ? k : '1v1'; since = 0; Online.queueKind = kind;
     stop(); matched = false;
     id = Math.random().toString(36).slice(2, 9); t0 = Date.now();
-    try { t = await openTransport(kind === '1v1' ? (rankedQ ? 'mm1v1r' : 'mm1v1') : 'mm' + kind); } catch (e) { Online.note = e.message; Online.status = 'closed'; Online.onChange(); return false; }
-    Queue.active = true; Queue.onChange();
+    let nt; try { nt = await openTransport(kind === '1v1' ? (rankedQ ? 'mm1v1r' : 'mm1v1') : 'mm' + kind); } catch (e) { if (my === qGen) { Online.note = e.message; Online.status = 'closed'; Online.onChange(); } return false; }
+    if (my !== qGen) { try { nt.close(); } catch (e) { /* stale */ } return false; }
+    t = nt; Queue.active = true; Queue.onChange();
     t.onmessage = (m) => {
         if (matched || !m) return;
         if (m.t === 'q') peers.set(m.id, { t0: m.t0, seen: Date.now() });
