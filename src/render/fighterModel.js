@@ -400,20 +400,22 @@ export class FighterModel {
         const f = this.f;
 
         // shield bubble (fresnel + hex-ish rings)
-        this.shield = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), new THREE.ShaderMaterial({
-            transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-            uniforms: { uColor: { value: new THREE.Color('#22d3ee') }, uT: { value: 0 }, uPow: { value: 1 } },
+        this.shield = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), new THREE.ShaderMaterial({
+            transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.NormalBlending, toneMapped: false,
+            uniforms: { uColor: { value: new THREE.Color('#67e8f9') }, uT: { value: 0 }, uPow: { value: 1 } },
             vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vP;
                 void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
             fragmentShader: `uniform vec3 uColor; uniform float uT; uniform float uPow; varying vec3 vN; varying vec3 vV; varying vec3 vP;
                 void main(){
-                    float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2);
-                    float lat = abs(sin(vP.y * 9.0 + uT * 1.5)) ; float lon = abs(sin(atan(vP.z, vP.x) * 6.0 + uT));
-                    float grid = smoothstep(0.93, 1.0, max(lat, lon));
-                    float a = (0.16 + fr * 0.85 + grid * 0.22) * uPow;
-                    gl_FragColor = vec4(uColor * (1.0 + fr * 1.4), a);
+                    float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.6);
+                    float lat = abs(sin(vP.y * 9.0 + uT * 1.5)); float lon = abs(sin(atan(vP.z, vP.x) * 6.0 + uT));
+                    float grid = smoothstep(0.88, 1.0, max(lat, lon));
+                    float a = (0.42 + fr * 0.45 + grid * 0.28) * uPow;
+                    gl_FragColor = vec4(uColor, clamp(a, 0.0, 0.92));
                 }`,
         }));
+        this.shield.userData.keepLod = true;
+        this.shield.layers.set(0);
         this.shield.visible = false; this.shield.renderOrder = 8; this.root.add(this.shield);
 
         // dash aura
@@ -1288,6 +1290,7 @@ export class FighterModel {
         // shield bubble: radius follows the remaining shield exactly like the original
         if (f.isShielding) {
             const r = (f.shieldHealth / f.maxShieldHealth) * 52 + 10;
+            this.shield.layers.set(0);
             this.shield.visible = true;
             this.shield.scale.setScalar(r);
             this.shield.position.set(0, 0, 0);
