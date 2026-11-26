@@ -57,12 +57,15 @@ export function showRoulette(chosen, done, title = 'RACE CHARACTER') {
     o.innerHTML = `<div class="rl-wrap"><div class="rl-title">${esc(title)}</div><div class="rl-box"><div class="rl-ptr"></div><div class="rl-hub"></div><div class="rl-wheel" style="background:conic-gradient(from 0deg,${stops})">${ids.map((id, i) => `<div style="position:absolute;left:50%;top:50%;width:0;height:0;transform:rotate(${i * seg + seg / 2 - 90}deg)"><div class="rl-lbl" style="left:70px;top:-0.6em;color:${colOf(id)};${(i * seg + seg / 2) > 180 ? 'transform:rotate(180deg);transform-origin:50% 50%' : ''}">${esc(CHARS[id].name.toUpperCase())}</div></div>`).join('')}</div></div><div class="rl-res">&nbsp;</div></div>`;
     const wheel = o.querySelector('.rl-wheel'), res = o.querySelector('.rl-res');
     let finished = false;
-    const end = () => { if (finished) return; finished = true; o.remove(); done && done(); };
+    let tmr1 = 0, tmr2 = 0;
+    const end = () => { if (finished) return; finished = true; clearTimeout(tmr1); clearTimeout(tmr2); o.remove(); if (S.presentCancel === cancel) S.presentCancel = null; done && done(); };
+    const cancel = () => { if (finished) return; finished = true; clearTimeout(tmr1); clearTimeout(tmr2); o.remove(); S.presentCancel = null; };
+    S.presentCancel = cancel;
     // the pointer is at the top (0deg): bring segment idx's centre there after a few full turns
     const target = 360 * 6 - (idx * seg + seg / 2) + (Math.random() - 0.5) * seg * 0.6;
     requestAnimationFrame(() => requestAnimationFrame(() => { wheel.style.transform = `rotate(${target}deg)`; }));
-    setTimeout(() => { if (finished) return; res.style.color = colOf(chosen); res.textContent = CHARS[chosen].name.toUpperCase() + '!'; }, 5300);
-    setTimeout(end, 6900);
+    tmr1 = setTimeout(() => { if (finished) return; res.style.color = colOf(chosen); res.textContent = CHARS[chosen].name.toUpperCase() + '!'; }, 5300);
+    tmr2 = setTimeout(end, 6900);
 }
 
 /** 3D pre-match cinematic (no skip): the camera orbits the arena, then visits every spawn: a portal opens, the fighter steps out, and a card shows name, character and K/D for 2 s */
@@ -75,7 +78,9 @@ export function present(list, done) {
     o.innerHTML = '<div class="pp-bar t"></div><div class="pp-bar b"></div><div class="pp-count"></div><div class="pp-card3"></div>';
     const cnt = o.querySelector('.pp-count'), card = o.querySelector('.pp-card3');
     let shown = -2, raf = 0, ended = false;
-    const end = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); S.intro = null; document.body.classList.remove('cbg-intro'); o.remove(); done(); };
+    const end = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); S.intro = null; document.body.classList.remove('cbg-intro'); o.remove(); if (S.presentCancel === cancel) S.presentCancel = null; done(); };
+    const cancel = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); S.intro = null; document.body.classList.remove('cbg-intro'); o.remove(); S.presentCancel = null; };
+    S.presentCancel = cancel;
     const tick = () => {
         if (ended) return;
         const el = performance.now() - T0;
@@ -99,7 +104,7 @@ export function present(list, done) {
 /** the 20-second "get ready" screen before every match except training and the tutorial: everyone's rank, level and K/D (hidden everywhere else), and you can swap your own character */
 export function preMatch(list, done) {
     css();
-    const o = document.createElement('div'); o.className = 'pz'; o.style.cssText = 'display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,.84);z-index:90;pointer-events:auto;overflow:auto;padding:12px';
+    const o = document.createElement('div'); o.className = 'pz'; o.style.cssText = 'display:flex;align-items:flex-start;justify-content:center;background:rgba(2,6,23,.84);z-index:90;pointer-events:auto;overflow:auto;padding:12px';
     document.body.appendChild(o);
     const m = getMeta(), lv = levelInfo().level, T = tierOf(m.rating || 0), race = !!(S.match && S.match.race);
     let left = 20, sort = 'az', perkFor = null, ended = false, timer = 0; const ready = new Set(list.filter(p => p.bot).map(p => p.slot));   // bots are ready by default; every human clicks READY
@@ -117,7 +122,7 @@ export function preMatch(list, done) {
     const draw = () => {
         const ids = CHAR_IDS.slice().sort((a, b) => sort === 'az' ? CHARS[a].name.localeCompare(CHARS[b].name) : (CHARS[a].role || '').localeCompare(CHARS[b].role || '') || CHARS[a].name.localeCompare(CHARS[b].name));
         const f = mine(), cur = f ? f.char : '';
-        o.innerHTML = `<div style="max-width:980px;width:100%;color:#e2e8f0;font-family:Inter,sans-serif">
+        o.innerHTML = `<div class="pm-root" style="max-width:980px;width:100%;margin:auto 0;color:#e2e8f0;font-family:Inter,sans-serif">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><div style="font-weight:900;letter-spacing:.14em;font-size:clamp(18px,3.4vmin,28px)">GET READY</div><div style="font-weight:900;font-size:clamp(18px,3.4vmin,28px);color:#38bdf8">Starting in ${left}s</div></div>
             <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px">${list.map(p => { const c = p.color || '#38bdf8', ch = CHARS[(fighters.find(f => f.slot === p.slot) || p).char] || CHARS.luminent;
                 return `<div style="flex:1 1 200px;min-width:180px;background:#0f172a;border:2px solid ${esc(c)};border-radius:14px;padding:10px 12px"><div style="font-weight:900;color:${esc(c)}">${esc(p.name || 'Player')}${p.human ? ' (you)' : ''} <span style="float:right;font-size:12px;color:${ready.has(p.slot) ? '#4ade80' : '#94a3b8'}">${ready.has(p.slot) ? '✓ READY' : 'waiting…'}</span></div><div style="font-weight:800;color:${colOf(ch.id)}">${esc(ch.name)} <span style="color:#94a3b8;font-weight:600">${esc(ch.role)}</span></div><div style="margin-top:6px;font-size:13px;color:#cbd5e1">${stat(p)}</div></div>`; }).join('')}</div>
@@ -127,7 +132,9 @@ export function preMatch(list, done) {
             ${perkFor ? perkPanel(perkFor) : ''}` : ''}
             <div style="margin-top:16px;text-align:center"><button data-go style="background:${ready.has(meSlot) ? 'linear-gradient(90deg,#16a34a,#15803d)' : 'linear-gradient(90deg,#06b6d4,#2563eb)'};color:#fff;border:0;border-radius:12px;padding:10px 34px;font-weight:900;letter-spacing:.12em;cursor:pointer;font-size:16px">${ready.has(meSlot) ? 'READY ✓ (click to undo)' : 'READY'}</button></div></div>`;
     };
-    const end = () => { if (ended) return; ended = true; clearInterval(timer); o.remove(); done(); };
+    const end = () => { if (ended) return; ended = true; clearInterval(timer); o.remove(); if (S.presentCancel === cancel) S.presentCancel = null; done(); };
+    const cancel = () => { if (ended) return; ended = true; clearInterval(timer); o.remove(); S.presentCancel = null; };
+    S.presentCancel = cancel;
     o.addEventListener('change', (e) => { const sel = e.target.closest('select[data-slot]'); if (sel && perkFor) { setSlot(perkFor, +sel.dataset.slot, sel.value || null); draw(); } });
     o.addEventListener('click', (e) => {
         const b = e.target.closest('button'); if (!b) return;

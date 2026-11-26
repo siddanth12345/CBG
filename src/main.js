@@ -5,7 +5,7 @@ import { CHAR_IDS } from './characters.js';
 import { initPresent, showRoulette } from './presentUI.js';
 import { initProgress } from './progress.js';
 import { displayName } from './account.js';
-import { MAP_IDS } from './gameCore.js';
+import { MAP_IDS, cancelMatchTimers } from './gameCore.js';
 import { tickRace, initRace } from './raceUI.js';
 import { tickChaos } from './chaosUI.js';
 import { tickAnnouncer } from './announcer.js';
@@ -288,6 +288,7 @@ $('menuControlsBtn').addEventListener('click', () => { menuDropdown.classList.ad
 $('menuRestartBtn').addEventListener('click', () => { menuDropdown.classList.add('hidden'); if (!S.online) startMatchSequence(S.gameMode); });
 
 function backToMenu() {
+    cancelMatchTimers();
     ui.guide.stop();
     if (S.online || Online.role) leaveRoom();
     for (const id of ['gameHud', 'aimMatrixHud', 'inGameMenuContainer', 'trainMenuBtn']) $(id).classList.add('hidden');

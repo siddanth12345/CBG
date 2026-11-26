@@ -522,3 +522,27 @@ html,body{overscroll-behavior:none}
 @media (max-aspect-ratio:1/1){.cbg-menu{max-height:68%}}
 .lm-body{touch-action:pan-y;overscroll-behavior:contain}
 body.no-fs .lm-fs{display:none!important}
+
+/* small phones (iPhone-size, portrait or landscape): fit the screen, respect the notch / home bar, keep the HUD cards from colliding */
+@media (max-width:520px),(max-height:480px){
+  .lm-fs{top:max(6px,env(safe-area-inset-top));left:max(6px,env(safe-area-inset-left))}
+  .lm-accbar{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right))}
+  .w-72{width:min(18rem,46vw)!important}
+  .w-60{width:min(15rem,40vw)!important}
+  .lm-modal{padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+  #startScreen{padding-left:max(0px,env(safe-area-inset-left))}
+}
+@media (max-width:520px){ .text-9xl{font-size:5rem!important} .text-6xl{font-size:2.6rem!important} }
+
+/* pre-match screen + menus on short landscape phones: compact so it all fits and scrolls from the top */
+@media (max-height:520px){
+  .pz{padding:6px 10px!important}
+  .pm-root{max-width:100%!important}
+  .pm-root [style*="flex:1 1 200px"]{flex:1 1 130px!important;min-width:120px!important;padding:6px 9px!important;border-radius:10px!important;font-size:12px}
+  .pm-root .pm-row{font-size:11px;display:inline-block;margin-right:10px}
+  .pm-root button[data-ch],.pm-root button[data-sortc]{flex:1 1 72px!important;padding:4px 5px!important;font-size:11px!important;border-radius:8px!important}
+  .pm-root button[data-ch]>div{display:none!important}
+  .pm-root button[data-go]{padding:7px 26px!important;font-size:14px!important}
+  .pm-root>div{margin-top:6px!important}
+  .lm-panel{max-height:calc(100dvh - 16px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+}

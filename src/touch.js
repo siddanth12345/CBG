@@ -42,14 +42,16 @@ export function buildControls(host) {
 
 /** place the controls according to a layout (fractions of the host size) */
 export function positionControls(refs, cfg, w = window.innerWidth, h = window.innerHeight) {
-    const M = matrixSize(cfg);
+    const K = Math.min(1, Math.max(0.55, Math.min(w / 560, h / 520)));      // small / narrow phones: shrink the controls so they don't pile on top of each other
+    const M = matrixSize(cfg) * K;
     const place = (el, c, size) => {
         el.style.width = el.style.height = size + 'px';
         const x = Math.min(w - size / 2, Math.max(size / 2, c.x * w)), y = Math.min(h - size / 2, Math.max(size / 2, c.y * h));
         el.style.left = (x - size / 2) + 'px'; el.style.top = (y - size / 2) + 'px';
     };
-    place(refs.matrix, cfg.matrix, M);
-    for (const k of ['jump', 'grab', 'shield', 'neutral']) if (cfg[k]) place(refs[k], cfg[k], cfg[k].s);
+    const portrait = w < h && w < 600, PF = { matrix: { x: 0.3, y: 0.74 }, jump: { x: 0.68, y: 0.7 }, grab: { x: 0.86, y: 0.8 }, shield: { x: 0.68, y: 0.89 } };      // portrait phones get their own tidy layout
+    place(refs.matrix, portrait ? PF.matrix : (h < 480 ? { x: cfg.matrix.x, y: Math.max(cfg.matrix.y, 0.66) } : cfg.matrix), M);      // short landscape: keep the stick clear of the scoreboard
+    for (const k of ['jump', 'grab', 'shield', 'neutral']) if (cfg[k]) place(refs[k], portrait && PF[k] ? PF[k] : cfg[k], cfg[k].s * K);
     // grid internals
     const sub = refs.matrix, d = M * 0.22, off = M * 0.33, c = M / 2;
     const put = (el, dx, dy, dd) => { el.style.width = el.style.height = dd + 'px'; el.style.left = (c + dx - dd / 2) + 'px'; el.style.top = (c + dy - dd / 2) + 'px'; };

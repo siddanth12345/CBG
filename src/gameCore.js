@@ -3012,11 +3012,20 @@ class AIBot extends Fighter {
         const nn = N[nxt];
         for (const d of R.obs.dyn) if ((d.kind === 'liftU' || d.kind === 'liftD') && this.grounded && Math.abs(feet - d.p.y) < 12 && this.x > d.p.x && this.x < d.p.x + d.p.w) {     // on a lift: wait until it has carried us all the way
             const end = d.p.by + (d.kind === 'liftU' ? -LIFT_TRAVEL : LIFT_TRAVEL);
-            if (Math.abs(d.p.y - end) > 40) { this.vx *= 0.5; this.facing = 1; return; }
+            if (Math.abs(d.p.y - end) > 40) { const gl = R.map === 'sunny' ? galeOf(this.slot, R.t) : null, cx = d.p.x + d.p.w / 2; this.vx = this.vx * 0.5 + Math.max(-5, Math.min(5, (cx - this.x) * 0.12)) - (gl ? gl.ax * 0.9 : 0); this.facing = 1; return; }      // ride it out: stay on the middle and lean into the gale
         }
         const galeNow = R.map === 'sunny' ? galeOf(this.slot, R.t) : null, qq = RACE_Q[this.diff || this.level] ?? 0.55;
         if (galeNow && this.grounded && qq > 0.3) { this.vx = this.vx * 0.5 - galeNow.ax * 0.5 * qq; return; }              // a gale is blowing: brace on the platform and wait it out (it only lasts a second)
         if (galeNow && !this.grounded && qq > 0.3 && galeNow.ay > 0.3 && this.jumpsLeft > 0 && feet > nn.y + 40) this.vy -= 0.5 * qq;   // pushed down: fight it with the air jumps' lift
+        const ld = R.obs.dyn.find(d => (d.kind === 'liftU' || d.kind === 'liftD') && d.p.x + d.p.w - 30 > this.x && d.p.x - this.x < 700 && feet > d.p.by - 500 && feet < d.p.by + 400) || null;     // a lift is next: board it carefully, don't fly over it
+        if (ld && !this.grounded && this.x < ld.p.x + ld.p.w - 30) { this.facing = 1; this.vx = Math.max(-3, Math.min(cap, (ld.p.x + ld.p.w / 2 - this.x) * 0.12 + 2)); return; }
+        if (ld && this.grounded && cur >= 0 && N[cur].r <= ld.p.x + 5) {
+            const edge0 = N[cur].r - this.x; this.facing = 1;
+            if (Math.abs(ld.p.y - ld.p.by) > 12) { this.vx *= 0.5; return; }                                  // wait for it to come back down
+            this.vx = Math.min(cap, this.vx + 0.8);
+            if (edge0 < 16 && this.actionTimer > 6) { this.jump(); this.actionTimer = 0; }
+            return;
+        }
         const onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
         this.facing = 1;
         if (this.vx < cap) this.vx = Math.min(cap, this.vx + 1.2);
@@ -5539,7 +5548,16 @@ export function startDemo(map, chars) {
 
 const FFA_COLORS = ['#06b6d4', '#f43f5e', '#a3e635', '#f59e0b', '#a855f7', '#ec4899', '#14b8a6', '#f97316'];
 /** cfg (custom match): { players: [{slot, name, team}], teams: bool, startDamage, stocks, mySlot } */
+let matchGen = 0, matchCd = null;
+/** stop everything a previous match left running (pre-match screen, intro, countdown): leaving a game while it counts down must not touch the next one */
+export function cancelMatchTimers() {
+    matchGen++; if (matchCd) { clearInterval(matchCd); matchCd = null; } if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+    try { if (S.presentCancel) S.presentCancel(); } catch (e) { /* ignore */ }
+    S.intro = null; document.body.classList.remove('cbg-intro');
+    const cs = document.getElementById('countdownScreen'); if (cs) cs.classList.add('hidden');
+}
 function startMatchSequence(mode, cfg) {
+    cancelMatchTimers(); const gen = matchGen;
     S.trainRace = !!(mode === 'lobby' && cfg && cfg.trainRace);
     { const tb = document.getElementById('trainMenuBtn'); if (tb) tb.classList.toggle('hidden', !S.trainRace); }
     S.chaos = null; chaosMods();
@@ -5674,6 +5692,7 @@ function startMatchSequence(mode, cfg) {
 
     S.gameState = 'countdown';
     const runCountdown = () => {
+    if (gen !== matchGen) return;                                  // that match was left or replaced
     if (S.online && !S.demo) for (const f of fighters) if (f.active) { f.portalT = f.portalMax = 100; }      // online: everyone steps out of a portal while the countdown runs
     const countdownScreen = document.getElementById('countdownScreen');
     const countdownText = document.getElementById('countdownText');
@@ -5682,21 +5701,22 @@ function startMatchSequence(mode, cfg) {
     let count = 3;
     countdownText.textContent = count;
 
-    const countdownInterval = setInterval(() => {
+    const countdownInterval = matchCd = setInterval(() => {
+        if (gen !== matchGen) { clearInterval(countdownInterval); return; }
         count--;
         if (count > 0) {
             countdownText.textContent = count;
         } else if (count === 0) {
             countdownText.textContent = 'GO!';
         } else {
-            clearInterval(countdownInterval);
+            clearInterval(countdownInterval); if (matchCd === countdownInterval) matchCd = null;
             countdownScreen.classList.add('hidden');
-            S.gameState = 'playing';
+            if (S.gameState === 'countdown') S.gameState = 'playing';
         }
     }, 1000);
     };
     // offline matches open with a presentation of every player (character, name, K/D), then the countdown
-    if (presentHook && !S.online && !S.demo) { const list = fighters.filter(f => f.active).map(f => ({ slot: f.slot, name: f.name, char: f.char, color: f.color, bot: !!f.isAI, diff: f.diff, human: f.slot === (S.mySlot || 0) })); if (list.length > 1) { presentHook(list, runCountdown); return; } }
+    if (presentHook && !S.online && !S.demo) { const list = fighters.filter(f => f.active).map(f => ({ slot: f.slot, name: f.name, char: f.char, color: f.color, bot: !!f.isAI, diff: f.diff, human: f.slot === (S.mySlot || 0) })); if (list.length > 1) { presentHook(list, () => { if (gen === matchGen) runCountdown(); }); return; } }
     runCountdown();
 }
 let presentHook = null;
@@ -5836,7 +5856,10 @@ function updateRaceObs(R) {
         if (d.kind === 'liftU' || d.kind === 'liftD') {              // Sunny Hill lift: stand on it and it rises (white circle with an up arrow) or sinks; empty, it drifts back
             const hi = p.by + (d.kind === 'liftU' ? -LIFT_TRAVEL : LIFT_TRAVEL);
             const riders = act.filter(f => f.grounded && Math.abs(f.y + f.height / 2 - p.y) < 10 && f.x > p.x - 6 && f.x < p.x + p.w + 6);
-            const tgt = riders.length ? hi : p.by, dy = Math.sign(tgt - p.y) * Math.min(riders.length ? 4.6 : 3, Math.abs(tgt - p.y));
+            for (const f of riders) f._liftT = R.t;
+            const tgt = riders.length ? hi : p.by;
+            d.sp = riders.length ? Math.min(10, (d.sp || 2.5) + 7.5 / 60) : 2.5;                       // smooth: starts at 2.5 and reaches 4x (10) after 1 s of riding
+            const dy = Math.sign(tgt - p.y) * Math.min(riders.length ? d.sp : 8, Math.abs(tgt - p.y));
             if (dy) { p.y += dy; for (const f of riders) { f.y += dy; f.py += dy; } if (d.node) d.node.y = p.y; }
             d.st = riders.length ? 1 : 0; continue;
         }
@@ -5880,7 +5903,8 @@ function updateRaceObs(R) {
         if (f._finT) continue;
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
-            if (gl && f.hitstun <= 0) { f.vx = Math.max(-18, Math.min(18, f.vx + gl.ax * GALE.accel)); f.vy = Math.max(-17, Math.min(17, f.vy + gl.ay * GALE.accel * 0.9)); if (f.grounded && gl.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); } if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
+            const onL = t - (f._liftT || -9) < 4;      // riding a lift: the wind only leans on you, it can't blow you off or up
+            if (gl && f.hitstun <= 0) { f.vx = Math.max(-18, Math.min(18, f.vx + gl.ax * GALE.accel * (onL ? 0.25 : 1))); if (!onL) f.vy = Math.max(-17, Math.min(17, f.vy + gl.ay * GALE.accel * 0.9)); if (f.grounded && !onL && gl.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); } if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
         }
         const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
         for (const o of O.spin) {                                    // spinning plus signs

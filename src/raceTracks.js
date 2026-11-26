@@ -1,6 +1,6 @@
 // Race tracks: every map has its own course (small and big versions of a theme share the look, not the track).
 // A track is a chain of soft platforms [gap, rise (negative = up), width] after the start island; the last one is the finish island.
-export const LIFT_TRAVEL = 720;
+export const LIFT_TRAVEL = 2880;                              // 4x: jumps and recoveries cannot reach the next level, you have to ride the lift
 const START = { x: 300, y: 3125, w: 1300 };
 const CH = {
     // Neon Sprint: a rhythm of short hops, then a long thin bridge between two pillars, a dive, and a final staircase
