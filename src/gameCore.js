@@ -3028,6 +3028,13 @@ class AIBot extends Fighter {
             if (edge0 < 16 && this.actionTimer > 6) { this.jump(); this.actionTimer = 0; }
             return;
         }
+        const bxIn = R.obs.box.find(b => !b.p && this.x > b.x + 4 && this.x < b.x + b.w - 4 && feet > b.top + 8 && feet < b.y + 10);
+        if (bxIn) {                                                          // stuck inside a solid glass cube: the roof is one-way, so jump straight up through it
+            this.facing = 1; this.vx = Math.max(-2, Math.min(cap * 0.5, (b0x(bxIn) - this.x) * 0.1));
+            if (this.actionTimer > 8 && (this.grounded || (this.jumpsLeft > 0 && this.vy > -2))) { this.jump(); this.actionTimer = 0; }
+            if (!this.grounded && this.jumpsLeft <= 0 && this.cd.SPIRAL <= 0 && this.vy > 0 && !this.actionBlocked() && this.actionLock <= 0 && (RACE_TUNE[this.char] || RACE_TUNE._).spiral) this.useSpecial('SPIRAL', this.x, bxIn.top - 200);
+            return;
+        }
         const onCur = cur >= 0 && this.grounded, slackK = 0.55 + 0.45 * q, react = 0.2 + 0.8 * q;
         this.facing = 1;
         if (this.vx < cap) this.vx = Math.min(cap, this.vx + 1.2);
@@ -3422,6 +3429,12 @@ class AIBot extends Fighter {
             if (this.char === 'ember' && !this.grabHolding && this.cd.BLINK <= 0 && Math.abs(distToTargetX) > 100 && Math.abs(distToTargetX) < 1400 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.5 : 0.9)) {
                 const close = Math.abs(distToTargetX) < 320, c = close ? 0.2 + Math.random() * 0.25 : (target.damage > 70 || target.isHanging) ? 0.9 + Math.random() * 0.1 : 0.55 + Math.random() * 0.4;
                 if (this.useSpecial('BLINK', target.x, target.y, c)) { const e = aiStats[this.level] && (aiStats[this.level]['ember:S'] || (aiStats[this.level]['ember:S'] = { use: 0, hit: 0 })); if (e) e.use++; this.aiMove = { slot: 'S', t: 100, hit: false }; return; }
+            }
+            // 5a'') melee: J beats every move except shield, Terra's rock and a down air, and it is the best tool to push people away and KO: whenever they are in reach and not shielding, swing
+            if (!this.grabHolding && !target.isShielding && dist < 165 && Math.abs(distToTargetY) < 120 && this.actionLock <= 0 && !this.actionBlocked() &&
+                !(tMove === 'DOWN' && !target.grounded) && !(target.char === 'terra' && target.rockT > 0 && tMove === 'NEUTRAL') && Math.random() < (med ? 0.4 : 0.7)) {
+                const opts = []; this.aiMeleeOpts(opts, target, distToTargetX, distToTargetY, aim);
+                const s0 = this.attackSerial; this.pickWeighted(opts); if (this.attackSerial !== s0) return;
             }
             // 5b) the character's own special moves
             if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.85) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
@@ -5867,6 +5880,7 @@ function obsHit(f, ux, uy, kb, dmg, stun) {
 }
 /** the race obstacles: spinning plus signs, projectile lanes, trap platforms (exploding stars / falling slabs) and slow-fall clouds */
 /** glass boxes: the rectangle of a box this frame (lift boxes ride with their lift) */
+const b0x = (b) => b.x + b.w * 0.6;
 const boxRect = (b) => b.p ? { x0: b.p.x, x1: b.p.x + b.p.w, y0: b.p.y - b.w, y1: b.p.y } : { x0: b.x, x1: b.x + b.w, y0: b.top, y1: b.y };
 const inGlass = (R, x, y) => { const B = R.obs.box; if (B) for (const b of B) { const r = boxRect(b); if (x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1) return true; } return false; };
 function updateRaceObs(R) {
@@ -5924,6 +5938,15 @@ function updateRaceObs(R) {
     }
     for (const f of act) {
         if (f._finT) continue;
+        for (const b of O.box) if (!b.p) {                           // a solid cube: the closed side (opposite the door) is a wall that stops you from either direction; the roof is a one-way platform
+            const wx0 = b.open < 0 ? b.x + b.w : b.x, hw = f.width / 2 + 8, top = f.y - f.height / 2, bot = f.y + f.height / 2;
+            if (bot > b.top + 6 && top < b.y - 2 && Math.abs(f.x - wx0) < hw) {
+                const inside = b.open < 0 ? (f._bxp !== undefined ? f._bxp < wx0 : f.x < wx0) : (f._bxp !== undefined ? f._bxp > wx0 : f.x > wx0);
+                const dir = (b.open < 0) === inside ? 1 : -1;       // inside the cube -> push toward the open side; outside -> push away from the wall
+                f.x = wx0 + (b.open < 0 ? (inside ? -hw : hw) : (inside ? hw : -hw)); if (f.vx * (f.x - wx0) > 0 || true) f.vx = 0;
+            }
+        }
+        f._bxp = f.x;
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
             const onL = t - (f._liftT || -9) < 4;      // riding a lift: the wind only leans on you, it can't blow you off or up

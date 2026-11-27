@@ -1,7 +1,7 @@
 // Race tracks: every map has its own course (small and big versions of a theme share the look, not the track).
 // A track is a chain of soft platforms [gap, rise (negative = up), width] after the start island; the last one is the finish island.
 export const LIFT_TRAVEL = 2880;
-export const BOX_W = 204;                    // glass cubes: 3 x the fighter's height                              // 4x: jumps and recoveries cannot reach the next level, you have to ride the lift
+export const BOX_W = 408;                    // glass cubes: 6 x the fighter's height (twice the old size); the platform under them is as wide                              // 4x: jumps and recoveries cannot reach the next level, you have to ride the lift
 const START = { x: 300, y: 3125, w: 1300 };
 const CH = {
     // Neon Sprint: a rhythm of short hops, then a long thin bridge between two pillars, a dive, and a final staircase
@@ -41,7 +41,7 @@ export function raceTrack(map) {
         for (let k = 0; k < 10; k++) {
             const up = k % 2 === 0;
             add(sc(200), sc(k % 3 === 0 ? -40 : 30), sc(240)); add(sc(210), sc(-30), sc(220)); add(sc(220), 0, sc(700), { rest: 1, stage: 1 });
-            add(sc(420), 0, sc(420), { dyn: up ? 'liftU' : 'liftD', lift: 1 });          // the lift sits next to the platform AHEAD; the wide gap before it holds the big spiked hill (with a doorway at platform height)
+            add(sc(420), 0, sc(840), { dyn: up ? 'liftU' : 'liftD', lift: 1 });          // the lift sits next to the platform AHEAD; the wide gap before it holds the big spiked hill (with a doorway at platform height)
             add(sc(230), up ? -TR : TR, sc(520), { rest: 1 });
         }
     }
@@ -84,7 +84,7 @@ export function raceTrack(map) {
     if (map === 'sunny') {                                     // BIG spiked hills in the gap before every lift: green rounded columns with spikes standing on their surface; a doorway at platform height lets you cross to the lift, but you can't climb the gap
         for (let i = 1; i < platforms.length - 1; i++) {
             const p = platforms[i], pv = platforms[i - 1], nx = platforms[i + 1]; if ((p.dyn !== 'liftU' && p.dyn !== 'liftD') || pv.dyn || nx.dyn) continue;
-            const x0 = pv.x + pv.w + 56, x1 = p.x - 56; if (x1 - x0 < 40) continue;
+            const x0 = pv.x + pv.w + 56, x1 = p.x - 4;      // the hill is the lift cube's wall on the gap side: it stands flush against the cube if (x1 - x0 < 40) continue;
             const y0 = p.by, up = p.dyn === 'liftU';
             if (up) obs.spike.push({ dir: 1, x0, x1, a: nx.y + 100, b: y0 - 320 }, { dir: 1, x0, x1, a: y0 + 80, b: y0 + 600 });      // a = the rounded, spiked end, b = the flat end (at the doorway or far away)
             else obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: y0 - 600 });      // down lifts: upside-down hills hanging from above
@@ -93,6 +93,7 @@ export function raceTrack(map) {
     for (const p of platforms) if (p.box) { p.fixed = true; obs.box.push({ x: p.x, w: p.w, top: p.y - p.w, y: p.y, open: -1 }); }      // open side faces the start line
     if (map === 'sunny') for (const p of platforms) if (p.dyn === 'liftU' || p.dyn === 'liftD') obs.box.push({ p, w: p.w, open: 1 });      // the lift is a glass box: closed on the gap side, top, front and back; the doorway faces the platform ahead
     const last = platforms[platforms.length - 1];
+    for (const b of obs.box) if (!b.p) platforms.push({ x: b.x, y: b.top, w: b.w, roof: 1, fixed: true });      // the roof of a solid cube is a one-way platform: jump up through it from inside, then walk on
     obs.shot.forEach((o, i) => { o.id = i; });
     return {
         stage: { x: START.x, y: START.y, width: START.w, height: 225 },
