@@ -65,7 +65,7 @@ export function raceTrack(map) {
     add(sc(2200), 0, sc(700), { plus: 1 });
     add(sc(230), 0, sc(1500), { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
-    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
+    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [], spike: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
     let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
@@ -79,6 +79,16 @@ export function raceTrack(map) {
         if (h.cloud) obs.cloud.push({ x0: prev.r - 10, x1: x + 10, y0: Math.min(prev.y, y) - 340, y1: y + 30 });
         x += h.w; prev = n;
     });
+    if (map === 'sunny') {                                     // the empty drop beside each lift is a spiked hill: crossing it anywhere but the landing height respawns you
+        for (let i = 0; i < platforms.length; i++) {
+            const p = platforms[i];
+            if (p.dyn !== 'liftU' && p.dyn !== 'liftD') continue;
+            const nxt = platforms[i + 1]; if (!nxt || nxt.dyn) continue;
+            const x0 = p.x + p.w + 36, x1 = nxt.x - 8, lo = Math.min(p.y, nxt.y), hi = Math.max(p.y, nxt.y);
+            if (x1 - x0 < 24 || hi - lo < 80) continue;
+            obs.spike.push({ x: x0, w: x1 - x0, y0: lo - 30, y1: hi + 140, safeY: nxt.y - 42, safeHalf: 96 });
+        }
+    }
     const last = platforms[platforms.length - 1];
     obs.shot.forEach((o, i) => { o.id = i; });
     return {
@@ -94,8 +104,8 @@ export const shotPos = (o, k, t) => { const span = o.x1 - o.x0, pos = (t * o.sp 
 /** a plus-sign platform is solid while one of its arms is within 30 degrees of level, and gone while it turns through the diagonal */
 export const plusSolid = (o, t) => true; const _plusSolidOld = (o, t) => { const m = (((spinAngle(o, t) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2)); return Math.min(m, Math.PI / 2 - m) < 0.52; };
 
-/** Sunny Hill gale: every racer gets a big gust (1400 x 900) that appears out of nowhere for 1 s in a random direction, then is gone for 1 s. A pure function of the race clock. */
-export const GALE = { w: 1400, h: 900, accel: 0.8, on: 60, period: 120 };
+/** Sunny Hill gale: a gust for 1 s, then nothing until the next one. One gust every 3 s. A pure function of the race clock. */
+export const GALE = { w: 1400, h: 900, accel: 0.8, on: 60, period: 180 };
 export function galeOf(slot, t) {
     if (t < 180) return null; const k = Math.floor(t / GALE.period), age = t % GALE.period; if (age >= GALE.on) return null;
     const r = rng(hash('g' + k + ':' + slot)), a = r() * Math.PI * 2;

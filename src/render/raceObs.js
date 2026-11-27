@@ -102,5 +102,24 @@ export function buildRaceObs(root) {
             });
         });
     }
+    if ((O.spike || []).length) {                                    // spiked hills filling the shortcut beside each Sunny Hill lift
+        const cone = new THREE.ConeGeometry(18, 46, 5), mat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.45, metalness: 0.35 });
+        const tip = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 0.25, 0.2), toneMapped: false });
+        for (const s of O.spike) {
+            const hill = new THREE.Group(), mid = (s.y0 + s.y1) / 2, span = s.y1 - s.y0;
+            const n = Math.max(4, Math.round(span / 52));
+            for (let i = 0; i < n; i++) {
+                const y = s.y0 + (i + 0.5) * (span / n);
+                if (Math.abs(y - s.safeY) <= s.safeHalf + 10) continue;
+                const u = 1 - Math.abs(y - mid) / (span / 2);
+                const row = new THREE.Mesh(cone, mat), cap = new THREE.Mesh(new THREE.ConeGeometry(8, 16, 5), tip);
+                cap.position.y = 28; row.add(cap);
+                row.position.set(wx(s.x + s.w * (0.35 + (i % 3) * 0.15)), wy(y), (i % 2 ? 18 : -18));
+                row.scale.set(0.7 + u * 0.8, 0.85 + u * 0.7, 0.7 + u * 0.5);
+                hill.add(row);
+            }
+            g.add(hill);
+        }
+    }
     return { update: () => { const t = S.race ? S.race.t : 0; for (const f of ups) f(t); }, root: g };
 }

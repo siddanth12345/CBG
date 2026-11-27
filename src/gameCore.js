@@ -205,7 +205,7 @@ export function setRaceArena(m) {
     setArena('lobby', base === 'sunny' ? 'sunny' : base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
     WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
-    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
+    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, spike: t.obs.spike || [], dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
     resetHazards();
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -4943,8 +4943,8 @@ function updateHazards() {
         }
         if (c.t > c.warn + 45) HAZ.cr.splice(i, 1);
     }
-    if (S.hazards && S.theme === 'sunny' && !RC) {                           // Sunny Hill: a gale appears out of nowhere on the stage for 1 s in a random direction, then is gone for 1 s (1400 x 900 wide)
-        const GW = 1400, GH = 900, ph = HAZ.t % 120;
+    if (S.hazards && S.theme === 'sunny' && !RC) {                           // Sunny Hill: a gale for 1 s, then nothing. A new one every 3 s (1400 x 900)
+        const GW = 1400, GH = 900, ph = HAZ.t % 180;
         if (HAZ.t > 150 && ph === 0) { const a = Math.random() * Math.PI * 2; HAZ.gale = { x: STAGE.x + STAGE.width * (0.2 + Math.random() * 0.6), y: STAGE.y - 330, ax: Math.cos(a), ay: Math.sin(a), t: 0 }; fx('gale', HAZ.gale.x, HAZ.gale.y, a, 60, GW); }
         const G = HAZ.gale;
         if (G && ph < 60) {
@@ -5919,6 +5919,11 @@ function updateRaceObs(R) {
         for (const z of O.cloud) if (f.x > z.x0 && f.x < z.x1 && f.y > z.y0 && f.y < z.y1) {       // clouds: no jumping, and you sink slowly
             if (f.vy > 2.4) f.vy = 2.4; f.jumpsLeft = 0; f._cloudT = 6;
         }
+        if (f.invincibleTimer <= 0 && O.spike) for (const s of O.spike) {               // spiked hill beside a Sunny Hill lift: only the landing height is safe
+            if (f.x <= s.x || f.x >= s.x + s.w || f.y < s.y0 || f.y > s.y1) continue;
+            if (Math.abs(f.y - s.safeY) <= s.safeHalf) continue;
+            raceRespawn(f); break;
+        }
     }
 }
 /** Horizon race: every second five random platforms ahead of the racers slide sideways by a random amount, hold, then ease back */
@@ -5975,7 +5980,7 @@ function updateRace() {
         if (!f.active || f.out) continue;
         if (grace) f.invincibleTimer = Math.max(f.invincibleTimer, 2);
         if (f._finT) continue;
-        if (f.grounded) for (const n of R.nodes) if (n.cp && f.x > n.l && f.x < n.r && Math.abs(f.y + f.height / 2 - n.y) < 8 && n.l >= ((f._cp && f._cp.l) || 0) - 1) { f._cp = { x: (n.l + n.r) / 2, y: n.y, l: n.l, n }; break; }
+        for (const n of R.nodes) { const cx = (n.l + n.r) / 2; if (n.cp && f.x >= cx && cx > ((f._cp && f._cp.l) || -1e9)) { f._cp = { x: cx, y: n.y, l: cx, n }; break; } }
         f._rp = raceProg(f);
         if (f.y > killAt(R, f.x)) raceRespawn(f);                    // the kill barrier always takes you, whatever the knockback or settings
         else if (f.x >= R.finishX) {                                 // over the line: you finish, despawn, and can watch the others
