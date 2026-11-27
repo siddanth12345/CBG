@@ -205,7 +205,7 @@ export function setRaceArena(m) {
     setArena('lobby', base === 'sunny' ? 'sunny' : base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
     WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
-    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, spike: t.obs.spike || [], dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
+    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, spike: t.obs.spike || [], box: t.obs.box || [], dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
     resetHazards();
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -1546,6 +1546,7 @@ class Fighter {
             if (x.ph === 'charge') {
                 x.c = Math.min(1, x.t / ROLL_CHARGE);
                 this.activeMove = null; this.facing = x.d;
+                if (this.isAI && x.c >= (this._rollGoal || 0)) { this.launchRoll(); return; }
                 if (x.c >= 1) { x.fullT = (x.fullT || 0) + 1; if (x.fullT >= ROLL_AUTO) { this.launchRoll(); return; } }
                 else x.fullT = 0;
                 // red → white → blue particle gradient
@@ -1753,6 +1754,7 @@ class Fighter {
         }
         if (this.actionBlocked()) return false;
         if (this.cd[kind] > 0) return false;
+        if (kind === 'BLINK' && this.sx && this.sx.k === 'roll') return false;       // already charging / rolling
         if (kind === 'SUPLEX' && !this.grounded) return false;
         if (kind === 'SUPLEX' && this.char === 'ember' && this.bombShots <= 0 && this.bombLockT <= 0 && !orbs.some(o => o && o.owner === this && o.kind === 'bomb')) {   // Ember's Down-F first PRIMES the cluster bomb (neutral melee throws it); once primed or while bombs live it is the fire pillars
             this.bombShots = 2; this.bombPrimed = true; this.cd.SUPLEX = 24; this.actionLock = Math.max(this.actionLock, lk(this, 16));
@@ -1772,7 +1774,7 @@ class Fighter {
             case 'CORE': this.startCore(tx, ty, charge); break;
             case 'BLINK': {
                 const d = tx >= this.x ? 1 : -1;
-                if (sp.kind === 'roll') { if (this.cd.BLINK > 0) return false; this.startRollCharge(d); this.launchRoll(charge); } else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
+                if (sp.kind === 'roll') { this.cd.BLINK = 0; this.actionLock = 0; this.startRollCharge(d); if (this.isAI) this._rollGoal = Math.max(0.12, charge || 0); else this.launchRoll(charge); }   // bots really charge it (they let go at the charge they picked); the generic cooldown above must not cancel the charge else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
                 break;
             }
             case 'SPIRAL': if (sp.kind === 'rocket') this.startRocket(sp); else if (sp.kind === 'erupt') this.startErupt(sp); else if (sp.kind === 'bolt') this.startBolt(sp); else this.startSpiral(tx); break;
@@ -3039,6 +3041,7 @@ class AIBot extends Fighter {
         }
         if (onCur) {
             const n = N[cur], edge = n.r - this.x, trap = n.dyn && n.dyn !== 2, gap = Math.max(0, nn.l - n.r);
+            if (this.char === 'ember' && q >= 0.3 && edge > 330 && nxt === cur + 1 && !trap && this.cd.BLINK <= 0 && !this.actionBlocked() && this.actionLock <= 0 && !(this.sx && this.sx.k === 'roll')) { if (this.useSpecial('BLINK', this.x + 600, n.y, 0.3 + Math.random() * 0.25)) return; }      // Ember: the Fireball Roll is the fastest way to cover a long runway
             if (nxt !== cur && edge < (26 + gap * 0.12 + (trap ? 50 : 0)) * slackK && this.actionTimer > 6) { this.jump(); this.actionTimer = 0; }
             else if (nn.y < n.y - 90 && edge < 120 * slackK + 20) { this.jump(); this.actionTimer = 0; }
         } else if (!this.grounded) {
@@ -3202,6 +3205,17 @@ class AIBot extends Fighter {
         const distToTargetX = target.x - this.x;
         const distToTargetY = target.y - this.y;
         const dist = Math.sqrt(distToTargetX * distToTargetX + distToTargetY * distToTargetY);
+        const medU = this.level === 'medium' || this.level === 'easy';
+        // Umbra (checked EVERY frame, projectiles are fast): a soaked-up projectile is thrown back at the foe; and an incoming projectile (orb, tornado) is CAUGHT with the up melee instead of shielded
+        if (this.char === 'umbra') {
+            if (this._stored && this.attackTimer <= 0 && dist > 90 && dist < 950 && Math.abs(distToTargetY) < 280 && Math.random() < 0.35) { this.facing = distToTargetX > 0 ? 1 : -1; if (this.attack('NEUTRAL')) return; }
+            if (!this._stored && this.grounded && this.attackTimer <= 0 && this.actionLock <= 0 && !this.actionBlocked()) {
+                let thr = null, td = 1e9;
+                for (const o of orbs) { if (!o || !o.owner || o.owner === this || o.kind === 'bomb') continue; const d = Math.hypot(o.x - this.x, o.y - this.y); if (d < td && d < 300 && d > 135 && Math.abs(o.y - this.y) < 130 && ((o.vx || 0) * (this.x - o.x) + (o.vy || 0) * (this.y - o.y) > 0 || d < 120)) { thr = o; td = d; } }
+                for (const tw of tornadoes) { if (!tw.owner || tw.owner === this) continue; const d = Math.hypot(tw.x - this.x, (tw.y - tw.h / 2) - this.y); if (d < td && d < 250) { thr = tw; td = d; } }
+                if (thr && Math.random() < (medU ? 0.6 : 0.92)) { this.facing = thr.x > this.x ? 1 : -1; if (this.attack('UP')) { this.aiMove = { slot: 'CATCH', t: 40, hit: false }; return; } }
+            }
+        }
 
         // charging a CBG Core: stand still, then fire it straight at where the target is heading
         if (this.fActive) {
@@ -3404,6 +3418,11 @@ class AIBot extends Fighter {
             // 5a) Terra throws his neutral rock at range
             if (this.char === 'terra' && this.rockT <= 0 && dist > 140 && dist < 800 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.35 : 0.6)) { if (this.attack('NEUTRAL')) return; }
 
+            // 5a') Ember lives on the Fireball Roll: speed, control, huge knockback and move resistance, so he rolls at every chance (short charge up close, long charge from afar; hard keeps it for combos too)
+            if (this.char === 'ember' && !this.grabHolding && this.cd.BLINK <= 0 && Math.abs(distToTargetX) > 100 && Math.abs(distToTargetX) < 1400 && Math.abs(distToTargetY) < 260 && Math.random() < (med ? 0.5 : 0.9)) {
+                const close = Math.abs(distToTargetX) < 320, c = close ? 0.2 + Math.random() * 0.25 : (target.damage > 70 || target.isHanging) ? 0.9 + Math.random() * 0.1 : 0.55 + Math.random() * 0.4;
+                if (this.useSpecial('BLINK', target.x, target.y, c)) { const e = aiStats[this.level] && (aiStats[this.level]['ember:S'] || (aiStats[this.level]['ember:S'] = { use: 0, hit: 0 })); if (e) e.use++; this.aiMove = { slot: 'S', t: 100, hit: false }; return; }
+            }
             // 5b) the character's own special moves
             if (!this.grabHolding && Math.random() < (med ? 0.4 : 0.85) && this.aiSpecial(target, dist, distToTargetX, distToTargetY)) return;
 
@@ -3451,15 +3470,15 @@ class AIBot extends Fighter {
                 // Side-F is a primary pressure / combo tool
                 if (S1.kind === 'roll') {
                     const combo = t.hitstun > 8 || t.clashStunTimer > 4 || (t.lastHitBy === this && t.lastHitT < 40);
-                    const far = adx > (ch === 'ember' ? 200 : 260) && adx < (ch === 'ember' ? 1400 : 800) && Math.abs(dy) < (ch === 'ember' ? 260 : 160);
+                    const far = adx > (ch === 'ember' ? 110 : 260) && adx < (ch === 'ember' ? 1400 : 800) && Math.abs(dy) < (ch === 'ember' ? 260 : 160);
                     if (combo && adx < 500 && Math.abs(dy) < 150) {
                         // combo string: light charge so you can keep hitting
-                        add(9.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, 0.2 + Math.random() * 0.35));
+                        add(ch === 'ember' ? 24 : 9.0, 'S', () => this.useSpecial('BLINK', t.x, t.y, 0.2 + Math.random() * 0.35));
                     } else if (far) {
                         // far: higher charge to cover distance / send
                         let c = 0.55 + Math.random() * 0.4;
                         if (t.damage > 70 || t.isHanging) c = 0.9 + Math.random() * 0.1;
-                        add(ch === 'ember' ? (g ? 14 : 8) : (g ? 7.0 : 4.0), 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
+                        add(ch === 'ember' ? (g ? 34 : 20) : (g ? 7.0 : 4.0), 'S', () => this.useSpecial('BLINK', t.x, t.y, c));
                     }
                 } else if (S1.kind === 'dash' && adx > 50 && adx < dd + 240 && Math.abs(dy) < 150) {
                     add(6.0, 'S', () => this.useSpecial('BLINK', t.x, t.y));
@@ -3471,7 +3490,7 @@ class AIBot extends Fighter {
                     add(4.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
                 }
             } else {
-                if (S1.kind === 'roll' && g && adx > 130 && adx < 720 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
+                if (S1.kind === 'roll' && g && adx > 110 && adx < 900 && Math.abs(dy) < 160) add(ch === 'ember' ? 14 : 3, 'S', () => this.useSpecial('BLINK', t.x, t.y, lv === 'easy' ? 0.1 : charge));
                 else if (S1.kind === 'dash' && adx > 70 && adx < dd + 170 && Math.abs(dy) < 120) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
                 else if (S1.kind === 'bubble' && adx > 140 && adx < 680 && Math.abs(dy) < 160) add(2.5, 'S', () => this.useSpecial('BLINK', t.x, t.y));
                 else if (S1.kind === 'tp' && adx < dd + 100 && Math.abs(dy) < 130) add(3, 'S', () => this.useSpecial('BLINK', t.x, t.y));
@@ -5847,6 +5866,9 @@ function obsHit(f, ux, uy, kb, dmg, stun) {
     fx('hit', f.x, f.y, 22, Math.atan2(uy, ux)); audio.playHit(true); S.screenShake = Math.max(S.screenShake, 6);
 }
 /** the race obstacles: spinning plus signs, projectile lanes, trap platforms (exploding stars / falling slabs) and slow-fall clouds */
+/** glass boxes: the rectangle of a box this frame (lift boxes ride with their lift) */
+const boxRect = (b) => b.p ? { x0: b.p.x, x1: b.p.x + b.p.w, y0: b.p.y - b.w, y1: b.p.y } : { x0: b.x, x1: b.x + b.w, y0: b.top, y1: b.y };
+const inGlass = (R, x, y) => { const B = R.obs.box; if (B) for (const b of B) { const r = boxRect(b); if (x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1) return true; } return false; };
 function updateRaceObs(R) {
     const O = R.obs, t = R.t; if (!O) return;
     const act = fighters.filter(f => f.active && !f.out);
@@ -5882,8 +5904,8 @@ function updateRaceObs(R) {
     const sh = R.shots || (R.shots = []);
     const live = act.filter(f => !f._finT);
     if (t > RACE_GRACE + 60 && live.length && (R.nextShot = (R.nextShot || 0) - 1) <= 0) {
-        R.nextShot = 28 + Math.floor(Math.random() * 40);
-        if (sh.length < 14) {
+        R.nextShot = (28 + Math.floor(Math.random() * 40)) / 1.4;      // 1.4x as many projectiles
+        if (sh.length < 20) {
             const tg = live[Math.floor(Math.random() * live.length)], r = Math.random(), k = r < 0.5 ? 1 : 0;
             sh.push({ x: tg.x + 1100 + Math.random() * 500, y: tg.y + (Math.random() - 0.5) * 220, vx: k === 1 ? -19 - Math.random() * 4 : -8 - Math.random() * 3, vy: 0, k, life: 420 });
         }
@@ -5896,7 +5918,8 @@ function updateRaceObs(R) {
         }
         q.x += q.vx; q.y += q.vy;
         let hit = false;
-        for (const f of live) if (f.invincibleTimer <= 0 && !(f._oc > 0) && Math.abs(f.x - q.x) < f.width / 2 + 26 && Math.abs(f.y - q.y) < f.height / 2 + 26) { obsHit(f, -1, -0.3, q.k === 1 ? 15 : 12, q.k === 1 ? 9 : 8, 60); hit = true; break; }
+        if (inGlass(R, q.x, q.y)) { sh.splice(i, 1); continue; }               // glass stops projectiles
+        for (const f of live) if (f.invincibleTimer <= 0 && !(f._oc > 0) && !inGlass(R, f.x, f.y) && Math.abs(f.x - q.x) < f.width / 2 + 26 && Math.abs(f.y - q.y) < f.height / 2 + 26) { obsHit(f, -1, -0.3, q.k === 1 ? 15 : 12, q.k === 1 ? 9 : 8, 60); hit = true; break; }
         if (hit || q.life <= 0 || (live.length && q.x < Math.min(...live.map(f => f.x)) - 1800)) sh.splice(i, 1);
     }
     for (const f of act) {
@@ -5904,7 +5927,7 @@ function updateRaceObs(R) {
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
             const onL = t - (f._liftT || -9) < 4;      // riding a lift: the wind only leans on you, it can't blow you off or up
-            if (gl && f.hitstun <= 0) { f.vx = Math.max(-18, Math.min(18, f.vx + gl.ax * GALE.accel * (onL ? 0.25 : 1))); if (!onL) f.vy = Math.max(-17, Math.min(17, f.vy + gl.ay * GALE.accel * 0.9)); if (f.grounded && !onL && gl.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); } if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
+            if (gl && f.hitstun <= 0 && !inGlass(R, f.x, f.y)) { f.vx = Math.max(-18, Math.min(18, f.vx + gl.ax * GALE.accel * (onL ? 0.25 : 1))); if (!onL) f.vy = Math.max(-17, Math.min(17, f.vy + gl.ay * GALE.accel * 0.9)); if (f.grounded && !onL && gl.ay < -0.3) { f.grounded = false; f.vy = Math.min(f.vy, -4); } if (t % 6 === 0) createParticles(f.x - gl.ax * 120, f.y - gl.ay * 90, '#e0f2fe', 1); }
         }
         const hurtable = f.invincibleTimer <= 0 && !(f._oc > 0);
         for (const o of O.spin) {                                    // spinning plus signs
@@ -5919,12 +5942,15 @@ function updateRaceObs(R) {
         for (const z of O.cloud) if (f.x > z.x0 && f.x < z.x1 && f.y > z.y0 && f.y < z.y1) {       // clouds: no jumping, and you sink slowly
             if (f.vy > 2.4) f.vy = 2.4; f.jumpsLeft = 0; f._cloudT = 6;
         }
-        if (f.invincibleTimer <= 0 && O.spike) for (const s of O.spike) {               // spiked hill beside a Sunny Hill lift: the lift shaft and the landing height are safe
-            if (f.x <= s.x || f.x >= s.x + s.w || f.y < s.y0 || f.y > s.y1) continue;
-            if (f.x > s.shaftL && f.x < s.shaftR) continue;
-            if (Math.abs(f.y - s.safeY) <= s.safeHalf) continue;
-            raceRespawn(f); break;
+        if (O.spike && (f._spikeT || 0) <= 0) for (const s of O.spike) {                 // spiked hills: big damage and a shove away, never a death
+            if (f.x < s.x0 - 16 || f.x > s.x1 + 16) continue;
+            const hit = s.dir === 1 ? (f.y + f.height / 2 > s.a - 46 && f.y - f.height / 2 < s.b) : (f.y - f.height / 2 < s.a + 46 && f.y + f.height / 2 > s.b);
+            if (!hit) continue;
+            const side = f.x < (s.x0 + s.x1) / 2 ? -1 : 1;
+            f.damage = (f.damage || 0) + 14; f.vx = side * 13; f.vy = s.dir === 1 ? -17 : 12; f.hitstun = Math.max(f.hitstun || 0, 22); f.grounded = false; f._spikeT = 50;
+            fx('hit', f.x, f.y, 0, 0, '#ef4444'); break;
         }
+        if (f._spikeT > 0) f._spikeT--;
     }
 }
 /** Horizon race: every second five random platforms ahead of the racers slide sideways by a random amount, hold, then ease back */
@@ -5933,7 +5959,7 @@ function raceSplit(R) {
     const live = fighters.filter(f => f.active && !f.out && !f._finT);
     if (R.t > RACE_GRACE && R.t % 60 === 0 && live.length) {
         const lo = Math.min(...live.map(f => f.x)) - 300, hi = Math.max(...live.map(f => f.x)) + 2200;
-        const cand = []; pl.forEach((q, i) => { if (!q.dyn && !q.plus && q.x > lo && q.x < hi && !sp.some(e => e.i === i && e.tx)) cand.push(i); });
+        const cand = []; pl.forEach((q, i) => { if (!q.dyn && !q.plus && !q.fixed && q.x > lo && q.x < hi && !sp.some(e => e.i === i && e.tx)) cand.push(i); });
         for (let k = 0; k < 5 && cand.length; k++) { const i = cand.splice(Math.floor(Math.random() * cand.length), 1)[0]; let e = sp.find(z => z.i === i); if (!e) { e = { i, cur: 0, tx: 0, hold: 0 }; if (pl[i].bx === undefined) pl[i].bx = pl[i].x; sp.push(e); } e.tx = (Math.random() < 0.5 ? -1 : 1) * (140 + Math.random() * 200); e.hold = 75 + Math.floor(Math.random() * 45); }
     }
     for (let k = sp.length - 1; k >= 0; k--) {

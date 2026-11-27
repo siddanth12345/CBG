@@ -102,24 +102,47 @@ export function buildRaceObs(root) {
             });
         });
     }
-    if ((O.spike || []).length) {                                    // spiked hills filling the shortcut beside each Sunny Hill lift
-        const cone = new THREE.ConeGeometry(18, 46, 5), mat = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.45, metalness: 0.35 });
-        const tip = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 0.25, 0.2), toneMapped: false });
+    if ((O.spike || []).length) {                                    // big spiked hills: one extruded green dome each + two instanced spike sets in total (cheap)
+        const hillMat = new THREE.MeshStandardMaterial({ color: 0x4fae5a, roughness: 0.8, metalness: 0 }), sp = [];
         for (const s of O.spike) {
-            const hill = new THREE.Group(), mid = (s.y0 + s.y1) / 2, span = s.y1 - s.y0;
-            const n = Math.max(4, Math.round(span / 52));
-            for (let i = 0; i < n; i++) {
-                const y = s.y0 + (i + 0.5) * (span / n);
-                if (Math.abs(y - s.safeY) <= s.safeHalf + 10) continue;
-                const u = 1 - Math.abs(y - mid) / (span / 2);
-                const row = new THREE.Mesh(cone, mat), cap = new THREE.Mesh(new THREE.ConeGeometry(8, 16, 5), tip);
-                cap.position.y = 28; row.add(cap);
-                row.position.set(wx(s.x + s.w * (0.35 + (i % 3) * 0.15)), wy(y), (i % 2 ? 18 : -18));
-                row.scale.set(0.7 + u * 0.8, 0.85 + u * 0.7, 0.7 + u * 0.5);
-                hill.add(row);
-            }
-            g.add(hill);
+            const r = (s.x1 - s.x0) / 2, cx = (s.x0 + s.x1) / 2, sg = s.dir, aW = wy(s.a), bW = wy(s.b), xl = wx(s.x0), xr = wx(s.x1), cW = wx(cx);
+            const sh = new THREE.Shape();                              // outline in world units: tip end rounded
+            if (sg === 1) { sh.moveTo(xl, bW); sh.lineTo(xl, aW - r); sh.absarc(cW, aW - r, r, Math.PI, 0, true); sh.lineTo(xr, bW); sh.closePath(); }
+            else { sh.moveTo(xl, bW); sh.lineTo(xr, bW); sh.lineTo(xr, aW + r); sh.absarc(cW, aW + r, r, 0, Math.PI, true); sh.lineTo(xl, bW); }
+            const geo = new THREE.ExtrudeGeometry(sh, { depth: 300, bevelEnabled: false, curveSegments: 14 }); geo.translate(0, 0, -150);
+            g.add(new THREE.Mesh(geo, hillMat));
+            // spikes standing on the hill's surface: around the round tip and down both flanks (outward = perpendicular to the surface)
+            const tipY = aW - sg * r;                                   // centre of the round cap (world y)
+            for (let k = 0; k <= 8; k++) { const an = Math.PI * k / 8; sp.push([cW + Math.cos(an) * r, tipY + sg * Math.sin(an) * r, Math.cos(an), sg * Math.sin(an)]); }
+            for (let d = 70; d < 1100; d += 80) for (const side of [-1, 1]) sp.push([side < 0 ? xl : xr, tipY - sg * d, side, 0]);
         }
+        const cone = new THREE.ConeGeometry(17, 52, 5), cap = new THREE.ConeGeometry(7, 15, 5);
+        const im = new THREE.InstancedMesh(cone, new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.4, metalness: 0.4 }), sp.length);
+        const ic = new THREE.InstancedMesh(cap, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 0.25, 0.2), toneMapped: false }), sp.length);
+        const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), zax = new THREE.Vector3(0, 0, 1);
+        sp.forEach(([x, y, ox, oy], i) => {
+            q.setFromAxisAngle(zax, Math.atan2(oy, ox) - Math.PI / 2);
+            m4.compose(v.set(x + ox * 22, y + oy * 22, 0), q, one); im.setMatrixAt(i, m4);
+            m4.compose(v.set(x + ox * 52, y + oy * 52, 0), q, one); ic.setMatrixAt(i, m4);
+        });
+        g.add(im, ic);
+    }
+    if ((O.box || []).length) {                                      // glass cubes: closed on top, front, back and one side; the open side is the doorway
+        const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.17, depthWrite: false, side: THREE.DoubleSide });
+        const frameMat = new THREE.LineBasicMaterial({ color: 0xd8f6ff, transparent: true, opacity: 0.85 });
+        const geos = new Map(), geo = (w, h, d) => { const k = w + ':' + h + ':' + d; if (!geos.has(k)) geos.set(k, new THREE.BoxGeometry(w, h, d)); return geos.get(k); };
+        const boxes = O.box.map((b) => {
+            const W = b.w, T = 5, grp = new THREE.Group();
+            const top = new THREE.Mesh(geo(W, T, W), glassMat); top.position.y = W / 2;
+            const back = new THREE.Mesh(geo(W, W, T), glassMat); back.position.z = -W / 2;
+            const front = new THREE.Mesh(geo(W, W, T), glassMat); front.position.z = W / 2;
+            const wall = new THREE.Mesh(geo(T, W, W), glassMat); wall.position.x = -b.open * W / 2;       // the closed side is opposite the doorway
+            const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo(W, W, W)), frameMat);
+            grp.add(top, back, front, wall, edges); grp.position.y = W / 2; const out = new THREE.Group(); out.add(grp); g.add(out);
+            if (!b.p) out.position.set(wx(b.x + W / 2), wy(b.y), 0);
+            return { b, out };
+        });
+        ups.push(() => { for (const o of boxes) if (o.b.p) o.out.position.set(wx(o.b.p.x + o.b.w / 2), wy(o.b.p.y), 0); });
     }
     return { update: () => { const t = S.race ? S.race.t : 0; for (const f of ups) f(t); }, root: g };
 }

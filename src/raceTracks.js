@@ -1,6 +1,7 @@
 // Race tracks: every map has its own course (small and big versions of a theme share the look, not the track).
 // A track is a chain of soft platforms [gap, rise (negative = up), width] after the start island; the last one is the finish island.
-export const LIFT_TRAVEL = 2880;                              // 4x: jumps and recoveries cannot reach the next level, you have to ride the lift
+export const LIFT_TRAVEL = 2880;
+export const BOX_W = 204;                    // glass cubes: 3 x the fighter's height                              // 4x: jumps and recoveries cannot reach the next level, you have to ride the lift
 const START = { x: 300, y: 3125, w: 1300 };
 const CH = {
     // Neon Sprint: a rhythm of short hops, then a long thin bridge between two pillars, a dive, and a final staircase
@@ -40,7 +41,7 @@ export function raceTrack(map) {
         for (let k = 0; k < 10; k++) {
             const up = k % 2 === 0;
             add(sc(200), sc(k % 3 === 0 ? -40 : 30), sc(240)); add(sc(210), sc(-30), sc(220)); add(sc(220), 0, sc(700), { rest: 1, stage: 1 });
-            add(sc(230), 0, sc(420), { dyn: up ? 'liftU' : 'liftD', lift: 1 });
+            add(sc(420), 0, sc(420), { dyn: up ? 'liftU' : 'liftD', lift: 1 });          // the lift sits next to the platform AHEAD; the wide gap before it holds the big spiked hill (with a doorway at platform height)
             add(sc(230), up ? -TR : TR, sc(520), { rest: 1 });
         }
     }
@@ -65,32 +66,32 @@ export function raceTrack(map) {
     add(sc(2200), 0, sc(700), { plus: 1 });
     add(sc(230), 0, sc(1500), { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
-    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [], spike: [] }, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
+    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [], spike: [], box: [] }, BOXW = BOX_W, boxEl = (h) => !(h.dyn || h.plus || h.rest || h.cloud || h.fin) && h.w <= 320; let boxN = 0, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
     let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
             const r = Math.round(900 * 0.6), cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.0085, ph: R() * 1.5 };
             const pp = { x: cx - r, y: prev.y, w: r * 2, plus: o }; o.p = pp; nodes.push({ l: pp.x, r: pp.x + pp.w, y: prev.y, dyn: 2 }); obs.plus.push(o);
         }
+        if (boxEl(h) && ++boxN % 7 === 0) { h.w = BOXW; h.box = 1; }               // every 7th ordinary platform carries a glass cube as wide as the platform (3 x the fighter's height)
         x += h.gap; y += h.rise;
-        const p = { x, y, w: h.w }; if (h.dyn) { p.dyn = h.dyn; p.by = y; }
+        const p = { x, y, w: h.w }; if (h.box) p.box = 1; if (h.dyn) { p.dyn = h.dyn; p.by = y; }
         const n = { l: x, r: x + h.w, y, dyn: h.dyn || 0 };
         platforms.push(p); nodes.push(n); n.p = p; if (!h.dyn) { nrm++; if (nrm % 10 === 0) n.cp = 1; }  // a checkpoint on every 10th ordinary platform (trap / plus platforms are skipped, the next normal one takes it)
         if (h.cloud) obs.cloud.push({ x0: prev.r - 10, x1: x + 10, y0: Math.min(prev.y, y) - 340, y1: y + 30 });
         x += h.w; prev = n;
     });
-    if (map === 'sunny') {                                     // the empty drop beside each lift is a spiked hill: crossing it anywhere but the landing height respawns you
-        for (let i = 0; i < platforms.length; i++) {
-            const p = platforms[i];
-            if (p.dyn !== 'liftU' && p.dyn !== 'liftD') continue;
-            const nxt = platforms[i + 1]; if (!nxt || nxt.dyn) continue;
-            const prev = platforms[i - 1];
-            const x0 = prev && !prev.dyn ? prev.x + prev.w + 4 : p.x + p.w + 36;
-            const x1 = nxt.x - 4, lo = Math.min(p.y, nxt.y), hi = Math.max(p.y, nxt.y);
-            if (x1 - x0 < 24 || hi - lo < 80) continue;
-            obs.spike.push({ x: x0, w: x1 - x0, y0: lo - 30, y1: hi + 140, safeY: nxt.y - 42, safeHalf: 96, shaftL: p.x - 24, shaftR: p.x + p.w + 24 });
+    if (map === 'sunny') {                                     // BIG spiked hills in the gap before every lift: green rounded columns with spikes standing on their surface; a doorway at platform height lets you cross to the lift, but you can't climb the gap
+        for (let i = 1; i < platforms.length - 1; i++) {
+            const p = platforms[i], pv = platforms[i - 1], nx = platforms[i + 1]; if ((p.dyn !== 'liftU' && p.dyn !== 'liftD') || pv.dyn || nx.dyn) continue;
+            const x0 = pv.x + pv.w + 56, x1 = p.x - 56; if (x1 - x0 < 40) continue;
+            const y0 = p.by, up = p.dyn === 'liftU';
+            if (up) obs.spike.push({ dir: 1, x0, x1, a: nx.y + 100, b: y0 - 320 }, { dir: 1, x0, x1, a: y0 + 80, b: y0 + 600 });      // a = the rounded, spiked end, b = the flat end (at the doorway or far away)
+            else obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: y0 - 600 });      // down lifts: upside-down hills hanging from above
         }
     }
+    for (const p of platforms) if (p.box) { p.fixed = true; obs.box.push({ x: p.x, w: p.w, top: p.y - p.w, y: p.y, open: -1 }); }      // open side faces the start line
+    if (map === 'sunny') for (const p of platforms) if (p.dyn === 'liftU' || p.dyn === 'liftD') obs.box.push({ p, w: p.w, open: 1 });      // the lift is a glass box: closed on the gap side, top, front and back; the doorway faces the platform ahead
     const last = platforms[platforms.length - 1];
     obs.shot.forEach((o, i) => { o.id = i; });
     return {
