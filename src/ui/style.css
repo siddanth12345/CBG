@@ -546,3 +546,8 @@ body.no-fs .lm-fs{display:none!important}
   .pm-root>div{margin-top:6px!important}
   .lm-panel{max-height:calc(100dvh - 16px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 }
+
+/* rows never push their switch/buttons off a narrow screen; the floating fullscreen button steps aside while a full page or dialog is open */
+.lm-row>span:first-child{flex:1 1 0;min-width:0}
+.lm-row>:not(span:first-child){flex:none;max-width:100%}
+body:has(.lm-modal) .lm-fs{display:none!important}
