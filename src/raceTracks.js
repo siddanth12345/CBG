@@ -84,9 +84,11 @@ export function raceTrack(map) {
             const p = platforms[i];
             if (p.dyn !== 'liftU' && p.dyn !== 'liftD') continue;
             const nxt = platforms[i + 1]; if (!nxt || nxt.dyn) continue;
-            const x0 = p.x + p.w + 36, x1 = nxt.x - 8, lo = Math.min(p.y, nxt.y), hi = Math.max(p.y, nxt.y);
+            const prev = platforms[i - 1];
+            const x0 = prev && !prev.dyn ? prev.x + prev.w + 4 : p.x + p.w + 36;
+            const x1 = nxt.x - 4, lo = Math.min(p.y, nxt.y), hi = Math.max(p.y, nxt.y);
             if (x1 - x0 < 24 || hi - lo < 80) continue;
-            obs.spike.push({ x: x0, w: x1 - x0, y0: lo - 30, y1: hi + 140, safeY: nxt.y - 42, safeHalf: 96 });
+            obs.spike.push({ x: x0, w: x1 - x0, y0: lo - 30, y1: hi + 140, safeY: nxt.y - 42, safeHalf: 96, shaftL: p.x - 24, shaftR: p.x + p.w + 24 });
         }
     }
     const last = platforms[platforms.length - 1];

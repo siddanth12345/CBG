@@ -5919,8 +5919,9 @@ function updateRaceObs(R) {
         for (const z of O.cloud) if (f.x > z.x0 && f.x < z.x1 && f.y > z.y0 && f.y < z.y1) {       // clouds: no jumping, and you sink slowly
             if (f.vy > 2.4) f.vy = 2.4; f.jumpsLeft = 0; f._cloudT = 6;
         }
-        if (f.invincibleTimer <= 0 && O.spike) for (const s of O.spike) {               // spiked hill beside a Sunny Hill lift: only the landing height is safe
+        if (f.invincibleTimer <= 0 && O.spike) for (const s of O.spike) {               // spiked hill beside a Sunny Hill lift: the lift shaft and the landing height are safe
             if (f.x <= s.x || f.x >= s.x + s.w || f.y < s.y0 || f.y > s.y1) continue;
+            if (f.x > s.shaftL && f.x < s.shaftR) continue;
             if (Math.abs(f.y - s.safeY) <= s.safeHalf) continue;
             raceRespawn(f); break;
         }
