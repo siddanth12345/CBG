@@ -1783,7 +1783,8 @@ class Fighter {
             case 'CORE': this.startCore(tx, ty, charge); break;
             case 'BLINK': {
                 const d = tx >= this.x ? 1 : -1;
-                if (sp.kind === 'roll') { this.cd.BLINK = 0; this.actionLock = 0; this.startRollCharge(d); if (this.isAI) this._rollGoal = Math.max(0.12, charge || 0); else this.launchRoll(charge); }   // bots really charge it (they let go at the charge they picked); the generic cooldown above must not cancel the charge else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
+                if (sp.kind === 'roll') { this.cd.BLINK = 0; this.actionLock = 0; this.startRollCharge(d); if (this.isAI) this._rollGoal = Math.max(0.12, charge || 0); else this.launchRoll(charge); }   // bots really charge it (they let go at the charge they picked); the generic cooldown above must not cancel the charge
+                else if (sp.kind === 'dash') this.startDash(d, sp); else if (sp.kind === 'bubble') this.startBubble(d, sp); else this.startBlink(d, sp);
                 break;
             }
             case 'SPIRAL': if (sp.kind === 'rocket') this.startRocket(sp); else if (sp.kind === 'erupt') this.startErupt(sp); else if (sp.kind === 'bolt') this.startBolt(sp); else this.startSpiral(tx); break;
@@ -4848,7 +4849,7 @@ function resetHazards() {
     HAZ.t = 0; HAZ.gale = null; HAZ.list.length = 0; HAZ.met.length = 0; HAZ.cr.length = 0; SPL.base = null; SPL.cuts = []; SPL.t = 0; SPL.off = []; STAGE.segs = null;
 }
 function hazardHit(f, h) {
-    if (S.race && S.match && S.match.race) { obsHit(f, -1, -0.8, h.kind === 'meteor' ? 12 : 13, h.dmg || 10, 60); return; }
+    if (S.race && S.match && S.match.race) { obsHit(f, -1, -0.8, h.kind === 'meteor' ? 12 : 13, h.dmg || 10, 60); f.invincibleTimer = Math.max(f.invincibleTimer, f.hitstun + 30); f._oc = Math.max(f._oc, f.hitstun + 30); return; }
     f.interrupt && f.interrupt();
     if (h.kind === 'meteor') {
         if (!S.sdNoDmg) f.damage += h.dmg; f.grounded = false; f.vx = (f.x - h.x) * 0.1 + 4; f.vy = -11 - Math.min(8, f.damage * 0.03);
@@ -5948,7 +5949,7 @@ function updateRaceObs(R) {
         q.x += q.vx; q.y += q.vy;
         let hit = false;
         if (inGlass(R, q.x, q.y)) { sh.splice(i, 1); continue; }               // glass stops projectiles
-        for (const f of live) if (f.invincibleTimer <= 0 && !(f._oc > 0) && !inGlass(R, f.x, f.y) && Math.abs(f.x - q.x) < f.width / 2 + 26 && Math.abs(f.y - q.y) < f.height / 2 + 26) { obsHit(f, -1, -0.3, q.k === 1 ? 15 : 12, q.k === 1 ? 9 : 8, 60); hit = true; break; }
+        for (const f of live) if (f.invincibleTimer <= 0 && !(f._oc > 0) && !inGlass(R, f.x, f.y) && Math.abs(f.x - q.x) < f.width / 2 + 26 && Math.abs(f.y - q.y) < f.height / 2 + 26) { obsHit(f, -1, -0.3, q.k === 1 ? 15 : 12, q.k === 1 ? 9 : 8, 60); f.invincibleTimer = Math.max(f.invincibleTimer, f.hitstun + 30); f._oc = Math.max(f._oc, f.hitstun + 30); hit = true; break; }
         if (hit || q.life <= 0 || (live.length && q.x < Math.min(...live.map(f => f.x)) - 1800)) sh.splice(i, 1);
     }
     for (const f of act) {
@@ -6651,7 +6652,9 @@ export function step() {
             f.update();
         }
         updateWhirlpools(); updateTornadoes(); updateWinds(); updateHazards(); updateRace();
-        updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
+        { const d0 = fighters.map(f => f.damage);                    // race: anything a projectile lands gives i-frames for the whole stun + 0.5 s
+          updateOrbs(); updateDrops(); updatePillars(); updateZapTrails();
+          fighters.forEach((f, i) => { if (S.race && S.match && S.match.race && f.damage > d0[i] && f.hitstun > 0) f.invincibleTimer = Math.max(f.invincibleTimer, f.hitstun + 30); }); }
         updateItems();
         const live2 = fighters.filter(isAlive);
         for (const a of live2) for (const b of live2) {

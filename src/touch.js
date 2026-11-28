@@ -274,14 +274,10 @@ export class TouchControls {
                 if (s.rolling) { this.api.releaseAction('special'); }
                 else if (s.spent) { this.api.cancelF(); }
                 else if (s.sel && s.held) {
-                    const me0 = this.me(), cd0 = me0 && me0.cd ? me0.cd.BLINK : 0, hs0 = me0 && me0.sx;
                     mouse.forceDir = true; try { this.setAim(s.sel, s.aim || null); this.api.releaseAction('special'); } finally { mouse.forceDir = false; }
-                    setTimeout(() => { const m = this.me(); if (!m || !m.cd) return; const went = m.cd.BLINK > cd0 || m.sx !== hs0 || m.actionLock > 0 || (m.cd.BLINK > 0); this.toast(went ? 'F ' + s.sel.replace('SIDE_', '') : 'F blocked' + (m.cd.BLINK > 0 ? ' (cooldown)' : m.actionLock > 0 ? ' (busy)' : ' (not allowed here)')); }, 60);
                 }
                 else if (s.sel) {
-                    const me0 = this.me(), cd0 = me0 && me0.cd ? me0.cd.BLINK : 0, hs0 = me0 && me0.sx;
                     this.act('special', s.sel); this.api.releaseAction('special');
-                    setTimeout(() => { const m = this.me(); if (!m || !m.cd) return; const went = m.cd.BLINK > cd0 || m.sx !== hs0 || m.actionLock > 0 || (m.cd.BLINK > 0); this.toast(went ? 'F ' + s.sel.replace('SIDE_', '') : 'F blocked' + (m.cd.BLINK > 0 ? ' (cooldown)' : m.actionLock > 0 ? ' (busy)' : ' (not allowed here)')); }, 60);
                 } else if (s.charging) {
                     this.pressedAim = true;
                     mouse.touchAim = s.aim || null;
