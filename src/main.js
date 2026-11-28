@@ -127,8 +127,9 @@ if (!(document.documentElement.requestFullscreen || document.documentElement.web
     if (!v) { v = document.createElement('meta'); v.name = 'viewport'; document.head.appendChild(v); }
     v.content = 'width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover';
     document.documentElement.style.touchAction = 'pan-x pan-y'; document.body.style.touchAction = document.body.style.touchAction || 'pan-x pan-y';   // pan, never pinch / double-tap zoom
-    document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-    document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+    const onHud = (e) => !!(e.target && e.target.closest && e.target.closest('.tz-hud, .tz-matrix, .tz-b, .tz-zone'));      // two thumbs on the game controls (stick + buttons) must never be treated as a pinch: that cancelled the F button's pointer and killed every side special
+    document.addEventListener('touchstart', (e) => { if (e.touches.length > 1 && !onHud(e)) e.preventDefault(); }, { passive: false });
+    document.addEventListener('touchmove', (e) => { if ((e.touches.length > 1 || (e.scale && e.scale !== 1)) && !onHud(e)) e.preventDefault(); }, { passive: false });
     document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
     window.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 })();

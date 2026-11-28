@@ -1096,7 +1096,7 @@ export class FighterModel {
         // loser of a finished match is gone (blown out of the arena)
         const cloaked = f.cloakT > 0, mineCloak = cloaked && f === viewerFighter();        // a cloaked Umbra: nobody but he can see himself (glowing yellow)
         this.mineCloak = mineCloak;
-        const hidden = (S.gameState === 'gameover' && !S.replay && f.stocks <= 0) || f.active === false || f.out === true || (cloaked && !mineCloak) || f.buryT > 0;
+        const hidden = (S.gameState === 'gameover' && !S.replay && f.stocks <= 0) || f.active === false || f.out === true || (cloaked && !mineCloak) || f.buryT > 0 || f.entryHid === true;
         this.root.visible = !hidden;
         if (hidden) { this.#hideExtras(); return; }
 

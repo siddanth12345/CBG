@@ -11,7 +11,8 @@ const glow = (c, k = 2.4) => new THREE.MeshBasicMaterial({ color: new THREE.Colo
 export function buildRaceObs(root) {
     const R = S.race, O = R.obs, g = new THREE.Group(); root.add(g);
     const theme = R.theme;
-    const ups = [];
+    const ups = [], cull = [];                                       // cull: far-away obstacle groups are switched off (less to draw on phones)
+    const addCull = (obj, x0, x1) => { cull.push({ obj, x0, x1 }); };
     // ---- plus-sign platforms: a big cross; the level arm is the platform
     const plus = (O.plus || []).map((o) => {
         const grp = new THREE.Group(), col = theme === 'lava' ? '#fb923c' : theme === 'horizon' ? '#f0abfc' : '#22d3ee', len = o.r * 2 + 40;
@@ -110,7 +111,7 @@ export function buildRaceObs(root) {
             if (sg === 1) { sh.moveTo(xl, bW); sh.lineTo(xl, aW - r); sh.absarc(cW, aW - r, r, Math.PI, 0, true); sh.lineTo(xr, bW); sh.closePath(); }
             else { sh.moveTo(xl, bW); sh.lineTo(xr, bW); sh.lineTo(xr, aW + r); sh.absarc(cW, aW + r, r, 0, Math.PI, true); sh.lineTo(xl, bW); }
             const geo = new THREE.ExtrudeGeometry(sh, { depth: 300, bevelEnabled: false, curveSegments: 14 }); geo.translate(0, 0, -150);
-            g.add(new THREE.Mesh(geo, hillMat));
+            const hm = new THREE.Mesh(geo, hillMat); g.add(hm); addCull(hm, s.x0, s.x1);
             // spikes standing on the hill's surface: around the round tip and down both flanks (outward = perpendicular to the surface)
             const tipY = aW - sg * r;                                   // centre of the round cap (world y)
             for (let k = 0; k <= 8; k++) { const an = Math.PI * k / 8; sp.push([cW + Math.cos(an) * r, tipY + sg * Math.sin(an) * r, Math.cos(an), sg * Math.sin(an)]); }
@@ -140,17 +141,24 @@ export function buildRaceObs(root) {
             const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo(W, W, W)), frameMat);
             grp.add(top, back, front, wall, edges); grp.position.y = W / 2; const out = new THREE.Group(); out.add(grp); g.add(out);
             if (!b.p) out.position.set(wx(b.x + W / 2), wy(b.y), 0);
+            addCull(out, b.p ? b.p.x : b.x, (b.p ? b.p.x : b.x) + W);
             return { b, out };
         });
         ups.push(() => { for (const o of boxes) if (o.b.p) o.out.position.set(wx(o.b.p.x + o.b.w / 2), wy(o.b.p.y), 0); });
     }
-    if ((O.wind || []).length) {                                     // headwind zones: a pale haze with streaks racing in the wind's direction
+    if ((O.wind || []).length) {
+        const wsGeo = new THREE.BoxGeometry(220, 6, 4), wsMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false });                                     // headwind zones: a pale haze with streaks racing in the wind's direction
         const hz = O.wind.map((w) => {
             const gg = new THREE.Group(), W = w.x1 - w.x0, H = w.y1 - w.y0, body = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.1, depthWrite: false, toneMapped: false }));
-            gg.add(body); const st = []; for (let j = 0; j < 40; j++) { const m = new THREE.Mesh(new THREE.BoxGeometry(220, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false })); m.rotation.z = Math.atan2(-w.ay, w.ax); gg.add(m); st.push(m); }
-            gg.position.set(wx((w.x0 + w.x1) / 2), wy((w.y0 + w.y1) / 2), 10); g.add(gg); return { w, st, W, H };
+            gg.add(body); const st = []; for (let j = 0; j < 24; j++) { const m = new THREE.Mesh(wsGeo, wsMat); m.rotation.z = Math.atan2(-w.ay, w.ax); gg.add(m); st.push(m); }
+            gg.position.set(wx((w.x0 + w.x1) / 2), wy((w.y0 + w.y1) / 2), 10); g.add(gg); addCull(gg, w.x0, w.x1); return { w, st, W, H, gg };
         });
-        ups.push((t) => { for (const h of hz) h.st.forEach((m, j) => { const u = ((j * 0.137 + t * 0.012) % 1), v = ((j * 0.61) % 1) - 0.5; m.position.set(h.w.ax >= 0 ? (u - 0.5) * h.W : (0.5 - u) * h.W, v * h.H * 0.9 + (0.5 - u) * h.w.ay * h.H * -0.15, 0); }); });
+        ups.push((t) => { for (const h of hz) if (h.gg.visible) h.st.forEach((m, j) => { const u = ((j * 0.137 + t * 0.012) % 1), v = ((j * 0.61) % 1) - 0.5; m.position.set(h.w.ax >= 0 ? (u - 0.5) * h.W : (0.5 - u) * h.W, v * h.H * 0.9 + (0.5 - u) * h.w.ay * h.H * -0.15, 0); }); });
     }
+    ups.unshift(() => {                                              // keep only what is near the racers on screen
+        let lo = 1e9, hi = -1e9; for (const f of fighters) if (f.active && !f.out) { if (f.x < lo) lo = f.x; if (f.x > hi) hi = f.x; }
+        if (lo > hi) return; lo -= 2600; hi += 2600;
+        for (const c of cull) c.obj.visible = c.x1 > lo && c.x0 < hi;
+    });
     return { update: () => { const t = S.race ? S.race.t : 0; for (const f of ups) f(t); }, root: g };
 }

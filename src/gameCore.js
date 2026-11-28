@@ -529,7 +529,7 @@ class Fighter {
         this.freezeAirTimer = 0;
         this.bounceReflectT = 0;
         this.invincibleTimer = 0;
-        this.portalT = 0; this.portalMax = 1;   // entrance through a portal (online start, sudden death): hidden, then steps out; frozen meanwhile
+        this.entry = null; this.entryHid = false; this.portalT = 0; this.portalMax = 1;   // entrance through a portal (online start, sudden death): hidden, then steps out; frozen meanwhile
         this.spawnT = 0;                     // respawn pre-animation: frozen and untouchable at the spawn point while the light pillar plays (60 frames = 1 s)
         this.ghostT = 0;                     // Phoenix Dash aftermath: invincible, but nothing this fighter does hurts anyone
         this.facing = 1;
@@ -745,6 +745,7 @@ class Fighter {
             if (!(sxc && sxc.k === 'roll' && sxc.ph === 'roll')) { this._rollCarry = null; if (c._rollLast && isAlive(c)) c.rollRelease(this, c._rollLast); }
         }
         if (!(this.hitstun > 0 || this.clashStunTimer > 0 || this.dizzyTimer > 0)) this._freeFace = this.facing;      // remembered for Umbra's backstab: which way they faced before being stunned
+        if (this.entry) { this.tickEntry(); return; }
         if (this.portalT > 0) { this.portalT--; this.vx = this.vy = 0; this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2); return; }
         if (this.spawnT > 0) {                                          // 1 s pre-spawn: hold still in the light while it plays, then drop in
             this.spawnT--; this.vx = this.vy = 0; this.y = STAGE.y - 300; this.grounded = false; this.isHanging = false;
@@ -1710,6 +1711,14 @@ class Fighter {
     }
 
     // ------------------------------------------------------------ F special: input
+    /** countdown entrance: hidden until the portal opens, then a slow, steady walk to the start spot */
+    tickEntry() {
+        const e = this.entry; if (!e) return; if (e.s0 === undefined) e.s0 = performance.now(); e.t = (performance.now() - e.s0) / 16.667;      // paced by the wall clock like the countdown numbers, so a slow device keeps the same rhythm
+        this.invincibleTimer = Math.max(this.invincibleTimer, 3); this.actionLock = Math.max(this.actionLock, 2); this.vy = 0; this.isShielding = false;
+        if (e.t < e.delay) { this.entryHid = true; this.x = e.x0; this.vx = 0; return; }
+        this.entryHid = false; const k = Math.min(1, (e.t - e.delay) / e.dur); this.x = e.x0 + (e.x1 - e.x0) * k; this.facing = e.dir; this.vx = k < 1 ? e.dir * e.v : 0;
+        if (k >= 1) { this.entry = null; this.x = e.x1; this.vx = 0; this.facing = e.face; }
+    }
     canStartF(dir) {
         if (this.actionBlocked()) return false;
         if (!this.grounded && this.airSpecials >= airFOf(this)) return false;
@@ -5610,7 +5619,7 @@ function startMatchSequence(mode, cfg) {
         S.mySlot = cfg.mySlot || 0;
         S.instantBlow = !!cfg.instantBlow && !raceM;
         initModeState();
-        S.chaos = cfg.chaos && !raceM ? { next: 360, gap: 480, n: 0, act: [], nextEv: null, last: null, shown: null } : null; chaosMods();
+        S.chaos = cfg.chaos ? { next: 360, gap: 480, n: 0, act: [], nextEv: null, last: null, shown: null } : null; chaosMods();
         S.matchCfg = cfg;
         S.hazards = (!!cfg.hazards || raceM) && !cfg.trainRace;      // a practice race in training runs without the map hazards
         cfg.map = setArenaByMap(cfg.map);                     // a random pick is resolved here (the host's choice is sent to guests already resolved)
@@ -5725,12 +5734,18 @@ function startMatchSequence(mode, cfg) {
     S.gameState = 'countdown';
     const runCountdown = () => {
     if (gen !== matchGen) return;                                  // that match was left or replaced
-    if (S.online && !S.demo) for (const f of fighters) if (f.active) { f.portalT = f.portalMax = 100; }      // online: everyone steps out of a portal while the countdown runs
+    const entrants = fighters.filter(f => f.active), N = Math.max(1, Math.min(9, entrants.length)), WALK = 2.4;      // the countdown starts at the number of players: one steps out of a portal on the side every second, and walks in slowly
+    if (!S.demo && S.gameMode !== 'training') entrants.forEach((f, i) => {
+        const x1 = f.x, room = (d) => Math.max(0, d > 0 ? STAGE.x + STAGE.width - 40 - x1 : x1 - (STAGE.x + 40)), dir0 = room(-1) >= room(1) ? -1 : 1, dist = Math.min(230, Math.max(60, room(dir0)));
+        const x0 = x1 + dir0 * dist, dir = -dir0;      // the portal sits on the nearer outer side; they walk toward the middle
+        f.entry = { t: 0, delay: i * 60 + 6, x0, x1, dir, face: f.facing || dir, v: WALK, dur: Math.round(dist / WALK) }; f.entryHid = true; f.x = x0; f.px = x0; f.vx = 0;
+        f.portalT = 0;
+    });
     const countdownScreen = document.getElementById('countdownScreen');
     const countdownText = document.getElementById('countdownText');
-    countdownScreen.classList.remove('hidden');
+    countdownScreen.classList.remove('hidden'); countdownScreen.style.background = 'transparent'; countdownScreen.style.backdropFilter = 'none'; countdownScreen.style.webkitBackdropFilter = 'none';      // keep the arena clear so you can see everyone walk in
 
-    let count = 3;
+    let count = N;
     countdownText.textContent = count;
 
     const countdownInterval = matchCd = setInterval(() => {
@@ -6038,7 +6053,7 @@ function updateRace() {
         f._rp = raceProg(f);
         if (f.y > killAt(R, f.x)) raceRespawn(f);                    // the kill barrier always takes you, whatever the knockback or settings
         else if (f.x >= R.finishX) {                                 // over the line: you finish, despawn, and can watch the others
-            f._finT = R.t; f._finI = (S.rec || []).length; if (!R.first) R.first = f;
+            f._finT = R.t; f._finI = (S.rec || []).length; if (!R.first) { R.first = f; S.timeLeft = Math.min(S.timeLeft || 0, 15 * 60); }      // the first finisher starts a 15 s countdown for everybody else
             fx('pickup', f.x, f.y); createParticles(f.x, f.y, '#fde047', 14); audio.playKO && audio.playKO();
             f.out = true; f.vx = f.vy = 0; f.isShielding = false; f.interrupt && f.interrupt();
         }
@@ -6623,6 +6638,7 @@ export function step() {
         if (f.throwFxT > 0 && f._upd) f.throwFxT--;
     }
 
+    if (S.gameState === 'countdown') for (const f of fighters) if (f.entry) f.tickEntry();      // the entrance runs during the countdown
     if (S.online === 'guest') {
         guestSmooth();                                      // the host simulates; we only show what it sends
     } else if ((S.gameState === 'playing' || S.demo) && S.match) {      // custom match: up to 8 fighters, steered by their players (the menu showcase runs the same loop with two bots)

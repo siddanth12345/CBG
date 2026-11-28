@@ -250,9 +250,13 @@ export class TouchControls {
             main.classList.remove('down', 'charging'); main.style.transform = ''; clearSel(); showAim(null);
             try { if (e && e.pointerId != null) main.releasePointerCapture(e.pointerId); } catch (err) {}
             const finish = () => { mouse.touchAim = null; };
-            if (e && e.type === 'pointercancel') {
-                if (s.charging || s.rolling || s.spent) this.api.cancelF();
-                else this.api.cancelF();
+            if (!s.sel && !s.charging && !s.rolling && !s.spent && e && e.clientX != null && !neutralForced()) {          // the last move event may have been dropped by the browser: pick the side from where the finger actually ended
+                const dx = e.clientX - s.sx, dy = e.clientY - s.sy, len = Math.hypot(dx, dy);
+                if (len > this.geo.d * 0.45 && (e.clientX || e.clientY)) s.sel = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN');
+            }
+            if (e && e.type === 'pointercancel') {                          // some phones cancel the pointer when a second thumb lands or the finger slides far: a chosen side special still goes off
+                if (s.sel && !s.charging && !s.rolling && !s.spent) { try { this.act('special', s.sel); this.api.releaseAction('special'); } finally { finish(); } return; }
+                this.api.cancelF();
                 finish(); return;
             }
             try {

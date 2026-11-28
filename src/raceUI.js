@@ -106,10 +106,10 @@ function spectate() {
     ensureBars();
     const live = fighters.filter(f => f.active && !f._finT);
     if (!live.some(f => f.slot === S.raceCam) && live.length) S.raceCam = live[0].slot;
-    const key = live.map(f => f.slot).join(',') + '|' + S.raceCam;
+    const key = live.map(f => f.slot).join(',') + '|' + S.raceCam + '|' + (live.some(f => !f.isAI) ? 'h' : 'b');
     if (key !== sKey) {
         sKey = key;
-        sbar.innerHTML = `<span>🏁 You finished!${me._finT ? ' ' + fmt(me._finT) : ''} Spectating:</span>${live.map((f) => `<button data-sp="${f.slot}" class="${S.raceCam === f.slot ? 'on' : ''}" style="border-left:6px solid ${esc(f.color)}">${esc(f.name)}</button>`).join('')}<button data-sx="replay">▶ Replay my run</button><button data-sx="skip">⏭ Results now</button>`;
+        sbar.innerHTML = `<span>🏁 You finished!${me._finT ? ' ' + fmt(me._finT) : ''} Spectating:</span>${live.map((f) => `<button data-sp="${f.slot}" class="${S.raceCam === f.slot ? 'on' : ''}" style="border-left:6px solid ${esc(f.color)}">${esc(f.name)}</button>`).join('')}<button data-sx="replay">▶ Replay my run</button>${live.some(f => !f.isAI) ? '' : '<button data-sx="skip">⏭ Results now</button>'}`;
     }
     sbar.style.display = 'flex';
 }
