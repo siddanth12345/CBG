@@ -1736,12 +1736,12 @@ class Fighter {
     }
     cancelF() { this.fActive = false; this.chargeFrames = 0; this.aiChargeGoal = 0; if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') this.sx = null; }
     /** F released: held >= 0.5 s (or neutral aim) -> CBG Core, otherwise the directional variant */
-    fRelease(dir, tx, ty) {
+    fRelease(dir, tx, ty, force) {
         if (!this.fActive) return false;
         if (this.sx && this.sx.k === 'roll' && this.sx.ph === 'charge') { this.fActive = false; this.chargeFrames = 0; this.launchRoll(); return true; }
         const held = this.chargeFrames, neutral = this.fNeutral, dp = this.fDirPress;
         this.cancelF();
-        if (neutral || held >= HOLD_TO_CORE) {
+        if (!(force && dir && dir !== 'NEUTRAL') && (neutral || held >= HOLD_TO_CORE)) {      // force = the touch matrix picked a direction on purpose: holding it never turns into the Core
             return this.useSpecial('CORE', tx, ty, Math.min(1, held / CHARGE_MAX));
         }
         const d = dir !== 'NEUTRAL' ? dir : dp;
@@ -6179,7 +6179,7 @@ export function applyRemote(ev, slot = 1) {
         case 'grab': f.executeGrabDash(ev.wx, ev.wy); break;
         case 'roll': f.executeRoll(); break;
         case 'special': f.fPress(ev.dir); break;
-        case 'specialUp': f.fRelease(ev.dir, ev.wx, ev.wy); break;
+        case 'specialUp': f.fRelease(ev.dir, ev.wx, ev.wy, !!ev.force); break;
         case 'cancelF': f.cancelF(); break;
     }
 }

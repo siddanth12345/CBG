@@ -166,11 +166,11 @@ function doAction(action) {
 function releaseAction(action) {
     if (action === 'attack') { inputBuf.hold = false; if (S.online === 'guest') sendAct('attackUp'); else p1.releaseAttack(); return; }
     if (S.online === 'guest') {
-        if (action === 'special' && S.gameState === 'playing') sendAct('specialUp', { wx: mouse.worldX, wy: mouse.worldY, dir: mouse.direction });
+        if (action === 'special' && S.gameState === 'playing') sendAct('specialUp', { wx: mouse.worldX, wy: mouse.worldY, dir: mouse.direction, force: !!mouse.forceDir });
         return;
     }
     if (action === 'special') {
-        if (S.gameState === 'playing') p1.fRelease(mouse.direction, mouse.worldX, mouse.worldY);
+        if (S.gameState === 'playing') p1.fRelease(mouse.direction, mouse.worldX, mouse.worldY, !!mouse.forceDir);
         else p1.cancelF();
     }
 }

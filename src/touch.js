@@ -244,6 +244,10 @@ export class TouchControls {
                     if (g.rolling) { g.rolling = false; g.spent = true; this.api.releaseAction('special'); }
                     else if (!g.spent && (sel === 'SIDE_LEFT' || sel === 'SIDE_RIGHT') && me.cd.BLINK <= 0) { g.rolling = true; clearTimeout(g.timer); this.act('special', sel); }
                 }
+                else if (!g.spent) {                                  // every other fighter: the drag presses F at once (like Ember's charge) and lifting the finger releases it, so press and release are never in the same instant
+                    if (g.held) { g.held = false; this.api.cancelF(); }
+                    if (sel) { clearTimeout(g.timer); g.held = true; this.act('special', sel); }
+                }
                 g.sel = sel; clearSel(); if (sel) dirButton(sel).classList.add('sel');
             }
             if (len > 10) g.aim = [dx / len, dy / len]; else g.aim = null;
@@ -262,13 +266,18 @@ export class TouchControls {
                 if (len > this.geo.d * 0.45 && (e.clientX || e.clientY)) s.sel = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'SIDE_LEFT' : 'SIDE_RIGHT') : (dy < 0 ? 'UP' : 'DOWN');
             }
             if (e && e.type === 'pointercancel') {                          // some phones cancel the pointer when a second thumb lands or the finger slides far: a chosen side special still goes off
-                if (s.sel && !s.charging && !s.rolling && !s.spent) { try { this.act('special', s.sel); this.api.releaseAction('special'); } finally { finish(); } return; }
+                if (s.sel && !s.charging && !s.rolling && !s.spent) { try { if (!s.held) this.act('special', s.sel); mouse.forceDir = true; this.api.releaseAction('special'); } finally { mouse.forceDir = false; finish(); } return; }
                 this.api.cancelF();
                 finish(); return;
             }
             try {
                 if (s.rolling) { this.api.releaseAction('special'); }
                 else if (s.spent) { this.api.cancelF(); }
+                else if (s.sel && s.held) {
+                    const me0 = this.me(), cd0 = me0 && me0.cd ? me0.cd.BLINK : 0, hs0 = me0 && me0.sx;
+                    mouse.forceDir = true; try { this.setAim(s.sel, s.aim || null); this.api.releaseAction('special'); } finally { mouse.forceDir = false; }
+                    setTimeout(() => { const m = this.me(); if (!m || !m.cd) return; const went = m.cd.BLINK > cd0 || m.sx !== hs0 || m.actionLock > 0 || (m.cd.BLINK > 0); this.toast(went ? 'F ' + s.sel.replace('SIDE_', '') : 'F blocked' + (m.cd.BLINK > 0 ? ' (cooldown)' : m.actionLock > 0 ? ' (busy)' : ' (not allowed here)')); }, 60);
+                }
                 else if (s.sel) {
                     const me0 = this.me(), cd0 = me0 && me0.cd ? me0.cd.BLINK : 0, hs0 = me0 && me0.sx;
                     this.act('special', s.sel); this.api.releaseAction('special');
