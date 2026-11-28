@@ -120,6 +120,13 @@ export class TouchControls {
 
     facingVec(m) { return this.joyVec ? this.joyVec : [m.facing || 1, 0]; }
     /** set the aim for the next action; `dir` is the matrix direction, vector gives Core / dash / grab targets */
+    /** a tiny status line over the F button so you can see what the touch controls did (build 2026-11-28 a diagnostics) */
+    toast(msg) {
+        try {
+            let el = this._toast; if (!el) { el = this._toast = document.createElement('div'); el.style.cssText = 'position:fixed;left:50%;bottom:34%;transform:translateX(-50%);z-index:9999;pointer-events:none;font:700 13px system-ui;color:#fff;background:rgba(15,23,42,.8);padding:4px 10px;border-radius:10px;opacity:0;transition:opacity .15s'; document.body.appendChild(el); }
+            el.textContent = msg; el.style.opacity = '1'; clearTimeout(this._toastT); this._toastT = setTimeout(() => { el.style.opacity = '0'; }, 900);
+        } catch (e) { /* cosmetic */ }
+    }
     setAim(dir, vec) {
         const m = this.me();
         let v = vec;
@@ -263,7 +270,9 @@ export class TouchControls {
                 if (s.rolling) { this.api.releaseAction('special'); }
                 else if (s.spent) { this.api.cancelF(); }
                 else if (s.sel) {
+                    const me0 = this.me(), cd0 = me0 && me0.cd ? me0.cd.BLINK : 0, hs0 = me0 && me0.sx;
                     this.act('special', s.sel); this.api.releaseAction('special');
+                    setTimeout(() => { const m = this.me(); if (!m || !m.cd) return; const went = m.cd.BLINK > cd0 || m.sx !== hs0 || m.actionLock > 0 || (m.cd.BLINK > 0); this.toast(went ? 'F ' + s.sel.replace('SIDE_', '') : 'F blocked' + (m.cd.BLINK > 0 ? ' (cooldown)' : m.actionLock > 0 ? ' (busy)' : ' (not allowed here)')); }, 60);
                 } else if (s.charging) {
                     this.pressedAim = true;
                     mouse.touchAim = s.aim || null;
@@ -278,6 +287,8 @@ export class TouchControls {
                 finish();
             }
         };
+        const touchEnd = (e) => { if (!g) return; const t = (e.changedTouches && e.changedTouches[0]) || null; mainEnd(t ? { type: e.type === 'touchcancel' ? 'pointercancel' : 'touchend', clientX: t.clientX, clientY: t.clientY } : { type: 'touchend' }); };      // iOS home-screen Safari: if the pointer events never arrive, the touch events still do
+        main.addEventListener('touchend', touchEnd, { passive: true }); main.addEventListener('touchcancel', touchEnd, { passive: true });
         main.addEventListener('pointerup', mainEnd);
         main.addEventListener('pointercancel', mainEnd);
         main.addEventListener('lostpointercapture', mainEnd);
