@@ -205,7 +205,7 @@ export function setRaceArena(m) {
     setArena('lobby', base === 'sunny' ? 'sunny' : base === 'horizon' || base === 'bighorizon' ? 'horizon' : base === 'lava' || base === 'biglava' ? 'lava' : 'frontier');
     Object.assign(STAGE, t.stage); STAGE.platforms = t.platforms;
     WORLD.width = Math.ceil(t.finishX + 2200); BLAST_ZONES.left = -600; BLAST_ZONES.right = WORLD.width + 600; BLAST_ZONES.top = Math.min(BLAST_ZONES.top, Math.min(...t.platforms.map(q => q.y)) - 1800);      // a longer world for the long track
-    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, spike: t.obs.spike || [], box: t.obs.box || [], dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
+    S.race = { map: base, nodes: t.nodes, finishX: t.finishX, finishY: t.finishY, killY: t.killY, name: t.name, t: 0, theme: t.theme, obs: { plus: t.obs.plus, spin: t.obs.spin, shot: t.obs.shot, cloud: t.obs.cloud, spike: t.obs.spike || [], box: t.obs.box || [], wind: t.obs.wind || [], dyn: t.platforms.filter(q => q.dyn).map(q => ({ p: q, kind: q.dyn, st: 0, tm: 0, vy: 0, node: t.nodes.find(n => n.p === q) })) } };
     resetHazards();
 }
 /** where the two duel fighters start on the current arena (the big arenas are far from the small one's coordinates) */
@@ -5938,15 +5938,19 @@ function updateRaceObs(R) {
     }
     for (const f of act) {
         if (f._finT) continue;
-        for (const b of O.box) if (!b.p) {                           // a solid cube: the closed side (opposite the door) is a wall that stops you from either direction; the roof is a one-way platform
-            const wx0 = b.open < 0 ? b.x + b.w : b.x, hw = f.width / 2 + 8, top = f.y - f.height / 2, bot = f.y + f.height / 2;
-            if (bot > b.top + 6 && top < b.y - 2 && Math.abs(f.x - wx0) < hw) {
+        for (const b of O.box) {                                     // solid cubes: the closed side (opposite the door) is a wall that stops you from either direction; a fixed cube's roof is a one-way platform. A lift cube's wall has a doorway at its floor so you can step in from the gap
+            const bx = b.p ? b.p.x : b.x, by = b.p ? b.p.y : b.y, wx0 = b.open < 0 ? bx + b.w : bx, hw = f.width / 2 + 8, wTop = by - b.w, wBot = b.p ? by - 240 : by;
+            if (f.active === false) continue;
+            const top = f.y - f.height / 2, bot = f.y + f.height / 2;
+            if (bot > wTop + 6 && top < wBot - 2 && Math.abs(f.x - wx0) < hw) {
                 const inside = b.open < 0 ? (f._bxp !== undefined ? f._bxp < wx0 : f.x < wx0) : (f._bxp !== undefined ? f._bxp > wx0 : f.x > wx0);
-                const dir = (b.open < 0) === inside ? 1 : -1;       // inside the cube -> push toward the open side; outside -> push away from the wall
-                f.x = wx0 + (b.open < 0 ? (inside ? -hw : hw) : (inside ? hw : -hw)); if (f.vx * (f.x - wx0) > 0 || true) f.vx = 0;
+                f.x = wx0 + (b.open < 0 ? (inside ? -hw : hw) : (inside ? hw : -hw)); f.vx = 0;
             }
         }
         f._bxp = f.x;
+        for (const w of O.wind || []) if (f.x > w.x0 && f.x < w.x1 && f.y > w.y0 && f.y < w.y1 && f.hitstun <= 0 && !inGlass(R, f.x, f.y)) {      // the headwind over a descent: 3x a gale's push, always on
+            f.vx = Math.max(-26, Math.min(26, f.vx + w.ax * GALE.accel * 3)); f.vy = Math.max(-17, Math.min(20, f.vy + w.ay * GALE.accel * 3 * 0.9));
+        }
         if (R.map === 'sunny') {                                     // gale: a gust twice as big and strong as before pushes you in a random direction for 1 s
             const gl = galeOf(f.slot, t);
             const onL = t - (f._liftT || -9) < 4;      // riding a lift: the wind only leans on you, it can't blow you off or up

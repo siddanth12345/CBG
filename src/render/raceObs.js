@@ -114,7 +114,7 @@ export function buildRaceObs(root) {
             // spikes standing on the hill's surface: around the round tip and down both flanks (outward = perpendicular to the surface)
             const tipY = aW - sg * r;                                   // centre of the round cap (world y)
             for (let k = 0; k <= 8; k++) { const an = Math.PI * k / 8; sp.push([cW + Math.cos(an) * r, tipY + sg * Math.sin(an) * r, Math.cos(an), sg * Math.sin(an)]); }
-            for (let d = 70; d < 1100; d += 80) for (const side of [-1, 1]) sp.push([side < 0 ? xl : xr, tipY - sg * d, side, 0]);
+            for (let d = 70, ext = Math.min(Math.abs(s.b - s.a) - 80, 2600); d < Math.max(1100, ext); d += 100) for (const side of [-1, 1]) sp.push([side < 0 ? xl : xr, tipY - sg * d, side, 0]);
         }
         const cone = new THREE.ConeGeometry(17, 52, 5), cap = new THREE.ConeGeometry(7, 15, 5);
         const im = new THREE.InstancedMesh(cone, new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.4, metalness: 0.4 }), sp.length);
@@ -143,6 +143,14 @@ export function buildRaceObs(root) {
             return { b, out };
         });
         ups.push(() => { for (const o of boxes) if (o.b.p) o.out.position.set(wx(o.b.p.x + o.b.w / 2), wy(o.b.p.y), 0); });
+    }
+    if ((O.wind || []).length) {                                     // headwind zones: a pale haze with streaks racing in the wind's direction
+        const hz = O.wind.map((w) => {
+            const gg = new THREE.Group(), W = w.x1 - w.x0, H = w.y1 - w.y0, body = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.1, depthWrite: false, toneMapped: false }));
+            gg.add(body); const st = []; for (let j = 0; j < 40; j++) { const m = new THREE.Mesh(new THREE.BoxGeometry(220, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false })); m.rotation.z = Math.atan2(-w.ay, w.ax); gg.add(m); st.push(m); }
+            gg.position.set(wx((w.x0 + w.x1) / 2), wy((w.y0 + w.y1) / 2), 10); g.add(gg); return { w, st, W, H };
+        });
+        ups.push((t) => { for (const h of hz) h.st.forEach((m, j) => { const u = ((j * 0.137 + t * 0.012) % 1), v = ((j * 0.61) % 1) - 0.5; m.position.set(h.w.ax >= 0 ? (u - 0.5) * h.W : (0.5 - u) * h.W, v * h.H * 0.9 + (0.5 - u) * h.w.ay * h.H * -0.15, 0); }); });
     }
     return { update: () => { const t = S.race ? S.race.t : 0; for (const f of ups) f(t); }, root: g };
 }

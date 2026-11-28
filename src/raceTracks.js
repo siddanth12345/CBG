@@ -41,7 +41,7 @@ export function raceTrack(map) {
         for (let k = 0; k < 10; k++) {
             const up = k % 2 === 0;
             add(sc(200), sc(k % 3 === 0 ? -40 : 30), sc(240)); add(sc(210), sc(-30), sc(220)); add(sc(220), 0, sc(700), { rest: 1, stage: 1 });
-            add(sc(420), 0, sc(840), { dyn: up ? 'liftU' : 'liftD', lift: 1 });          // the lift sits next to the platform AHEAD; the wide gap before it holds the big spiked hill (with a doorway at platform height)
+            add(sc(420), 0, BOX_W, { dyn: up ? 'liftU' : 'liftD', lift: 1 });          // the lift sits next to the platform AHEAD; the wide gap before it holds the big spiked hill (with a doorway at platform height)
             add(sc(230), up ? -TR : TR, sc(520), { rest: 1 });
         }
     }
@@ -66,14 +66,14 @@ export function raceTrack(map) {
     add(sc(2200), 0, sc(700), { plus: 1 });
     add(sc(230), 0, sc(1500), { rest: 1, fin: 1 });
     let x = START.x + START.w, y = START.y;
-    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [], spike: [], box: [] }, BOXW = BOX_W, boxEl = (h) => !(h.dyn || h.plus || h.rest || h.cloud || h.fin) && h.w <= 320; let boxN = 0, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
+    const platforms = [], obs = { spin: [], plus: [], shot: [], cloud: [], spike: [], box: [], wind: [] }, BOXW = BOX_W, boxEl = (h) => !(h.dyn || h.plus || h.rest || h.cloud || h.fin); let boxN = 0, nodes = [{ l: START.x, r: START.x + START.w, y: START.y }];
     let prev = { l: START.x, r: START.x + START.w, y: START.y }, nrm = 0;
     hops.forEach((h, i) => {
         if (h.plus) {                                              // a big plus sign in the middle of the gap: its horizontal arm is a platform for part of every quarter turn
             const r = Math.round(900 * 0.6), cx = prev.r + h.gap / 2, o = { by: prev.y, r, sp: (R() < 0.5 ? -1 : 1) * 0.0085, ph: R() * 1.5 };
             const pp = { x: cx - r, y: prev.y, w: r * 2, plus: o }; o.p = pp; nodes.push({ l: pp.x, r: pp.x + pp.w, y: prev.y, dyn: 2 }); obs.plus.push(o);
         }
-        if (boxEl(h) && ++boxN % 7 === 0) { h.w = BOXW; h.box = 1; }               // every 7th ordinary platform carries a glass cube as wide as the platform (3 x the fighter's height)
+        if (boxEl(h, 1) && !h.dyn && (nrm + 1) % 10 === 0) { h.w = BOXW; h.box = 1; }      // every checkpoint platform carries a solid glass cube as wide as the platform
         x += h.gap; y += h.rise;
         const p = { x, y, w: h.w }; if (h.box) p.box = 1; if (h.dyn) { p.dyn = h.dyn; p.by = y; }
         const n = { l: x, r: x + h.w, y, dyn: h.dyn || 0 };
@@ -84,10 +84,13 @@ export function raceTrack(map) {
     if (map === 'sunny') {                                     // BIG spiked hills in the gap before every lift: green rounded columns with spikes standing on their surface; a doorway at platform height lets you cross to the lift, but you can't climb the gap
         for (let i = 1; i < platforms.length - 1; i++) {
             const p = platforms[i], pv = platforms[i - 1], nx = platforms[i + 1]; if ((p.dyn !== 'liftU' && p.dyn !== 'liftD') || pv.dyn || nx.dyn) continue;
-            const x0 = pv.x + pv.w + 56, x1 = p.x - 4;      // the hill is the lift cube's wall on the gap side: it stands flush against the cube if (x1 - x0 < 40) continue;
-            const y0 = p.by, up = p.dyn === 'liftU';
-            if (up) obs.spike.push({ dir: 1, x0, x1, a: nx.y + 100, b: y0 - 320 }, { dir: 1, x0, x1, a: y0 + 80, b: y0 + 600 });      // a = the rounded, spiked end, b = the flat end (at the doorway or far away)
-            else obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: y0 - 600 });      // down lifts: upside-down hills hanging from above
+            const x0 = pv.x + pv.w + 56, x1 = p.x - 4; if (x1 - x0 < 40) continue;      // the hill is the lift cube's wall on the gap side: it stands flush against the cube
+            const y0 = p.by, up = p.dyn === 'liftU', lo = Math.max(...nodes.map(n => n.y)) + 1500, hi = Math.min(...nodes.map(n => n.y)) - 3000, lx1 = p.x + p.w;
+            if (up) obs.spike.push({ dir: 1, x0, x1, a: nx.y + 100, b: y0 - 320 }, { dir: 1, x0, x1, a: y0 + 80, b: lo }, { dir: 1, x0: p.x, x1: lx1, a: y0 + 120, b: lo });      // a = the rounded, spiked end, b = the flat end; the wall under the lift runs down to the boundary so there is no way round it
+            else {                                                  // down lifts: upside-down hills hanging from above, all the way up to the top boundary
+                obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: hi }, { dir: -1, x0: p.x, x1: lx1, a: y0 - p.w - 120, b: hi });
+                obs.wind.push({ x0: x0 - 700, x1: lx1 + 700, y0: y0 - 2600, y1: y0 - 750, ax: -0.94, ay: 0.34 });      // a strong headwind up there (3x a gale, a wide zone) so nobody flies over the descent
+            }
         }
     }
     for (const p of platforms) if (p.box) { p.fixed = true; obs.box.push({ x: p.x, w: p.w, top: p.y - p.w, y: p.y, open: -1 }); }      // open side faces the start line
