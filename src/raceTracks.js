@@ -84,11 +84,12 @@ export function raceTrack(map) {
     if (map === 'sunny') {                                     // BIG spiked hills in the gap before every lift: green rounded columns with spikes standing on their surface; a doorway at platform height lets you cross to the lift, but you can't climb the gap
         for (let i = 1; i < platforms.length - 1; i++) {
             const p = platforms[i], pv = platforms[i - 1], nx = platforms[i + 1]; if ((p.dyn !== 'liftU' && p.dyn !== 'liftD') || pv.dyn || nx.dyn) continue;
-            const x0 = pv.x + pv.w + 56, x1 = p.x - 4; if (x1 - x0 < 40) continue;      // the hill is the lift cube's wall on the gap side: it stands flush against the cube
             const y0 = p.by, up = p.dyn === 'liftU', lo = Math.max(...nodes.map(n => n.y)) + 1500, hi = Math.min(...nodes.map(n => n.y)) - 3000, lx1 = p.x + p.w;
-            if (up) obs.spike.push({ dir: 1, x0, x1, a: nx.y + 100, b: y0 - 320 }, { dir: 1, x0, x1, a: y0 + 80, b: lo }, { dir: 1, x0: p.x, x1: lx1, a: y0 + 120, b: lo });      // a = the rounded, spiked end, b = the flat end; the wall under the lift runs down to the boundary so there is no way round it
-            else {                                                  // down lifts: upside-down hills hanging from above, all the way up to the top boundary
-                obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: hi }, { dir: -1, x0: p.x, x1: lx1, a: y0 - p.w - 120, b: hi });
+            if (up) {                                                // AFTER an up lift: a spiked hill in the gap between the lift and the platform ahead, standing from the boundary up to just below the platform
+                const ax0 = lx1 + 10, ax1 = nx.x - 10; if (ax1 - ax0 >= 40) obs.spike.push({ dir: 1, x0: ax0, x1: ax1, a: nx.y + 100, b: lo });
+            } else {                                                 // BEFORE a down lift: an upside-down hill hanging from the top boundary down to the doorway, and a big one below the doorway
+                const x0 = pv.x + pv.w + 56, x1 = p.x - 4; if (x1 - x0 < 40) continue;
+                obs.spike.push({ dir: -1, x0, x1, a: nx.y - 400, b: y0 + 80 }, { dir: -1, x0, x1, a: y0 - 320, b: hi });
                 obs.wind.push({ x0: x0 - 700, x1: lx1 + 700, y0: y0 - 2600, y1: y0 - 750, ax: -0.94, ay: 0.34 });      // a strong headwind up there (3x a gale, a wide zone) so nobody flies over the descent
             }
         }
